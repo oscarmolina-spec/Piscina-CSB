@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { db, auth } from './firebase.js'; // Importamos tu archivo de claves
+import { db, auth } from './firebase.js'; 
 import {
   collection,
   addDoc,
@@ -21,20 +21,27 @@ import {
 } from 'firebase/auth';
 
 // ==========================================
-// ⚙️ CONFIGURACIÓN GENERAL Y CONSTANTES
+// ⚙️ CONFIGURACIÓN GENERAL DEL SISTEMA
 // ==========================================
 
-const ADMIN_EMAIL = 'extraescolares@sanbuenaventura.org'; // Email del administrador
-const CAPACIDAD_POR_HUECO = 2; // Máximo de alumnos por hueco en prueba de nivel
+// Email del administrador (Superusuario)
+const ADMIN_EMAIL = 'extraescolares@sanbuenaventura.org'; 
 
-// Imágenes del sistema
+// Configuración de aforo para pruebas de nivel (alumnos por hueco de 5 min)
+const CAPACIDAD_POR_HUECO = 2; 
+
+// ==========================================
+// 🖼️ BANCO DE IMÁGENES
+// ==========================================
 const IMG_ESCUDO = 'https://i.ibb.co/JRz06Sym/San-uenaventura.png';
 const IMG_PRINCIPAL = 'https://i.ibb.co/HLt30jVK/20241210-084606.jpg';
 const IMG_GALERIA_1 = 'https://i.ibb.co/hJxW45tC/20241210-084225.jpg';
 const IMG_GALERIA_2 = 'https://i.ibb.co/mrJHGscm/Screenshot-2025-05-09-15-04-17.png';
 const MAPA_IMAGEN_URL = "https://i.ibb.co/35RNNBLz/Info-piscina.png";
 
-// Listado Maestro de Cursos Escolares
+// ==========================================
+// 📚 LISTADO MAESTRO DE CURSOS ESCOLARES
+// ==========================================
 const LISTA_CURSOS = [
   { val: 'INF3', label: 'Infantil 3 Años' },
   { val: 'INF4', label: 'Infantil 4 Años' },
@@ -65,7 +72,7 @@ const OFERTA_ACTIVIDADES = [
     requierePrueba: false,
     diasResumen: 'L, M, X, J o V',
     precioResumen: '45€/mes',
-    descripcion: '💧 Iniciación al medio acuático mediante el juego.\n⏰ Horario fijo: 16:00 - 17:00.\nIdeal para perder el miedo y aprender a flotar.',
+    descripcion: '💧 Actividad de iniciación al medio acuático para Infantil.\n🎲 Juegos en el agua para disfrutar, familiarizarse y perder el miedo.\n⏰ Horario fijo: 16:00 - 17:00.',
     aviso: '⚠️ Mínimo 5 alumnos para abrir grupo.',
     opciones: [
       { dias: 'Lunes', horario: '16:00 - 17:00', precio: '45€/mes' },
@@ -82,7 +89,7 @@ const OFERTA_ACTIVIDADES = [
     requierePrueba: true,
     diasResumen: 'L-X, M-J o sueltos',
     precioResumen: 'Desde 45€',
-    descripcion: '🏊 Trabajo por niveles (Iniciación, Medio, Perfeccionamiento).\n⏰ Recogida a las 16:15 en el portón azul.',
+    descripcion: '🏊 Para alumnos de 1º a 6º de Primaria.\n🎯 Trabajo por niveles, con objetivos técnicos y recreativos.\n⏰ Recogida 16:15 en portón azul. Salida 17:15.',
     aviso: '⚠️ Mínimo 6 alumnos por grupo.',
     opciones: [
       { dias: 'Lunes y Miércoles', horario: '16:15 - 17:15', precio: '65€/mes' },
@@ -101,7 +108,7 @@ const OFERTA_ACTIVIDADES = [
     requierePrueba: false,
     diasResumen: 'L-X o V',
     precioResumen: 'Desde 45€',
-    descripcion: '💦 Iniciación al waterpolo, pases, reglas y juego en equipo.',
+    descripcion: '💦 Iniciación al waterpolo adaptada a cada edad.\n⚽ Trabajo en equipo, lanzamientos y diversión garantizada.\n⏰ Horario fijo: 17:30 - 18:30.',
     aviso: '⚠️ Mínimo 7 alumnos para formar equipo.',
     opciones: [
       { dias: 'Lunes y Miércoles', horario: '17:30 - 18:30', precio: '60€/mes' },
@@ -117,7 +124,7 @@ const OFERTA_ACTIVIDADES = [
     requierePrueba: false,
     diasResumen: 'L-X-V (18:00) | M-J (18:30)',
     precioResumen: 'Desde 37€',
-    descripcion: '✨ Clases para adultos de todos los niveles.',
+    descripcion: '✨ Clases para adultos que quieran mantenerse activos o mejorar su estilo.\n🕓 Lunes, Miércoles, Viernes: 18:00 - 18:30.\n🕕 Martes, Jueves: 18:30 - 19:00.',
     aviso: '⚠️ Mínimo 4 alumnos.',
     opciones: [
       { dias: 'Lunes y Miércoles', horario: '18:00 - 18:30', precio: '50€/mes' },
@@ -136,7 +143,7 @@ const OFERTA_ACTIVIDADES = [
     requierePrueba: true,
     diasResumen: 'L-X, M-J o sueltos',
     precioResumen: 'Desde 37€',
-    descripcion: '🧒 Sesiones dinámicas de 30 minutos.',
+    descripcion: '🧒 Sesiones breves, dinámicas y muy seguras para avanzar en autonomía acuática.\n⏰ Horario fijo: 17:30 - 18:00.',
     aviso: '⚠️ Mínimo 4 alumnos.',
     opciones: [
       { dias: 'Lunes y Miércoles', horario: '17:30 - 18:00', precio: '50€/mes' },
@@ -155,7 +162,7 @@ const OFERTA_ACTIVIDADES = [
     requierePrueba: true,
     diasResumen: 'Varía según día',
     precioResumen: 'Desde 37€',
-    descripcion: '🚀 Mejora técnica y resistencia.',
+    descripcion: '🚀 Para quienes quieren seguir mejorando técnica y condición física. \n🕓 L-X-V: 17:30 - 18:30 (1 hora). \n🕕 M-J: 18:00 - 18:30 (30 min).',
     aviso: '⚠️ Mínimo 4 alumnos.',
     opciones: [
       { dias: 'Lunes y Miércoles', horario: '17:30 - 18:30', precio: '50€/mes' },
@@ -174,7 +181,7 @@ const OFERTA_ACTIVIDADES = [
     requierePrueba: true,
     diasResumen: 'L-X o V',
     precioResumen: 'Desde 37€',
-    descripcion: '🧠 Entrenamiento adaptado a adolescentes.',
+    descripcion: '🧠 Sesiones específicas para adolescentes, con técnica, mantenimiento o preparación física.\n🌙 Tardes: Lunes/Miércoles 18:30 - 19:00.\n☀️ Mediodía: Viernes 14:15 - 15:00.',
     aviso: '⚠️ Mínimo 4 alumnos.',
     opciones: [
       { dias: 'Lunes y Miércoles', horario: '18:30 - 19:00', precio: '50€/mes' },
@@ -190,7 +197,7 @@ const OFERTA_ACTIVIDADES = [
     requierePrueba: false,
     diasResumen: 'M y J',
     precioResumen: '50€/mes',
-    descripcion: '🌊 Gimnasia en el agua. Bajo impacto articular.',
+    descripcion: '🌊 Actividad acuática de bajo impacto ideal para mantenerse en forma sin sobrecargar las articulaciones.\n⏰ Martes y jueves de 17:30 - 18:15.',
     aviso: '⚠️ Mínimo 5 alumnos.',
     opciones: [
       { dias: 'Martes y Jueves', horario: '17:30 - 18:15', precio: '50€/mes' },
@@ -203,7 +210,7 @@ const OFERTA_ACTIVIDADES = [
     requierePrueba: false,
     diasResumen: 'L, X, V',
     precioResumen: 'Desde 25€',
-    descripcion: '🎧 Calle asignada para nadar a tu ritmo. Sin monitor.',
+    descripcion: '🎧 Sin monitor, para jóvenes y adultos que prefieren nadar a su ritmo. 🌙 Ideal para relajarse al final del día.\n⏰ Lunes, Miércoles y Viernes de 18:30 a 19:00.',
     aviso: '⚠️ Mínimo 2 alumnos.',
     opciones: [
       { dias: 'Lunes y Miércoles', horario: '18:30 - 19:00', precio: '35€/mes' },
@@ -215,30 +222,37 @@ const OFERTA_ACTIVIDADES = [
 ];
 
 // ==========================================
-// 📧 UTILIDADES: FECHAS Y CORREO
+// 📧 UTILIDADES Y FUNCIONES DE AYUDA
 // ==========================================
 
 // Calcular los próximos 4 lunes para las pruebas de nivel
 const getNextMondays = () => {
   const d = new Date();
+  // Avanzar hasta el próximo lunes
   d.setDate(d.getDate() + ((1 + 7 - d.getDay()) % 7));
   const r = [];
   for (let i = 0; i < 4; i++) {
     r.push(new Date(d));
-    d.setDate(d.getDate() + 7);
+    d.setDate(d.getDate() + 7); // Saltar 7 días
   }
   return r;
 };
 
-const getDateId = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+// Formato de fecha para ID (YYYY-MM-DD)
+const getDateId = (d) => {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
 
-const getHumanDate = (d) => d.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' });
+// Formato de fecha legible (Lunes 14 de Febrero)
+const getHumanDate = (d) => {
+  return d.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' });
+};
 
-// Sistema de envío de Emails simulado (guarda en colección 'mail' para extensión de Firebase)
+// Sistema de envío de Emails (simulado con extensión Firebase Trigger Email)
 const enviarEmailConfirmacion = async (email, alumno, cita) => {
   try {
     const nombreAlumno = String(alumno).trim();
-    // Guardamos el email en la colección 'mail' que lee la extensión Trigger Email
+    // Guardamos el email en la colección 'mail'
     await addDoc(collection(db, 'mail'), {
       to: [email],
       message: {
@@ -255,18 +269,18 @@ const enviarEmailConfirmacion = async (email, alumno, cita) => {
             </div>
             <p>🎒 <strong>Recordad traer:</strong> Bañador, gorro, toalla, gafas y chanclas.</p>
             <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;" />
-            <p style="font-size: 12px; color: #888;">Este es un mensaje automático. No respondas a este correo.</p>
+            <p style="font-size: 12px; color: #888;">Este es un mensaje automático.</p>
           </div>
         `,
       },
     });
-    console.log("Email en cola de envío para:", email);
+    console.log("Email encolado para:", email);
   } catch (e) {
     console.error("Error al encolar email:", e);
   }
 };
 // ==========================================
-// 🏠 PÁGINA PÚBLICA (LANDING PAGE)
+// 🏠 PÁGINA PÚBLICA (LANDING PAGE - OFICIAL)
 // ==========================================
 const LandingPage = ({ setView }) => {
   const [tab, setTab] = useState('actividades');
@@ -319,20 +333,20 @@ const LandingPage = ({ setView }) => {
           
           {/* VISTA ACTIVIDADES */}
           {tab === 'actividades' && (
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 animate-fade-in">
               {OFERTA_ACTIVIDADES.map((act) => (
                 <div key={act.id} className="bg-white rounded-xl shadow-md overflow-hidden border border-gray-100 flex flex-col hover:shadow-xl transition-shadow">
                   <div className="bg-blue-600 p-4 relative">
                     <h3 className="text-white font-bold text-lg pr-8">{act.nombre}</h3>
                     <div className="flex flex-wrap gap-2 mt-2">
-                      <span className="bg-blue-800 text-white text-xs px-2 py-1 rounded shadow-sm">
+                      <span className="bg-blue-800 text-white text-xs px-2 py-1 rounded shadow-sm font-mono">
                         📅 {act.diasResumen}
                       </span>
                       {act.requierePrueba && (
-                        <span className="bg-red-500 text-white text-xs px-2 py-1 rounded font-bold shadow-sm animate-pulse">
-                          ❗ Requiere Prueba
-                        </span>
-                      )}
+  <span className="bg-red-500 text-white text-[10px] md:text-xs px-2 py-1 rounded font-bold shadow-sm animate-pulse whitespace-nowrap">
+    ❗ Requiere Prueba de Nivel
+  </span>
+)}
                     </div>
                   </div>
                   <div className="p-5 flex-1 flex flex-col">
@@ -343,8 +357,9 @@ const LandingPage = ({ setView }) => {
                       <span>⚠️</span>
                       <span>{act.aviso}</span>
                     </div>
-                    <div className="border-t pt-3 mt-auto">
-                      <p className="text-blue-600 text-xl font-black text-right">{act.precioResumen}</p>
+                    {/* AQUI HEMOS QUITADO EL LISTADO DE PRECIOS */}
+                    <div className="border-t pt-3 mt-auto flex justify-end">
+                       <p className="text-2xl font-black text-blue-600">{act.precioResumen}</p>
                     </div>
                   </div>
                 </div>
@@ -352,25 +367,81 @@ const LandingPage = ({ setView }) => {
             </div>
           )}
 
-          {/* VISTA INFO */}
+          {/* VISTA INFO COMPLETA */}
           {tab === 'info' && (
             <div className="space-y-10 animate-fade-in">
-              <div className="bg-white p-6 rounded-xl shadow border">
-                <h3 className="text-xl font-bold mb-4 text-blue-900 flex items-center gap-2">
-                  🗺️ Mapa de Accesos
-                </h3>
-                <div className="w-full bg-gray-100 rounded flex justify-center p-4">
-                  <img src={MAPA_IMAGEN_URL} className="max-h-[600px] object-contain rounded shadow-sm" alt="Mapa" />
+               {/* MAPA */}
+               <div className="bg-white p-6 rounded-xl shadow border border-gray-200">
+                  <h3 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">🗺️ Mapa de Accesos</h3>
+                  <div className="w-full bg-gray-100 rounded-lg overflow-hidden border relative flex justify-center p-4">
+                      <img src={MAPA_IMAGEN_URL} className="max-h-[500px] object-contain rounded shadow-sm" alt="Mapa" />
+                  </div>
+                  <p className="text-center text-xs text-gray-500 mt-2">Acceso por el portón azul al final del patio.</p>
+               </div>
+
+              {/* MATERIAL */}
+              <div className="bg-white rounded-xl shadow-md border border-gray-200 overflow-hidden">
+                <div className="bg-blue-600 p-4 text-white font-bold text-lg flex items-center gap-2">🎒 Material Necesario</div>
+                <div className="p-6 grid grid-cols-2 md:grid-cols-3 gap-6">
+                  <div className="flex items-center gap-3"><span className="text-3xl">👙</span> <span className="font-bold text-gray-700">Bañador</span></div>
+                  <div className="flex items-center gap-3"><span className="text-3xl">🧼</span> <span className="font-bold text-gray-700">Toalla (oblig)</span></div>
+                  <div className="flex items-center gap-3"><span className="text-3xl">🥽</span> <span className="font-bold text-gray-700">Gafas</span></div>
+                  <div className="flex items-center gap-3"><span className="text-3xl">🎩</span> <span className="font-bold text-gray-700">Gorro</span></div>
+                  <div className="flex items-center gap-3"><span className="text-3xl">🩴</span> <span className="font-bold text-gray-700">Chanclas</span></div>
                 </div>
               </div>
-              <div className="bg-white rounded-xl shadow border overflow-hidden">
-                <div className="bg-blue-600 p-4 text-white font-bold text-lg">🎒 Material Necesario</div>
-                <div className="p-6 grid grid-cols-2 md:grid-cols-3 gap-6 text-gray-700 font-bold text-center">
-                  <div className="p-4 bg-gray-50 rounded-lg">👙 Bañador Deportivo</div>
-                  <div className="p-4 bg-gray-50 rounded-lg">🧼 Toalla / Albornoz</div>
-                  <div className="p-4 bg-gray-50 rounded-lg">🥽 Gafas de Agua</div>
-                  <div className="p-4 bg-gray-50 rounded-lg">🩴 Chanclas Antideslizantes</div>
-                  <div className="p-4 bg-gray-50 rounded-lg">🎩 Gorro de Piscina</div>
+
+              {/* RECOGIDA ALUMNOS */}
+              <div className="grid md:grid-cols-1 gap-6">
+                <div className="bg-white p-6 rounded-xl shadow-sm border-l-4 border-blue-400">
+                  <h4 className="font-bold text-lg mb-2 text-blue-900">👶 Infantil</h4>
+                  <p className="text-gray-700 text-sm leading-relaxed">
+                    Los alumnos de Educación Infantil serán recogidos directamente en sus aulas por los monitores, quienes también se encargarán de ayudarles a cambiarse. Al finalizar la clase, los niños serán entregados a sus familias con la ropa de calle, <strong>en la puerta del vestuario correspondiente.</strong>
+                  </p>
+                </div>
+                <div className="bg-white p-6 rounded-xl shadow-sm border-l-4 border-blue-600">
+                  <h4 className="font-bold text-lg mb-2 text-blue-900">🧒 Primaria (16:15)</h4>
+                  <p className="text-gray-700 text-sm leading-relaxed">
+                    El monitor recogerá a los alumnos en el <strong>portón azul</strong> al final del patio. Al finalizar la clase, los niños serán entregados a sus familias con la ropa de calle en el mismo punto.
+                  </p>
+                </div>
+              </div>
+
+              {/* AVISOS, AMPLIACIÓN Y NORMATIVA */}
+              <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                <ul className="space-y-4 text-gray-700 text-sm">
+                  <li className="flex gap-4">
+                    <span className="text-2xl">🕓</span> 
+                    <span><strong>Resto de actividades:</strong> El alumnado deberá ir directamente a la piscina con suficiente antelación para cambiarse.</span>
+                  </li>
+                  <li className="flex gap-4 p-4 bg-orange-50 rounded-lg border border-orange-100">
+                    <span className="text-2xl">🕰️</span> 
+                    <div>
+                      <p className="font-bold text-orange-900 mb-1">Servicio de Ampliación</p>
+                      <p>
+                        Se ruega puntualidad a la hora de la recogida. En caso de llegar tarde, <strong>hasta las 18:00</strong> podrán recogerlos en el servicio de ampliación (consultar coste en secretaría).
+                      </p>
+                    </div>
+                  </li>
+                </ul>
+              </div>
+
+              {/* BAJAS Y ALTAS */}
+              <div className="bg-amber-50 border-2 border-amber-200 rounded-xl p-8">
+                <h3 className="text-2xl font-bold text-amber-800 mb-6">⚠️ Normativa de Bajas y Altas</h3>
+                <div className="grid md:grid-cols-1 gap-6">
+                  <div>
+                    <h4 className="font-bold text-amber-900 text-lg mb-2">📅 Bajas</h4>
+                    <p className="text-amber-900 text-sm">
+                      La fecha límite para solicitar la baja es el <strong>día 25 de cada mes</strong>. Si se comunica después, se cobrará el mes siguiente completo sin excepciones.
+                    </p>
+                  </div>
+                  <div className="border-t border-amber-200 pt-6">
+                    <h4 className="font-bold text-amber-900 text-lg mb-2">🆕 Altas y Mensualidades</h4>
+                    <p className="text-amber-900 text-sm">
+                      Si el alumno se incorpora una vez iniciado el mes, se deberá abonar la <strong>mensualidad completa</strong>. No se realizan prorrateos por días sueltos.
+                    </p>
+                  </div>
                 </div>
               </div>
             </div>
@@ -395,97 +466,71 @@ const LandingPage = ({ setView }) => {
 };
 
 // ==========================================
-// 🛡️ PANEL DE ADMINISTRADOR
+// 🛡️ PANEL DE ADMINISTRADOR (VERSIÓN BLINDADA)
 // ==========================================
 const AdminDashboard = ({ logout }) => {
   const [alumnos, setAlumnos] = useState([]);
   const [avisos, setAvisos] = useState([]);
-  const [tab, setTab] = useState('pruebas');
+  const [tab, setTab] = useState('global');
+  const [busqueda, setBusqueda] = useState('');
   const [nuevoAviso, setNuevoAviso] = useState('');
 
   useEffect(() => {
-    // Escuchar cambios en alumnos
-    const u1 = onSnapshot(query(collection(db, 'students')), s => 
-      setAlumnos(s.docs.map(d => ({ id: d.id, ...d.data() })))
-    );
-    // Escuchar cambios en avisos
-    const u2 = onSnapshot(query(collection(db, 'avisos'), orderBy('fecha', 'desc')), s => 
-      setAvisos(s.docs.map(d => ({ id: d.id, ...d.data() })))
-    );
-    return () => { u1(); u2(); };
+    const unsubStudents = onSnapshot(query(collection(db, 'students')), (s) => setAlumnos(s.docs.map(d => ({ id: d.id, ...d.data() }))));
+    const unsubAvisos = onSnapshot(query(collection(db, 'avisos'), orderBy('fecha', 'desc')), (s) => setAvisos(s.docs.map(d => ({ id: d.id, ...d.data() }))));
+    return () => { unsubStudents(); unsubAvisos(); };
   }, []);
 
-  const agregarAviso = async (e) => {
-    e.preventDefault();
-    if (!nuevoAviso) return;
-    await addDoc(collection(db, 'avisos'), { texto: nuevoAviso, fecha: new Date().toISOString() });
-    setNuevoAviso('');
+  // 🛠️ AQUÍ ESTABA EL ERROR: AHORA USAMOS ( || '') PARA EVITAR QUE EXPLOTE
+  const alumnosFiltrados = alumnos.filter(a => 
+    (a.nombre || '').toLowerCase().includes(busqueda.toLowerCase()) || 
+    (a.curso && a.curso.toLowerCase().includes(busqueda.toLowerCase())) || 
+    (a.actividad && (a.actividad || '').toLowerCase().includes(busqueda.toLowerCase()))
+  );
+
+  const descargarExcel = () => {
+    const cabecera = ['Nombre,Curso,Letra,Estado,Actividad,Días,Horario,Precio,Fecha Nac.,Tutor ID\n'];
+    const filas = alumnosFiltrados.map(a => `"${a.nombre || ''}","${a.curso || ''}","${a.letra || ''}","${a.estado || ''}","${a.actividad || '-'}","${a.dias || '-'}","${a.horario || '-'}","${a.precio || '-'}","${a.fechaNacimiento || ''}","${a.parentId || ''}"`);
+    const csvContent = "data:text/csv;charset=utf-8," + cabecera + filas.join("\n");
+    const link = document.createElement("a"); link.setAttribute("href", encodeURI(csvContent)); link.setAttribute("download", "alumnos.csv"); document.body.appendChild(link); link.click();
   };
 
-  const borrarAviso = async (id) => {
-    if (confirm('¿Borrar aviso?')) await deleteDoc(doc(db, 'avisos', id));
-  };
+  const agregarAviso = async (e) => { e.preventDefault(); if (!nuevoAviso) return; await addDoc(collection(db, 'avisos'), { texto: nuevoAviso, fecha: new Date().toISOString() }); setNuevoAviso(''); };
+  const borrarAviso = async (id) => { if (confirm('¿Borrar?')) await deleteDoc(doc(db, 'avisos', id)); };
+  const borrarAlumno = async (id) => { if(confirm('⚠️ ¿Estás seguro de borrar este alumno y todo su historial?')) await deleteDoc(doc(db, 'students', id)); }
 
   return (
-    <div className="min-h-screen bg-gray-100 p-6 font-sans">
-      <div className="flex justify-between items-center mb-6 bg-white p-4 rounded shadow">
-        <h1 className="text-2xl font-bold text-gray-800">Panel de Administración</h1>
-        <button onClick={logout} className="bg-red-600 text-white px-4 py-2 rounded font-bold hover:bg-red-700">Cerrar Sesión</button>
+    <div className="min-h-screen bg-gray-100 font-sans flex flex-col">
+      <div className="bg-white shadow-sm border-b p-4 flex justify-between items-center sticky top-0 z-50">
+        <div className="flex items-center gap-3"><div className="bg-blue-900 text-white p-2 rounded-lg font-bold">🛡️ ADMIN</div><h1 className="text-xl font-bold text-gray-800 hidden md:block">Panel de Control</h1></div>
+        <div className="flex gap-4"><button onClick={descargarExcel} className="bg-green-600 text-white px-4 py-2 rounded font-bold hover:bg-green-700 text-sm">📥 Excel</button><button onClick={logout} className="bg-red-50 text-red-600 border border-red-200 px-4 py-2 rounded font-bold hover:bg-red-100 text-sm">Salir</button></div>
       </div>
-
-      <div className="flex gap-2 mb-6">
-        <button onClick={() => setTab('pruebas')} className={`px-4 py-2 rounded shadow font-bold ${tab === 'pruebas' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600'}`}>Pruebas de Nivel</button>
-        <button onClick={() => setTab('avisos')} className={`px-4 py-2 rounded shadow font-bold ${tab === 'avisos' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600'}`}>Gestionar Avisos</button>
-      </div>
-
-      {tab === 'avisos' && (
-        <div className="bg-white p-6 rounded shadow max-w-2xl">
-          <h3 className="font-bold mb-4">Publicar Aviso para Familias</h3>
-          <form onSubmit={agregarAviso} className="flex gap-2 mb-4">
-            <input 
-              className="border p-2 flex-1 rounded" 
-              value={nuevoAviso} 
-              onChange={e => setNuevoAviso(e.target.value)} 
-              placeholder="Escribe un aviso importante..." 
-            />
-            <button className="bg-green-600 text-white px-4 rounded font-bold">Publicar</button>
-          </form>
-          <div className="space-y-2">
-            {avisos.map(a => (
-              <div key={a.id} className="flex justify-between border-b p-3 bg-yellow-50 rounded">
-                <span>{a.texto}</span>
-                <button onClick={() => borrarAviso(a.id)} className="text-red-500 font-bold hover:bg-red-100 px-2 rounded">🗑️</button>
-              </div>
-            ))}
+      <div className="p-6 max-w-7xl mx-auto w-full flex-1">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200"><p className="text-gray-500 text-xs font-bold uppercase">Total</p><p className="text-3xl font-black text-gray-800">{alumnos.length}</p></div>
+          <div className="bg-white p-4 rounded-xl shadow-sm border-l-4 border-green-500"><p className="text-green-600 text-xs font-bold uppercase">Inscritos</p><p className="text-3xl font-black text-green-700">{alumnos.filter(a => a.estado === 'inscrito').length}</p></div>
+          <div className="bg-white p-4 rounded-xl shadow-sm border-l-4 border-orange-400"><p className="text-orange-500 text-xs font-bold uppercase">Pruebas</p><p className="text-3xl font-black text-orange-600">{alumnos.filter(a => a.estado === 'prueba_reservada' || a.citaNivel).length}</p></div>
+          <div className="bg-white p-4 rounded-xl shadow-sm border-l-4 border-blue-400"><p className="text-blue-500 text-xs font-bold uppercase">Avisos</p><p className="text-3xl font-black text-blue-600">{avisos.length}</p></div>
+        </div>
+        <div className="flex gap-2 mb-4 overflow-x-auto pb-2">
+          {['global', 'pruebas', 'avisos'].map(t => <button key={t} onClick={() => setTab(t)} className={`px-5 py-2 rounded-full font-bold text-sm uppercase ${tab === t ? 'bg-blue-900 text-white' : 'bg-white text-gray-600'}`}>{t}</button>)}
+        </div>
+        {tab === 'global' && (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden animate-fade-in">
+            <div className="p-4 border-b bg-gray-50 flex gap-4"><input type="text" placeholder="🔍 Buscar..." className="flex-1 border p-2 rounded" value={busqueda} onChange={e => setBusqueda(e.target.value)}/></div>
+            <div className="overflow-x-auto"><table className="w-full text-sm text-left"><thead className="bg-gray-100 text-gray-600 uppercase text-xs"><tr><th className="p-3">Alumno</th><th className="p-3">Estado</th><th className="p-3">Actividad</th><th className="p-3 text-right">Acciones</th></tr></thead><tbody className="divide-y">{alumnosFiltrados.map(a => (<tr key={a.id} className="hover:bg-blue-50"><td className="p-3 font-bold">{a.nombre || '❌ SIN NOMBRE'}<br/><span className="text-xs text-gray-400">{a.curso}</span></td><td className="p-3">{a.estado}</td><td className="p-3">{a.actividad || '-'}</td><td className="p-3 text-right"><button onClick={() => borrarAlumno(a.id)} className="text-red-400 hover:text-red-600">🗑️</button></td></tr>))}</tbody></table></div>
           </div>
-        </div>
-      )}
-
-      {tab === 'pruebas' && (
-        <div className="bg-white rounded shadow p-4 overflow-x-auto">
-          <h3 className="font-bold mb-4">Listado de Pruebas Reservadas</h3>
-          <table className="w-full text-sm text-left border-collapse">
-            <thead className="bg-gray-50 text-gray-600 uppercase">
-              <tr>
-                <th className="p-3 border-b">Fecha Cita</th>
-                <th className="p-3 border-b">Alumno</th>
-                <th className="p-3 border-b">Estado</th>
-                <th className="p-3 border-b">Contacto</th>
-              </tr>
-            </thead>
-            <tbody>
-              {alumnos.filter(a => a.estado === 'prueba_reservada' || a.citaNivel).map(a => (
-                <tr key={a.id} className="border-b hover:bg-gray-50">
-                  <td className="p-3 font-medium text-blue-600">{a.citaNivel || 'Sin fecha'}</td>
-                  <td className="p-3 font-bold">{a.nombre}</td>
-                  <td className="p-3"><span className="bg-orange-100 text-orange-800 px-2 py-1 rounded text-xs font-bold">Prueba Pendiente</span></td>
-                  <td className="p-3 text-gray-500">{a.curso}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+        )}
+        {tab === 'pruebas' && (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden animate-fade-in"><table className="w-full text-sm text-left"><thead className="bg-gray-100 text-gray-600 uppercase text-xs"><tr><th className="p-3">Fecha</th><th className="p-3">Alumno</th><th className="p-3">Curso</th></tr></thead><tbody className="divide-y">{alumnos.filter(a => a.estado === 'prueba_reservada' || a.citaNivel).map(a => (<tr key={a.id} className="hover:bg-orange-50"><td className="p-3 font-bold text-blue-600">{a.citaNivel}</td><td className="p-3 font-bold">{a.nombre || '❌ SIN NOMBRE'}</td><td className="p-3 text-gray-500">{a.curso}</td></tr>))}</tbody></table></div>
+        )}
+        {tab === 'avisos' && (
+          <div className="grid md:grid-cols-2 gap-6 animate-fade-in">
+             <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200"><h3 className="font-bold mb-4">Nuevo Aviso</h3><form onSubmit={agregarAviso}><textarea className="w-full border p-3 rounded mb-4" rows="3" value={nuevoAviso} onChange={e => setNuevoAviso(e.target.value)} /><button className="w-full bg-blue-600 text-white py-2 rounded font-bold">Publicar</button></form></div>
+             <div className="space-y-3">{avisos.map(a => (<div key={a.id} className="bg-yellow-50 border border-yellow-200 p-4 rounded-lg flex justify-between"><div><p className="text-yellow-900 font-medium">{a.texto}</p></div><button onClick={() => borrarAviso(a.id)} className="text-red-500">🗑️</button></div>))}</div>
+          </div>
+        )}
+      </div>
     </div>
   );
 };
@@ -495,13 +540,12 @@ const AdminDashboard = ({ logout }) => {
 const Dashboard = ({ user, misHijos, logout, refresh }) => {
   const [showForm, setShowForm] = useState(false);
   const [alumnoSeleccionado, setAlumnoSeleccionado] = useState(null);
-  const [alumnoEditar, setAlumnoEditar] = useState(null); // Estado para abrir modal de edición
+  const [alumnoEditar, setAlumnoEditar] = useState(null);
   const [modoModal, setModoModal] = useState(null);
   const [avisos, setAvisos] = useState([]);
   
   const alumnoEnVivo = misHijos.find((h) => h.id === alumnoSeleccionado?.id);
 
-  // Cargar avisos del admin
   useEffect(() => {
     const unsub = onSnapshot(query(collection(db, 'avisos'), orderBy('fecha', 'desc')), (s) => 
       setAvisos(s.docs.map((doc) => ({ id: doc.id, ...doc.data() })))
@@ -512,14 +556,12 @@ const Dashboard = ({ user, misHijos, logout, refresh }) => {
   // Función para dar de baja / borrar alumno
   const gestionarBaja = async (hijo) => {
     if (hijo.estado === 'sin_inscripcion') {
-        // Si no está inscrito, BORRAMOS DIRECTAMENTE
         if (window.confirm(`⚠️ ¿Quieres eliminar definitivamente el perfil de ${hijo.nombre}?`)) {
             await deleteDoc(doc(db, 'students', hijo.id));
             refresh(user.uid);
         }
         return;
     }
-
     // Si ya está inscrito, es una BAJA administrativa
     if (new Date().getDate() > 25) return alert('⛔ Plazo cerrado (día 25). Contacta con secretaría.');
     if (window.confirm(`⚠️ ¿Seguro que desea tramitar la BAJA de ${hijo.nombre}?\nPerderá su plaza actual.`)) {
@@ -570,7 +612,6 @@ const Dashboard = ({ user, misHijos, logout, refresh }) => {
       <div className="grid gap-6 md:grid-cols-2 mb-8">
         {misHijos.map((hijo) => {
           const esPendiente = hijo.estado === 'inscrito' && !hijo.esAntiguoAlumno;
-          // Colores según estado
           let bordeColor = 'bg-gray-400';
           let estadoTexto = 'Sin Actividad';
           let estadoClase = 'bg-gray-100 text-gray-500';
@@ -587,14 +628,12 @@ const Dashboard = ({ user, misHijos, logout, refresh }) => {
 
           return (
             <div key={hijo.id} className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition relative overflow-hidden group">
-              {/* Barra lateral de color */}
               <div className={`absolute top-0 left-0 w-1.5 h-full ${bordeColor}`}></div>
               
               <div className="flex justify-between items-start mb-2 pl-3">
                 <div className="flex-1">
                   <h3 className="font-bold text-xl text-gray-800 flex items-center gap-2">
                     {hijo.nombre} 
-                    {/* BOTÓN EDITAR DATOS (LÁPIZ) */}
                     <button 
                         onClick={() => setAlumnoEditar(hijo)} 
                         className="text-gray-400 hover:text-blue-600 bg-gray-50 hover:bg-blue-50 p-1.5 rounded-full transition" 
@@ -615,7 +654,6 @@ const Dashboard = ({ user, misHijos, logout, refresh }) => {
                 </div>
               </div>
 
-              {/* INFO DE INSCRIPCIÓN */}
               {hijo.estado === 'inscrito' && (
                 <div className={`ml-3 mt-4 p-3 rounded-lg border text-sm ${esPendiente ? 'bg-yellow-50 border-yellow-200' : 'bg-green-50 border-green-100'}`}>
                   <p className="font-bold mb-1 text-gray-800">{hijo.actividad}</p>
@@ -626,7 +664,6 @@ const Dashboard = ({ user, misHijos, logout, refresh }) => {
                 </div>
               )}
 
-              {/* INFO DE CITA */}
               {hijo.estado === 'prueba_reservada' && (
                 <div className="ml-3 mt-4 bg-orange-50 p-3 rounded-lg border border-orange-100 text-sm flex items-start gap-3">
                   <span className="text-2xl">📅</span>
@@ -638,17 +675,11 @@ const Dashboard = ({ user, misHijos, logout, refresh }) => {
                 </div>
               )}
 
-              {/* BOTONERA ACCIONES */}
               <div className="mt-6 pt-4 ml-3 border-t border-gray-100 flex gap-2">
                 {hijo.estado === 'inscrito' ? (
-                  <>
-                    <button className="flex-1 bg-gray-100 text-gray-400 py-2 rounded-lg text-sm font-bold cursor-not-allowed border border-transparent">
-                      🔒 Grupo Asignado
-                    </button>
-                    <button onClick={() => gestionarBaja(hijo)} className="bg-white text-red-600 px-3 py-2 rounded-lg text-sm font-bold hover:bg-red-50 border border-red-200 transition">
+                    <button onClick={() => gestionarBaja(hijo)} className="w-full bg-white text-red-600 px-3 py-2 rounded-lg text-sm font-bold hover:bg-red-50 border border-red-200 transition">
                       Baja
                     </button>
-                  </>
                 ) : hijo.estado === 'prueba_reservada' ? (
                    <button className="w-full bg-orange-100 text-orange-700 py-2 rounded-lg text-sm font-bold cursor-default">
                       Esperando Prueba...
@@ -657,11 +688,10 @@ const Dashboard = ({ user, misHijos, logout, refresh }) => {
                   <div className="flex w-full gap-2">
                     <button 
                         onClick={() => { setAlumnoSeleccionado(hijo); setModoModal('inscripcion'); }} 
-                        className="flex-1 bg-blue-600 text-white py-2 rounded-lg text-sm font-bold hover:bg-blue-700 transition shadow-sm"
+                        className="flex-1 bg-blue-600 text-white py-2 rounded-lg text-sm font-bold hover:bg-blue-700 shadow-sm"
                     >
                         Gestionar Inscripción
                     </button>
-                    {/* BOTÓN BORRAR ALUMNO (PAPELERA) PARA LOS NO INSCRITOS */}
                     <button 
                         onClick={() => gestionarBaja(hijo)} 
                         className="bg-white text-red-500 px-3 py-2 rounded-lg text-sm font-bold hover:bg-red-50 border border-red-200 transition"
@@ -677,7 +707,6 @@ const Dashboard = ({ user, misHijos, logout, refresh }) => {
         })}
       </div>
       
-      {/* BOTÓN AÑADIR NUEVO HIJO */}
       <button 
         onClick={() => setShowForm(true)} 
         className="w-full py-5 border-2 border-dashed border-blue-200 text-blue-400 rounded-xl font-bold hover:bg-blue-50 hover:border-blue-400 hover:text-blue-600 transition flex items-center justify-center gap-2 mb-10"
@@ -685,10 +714,8 @@ const Dashboard = ({ user, misHijos, logout, refresh }) => {
         <span className="text-2xl">+</span> Añadir Otro Alumno
       </button>
       
-      {/* RENDERIZADO CONDICIONAL DE MODALES */}
       {showForm && (<FormularioHijo close={() => setShowForm(false)} user={user} refresh={refresh} />)}
       
-      {/* MODAL DE EDICIÓN DE DATOS */}
       {alumnoEditar && (
         <FormularioEdicionHijo 
             alumno={alumnoEditar} 
@@ -701,7 +728,7 @@ const Dashboard = ({ user, misHijos, logout, refresh }) => {
         <PantallaPruebaNivel 
             alumno={alumnoEnVivo} 
             close={() => setModoModal(null)} 
-            onSuccess={() => setModoModal(null)} // AL TERMINAR LA PRUEBA, CIERRA Y VUELVE AL DASHBOARD
+            onSuccess={() => setModoModal(null)} 
             user={user} 
             refresh={refresh} 
         />
@@ -721,7 +748,7 @@ const Dashboard = ({ user, misHijos, logout, refresh }) => {
 };
 
 // ==========================================
-// ✏️ FORMULARIO EDICIÓN DE DATOS (NUEVO)
+// ✏️ FORMULARIO EDICIÓN DE DATOS
 // ==========================================
 const FormularioEdicionHijo = ({ alumno, close, refresh }) => {
   const [data, setData] = useState({ 
@@ -778,296 +805,9 @@ const FormularioEdicionHijo = ({ alumno, close, refresh }) => {
     </div>
   );
 };
-// ==========================================
-// 📅 MODAL DE PRUEBA DE NIVEL
-// ==========================================
-const PantallaPruebaNivel = ({ alumno, close, onSuccess, user, refresh }) => {
-  const [citasOcupadas, setCitasOcupadas] = useState({});
-  const diasPrueba = getNextMondays();
-  const [diaIdSeleccionado, setDiaIdSeleccionado] = useState(getDateId(diasPrueba[0]));
-  
-  // Checks de aceptación
-  const [aceptaNormas, setAceptaNormas] = useState(alumno.aceptaNormas || false);
-  const [autorizaFotos, setAutorizaFotos] = useState(alumno.autorizaFotos || false);
-
-  // Generar huecos de 5 min
-  const horas = [];
-  for (let h = 16; h < 18; h++) {
-    for (let m = 0; m < 60; m += 5) {
-      horas.push(`${h}:${m.toString().padStart(2, '0')}`);
-    }
-  }
-
-  // Cargar citas ocupadas
-  useEffect(() => {
-    const unsub = onSnapshot(query(collection(db, 'students')), s => {
-      const c = {};
-      s.forEach(d => {
-        const dt = d.data();
-        if (dt.citaId) c[dt.citaId] = (c[dt.citaId] || 0) + 1;
-      });
-      setCitasOcupadas(c);
-    });
-    return () => unsub();
-  }, []);
-
-  const confirmarCita = async (hora) => {
-    if (!aceptaNormas) return alert("⚠️ Debes aceptar las normas de funcionamiento.");
-    
-    const citaId = `${diaIdSeleccionado}_${hora}`;
-    const textoCita = `${getHumanDate(diasPrueba.find(d => getDateId(d) === diaIdSeleccionado))} a las ${hora}`;
-
-    if ((citasOcupadas[citaId] || 0) >= CAPACIDAD_POR_HUECO) return alert('⚠️ Esa hora ya está completa. Por favor elige otra.');
-
-    if (!window.confirm(`¿Confirmar reserva de prueba?\n\n📅 ${textoCita}\n📍 Portón Azul`)) return;
-
-    try {
-      await updateDoc(doc(db, 'students', alumno.id), {
-        estado: 'prueba_reservada',
-        citaId,
-        citaNivel: textoCita,
-        aceptaNormas: true,
-        autorizaFotos
-      });
-      
-      // Enviar correo de confirmación
-      await enviarEmailConfirmacion(auth.currentUser.email, alumno.nombre, textoCita);
-
-      alert('✅ Cita Confirmada correctamente.');
-      refresh(user.uid);
-      onSuccess(); // ESTO CIERRA EL MODAL Y VUELVE AL DASHBOARD
-    } catch (e) {
-      alert('Error al reservar: ' + e.message);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
-      <div className="bg-white p-6 rounded-2xl max-w-lg w-full h-[85vh] flex flex-col shadow-2xl animate-fade-in-up">
-        <div className="flex justify-between items-center mb-4 border-b pb-2">
-           <h2 className="text-2xl font-bold text-blue-900">Reserva de Prueba</h2>
-           <button onClick={close} className="text-gray-400 hover:text-gray-800 font-bold text-xl">✕</button>
-        </div>
-
-        {/* CHECKBOXES NORMAS (Si no estaban aceptadas antes) */}
-        {!alumno.aceptaNormas && (
-          <div className="bg-yellow-50 p-4 rounded-lg mb-4 text-xs border border-yellow-200">
-            <h4 className="font-bold text-yellow-800 mb-2">Requisitos Previos</h4>
-            <label className="flex gap-2 mb-2 cursor-pointer items-start">
-              <input type="checkbox" className="mt-1" checked={aceptaNormas} onChange={e => setAceptaNormas(e.target.checked)} />
-              <span>He leído y acepto las <strong>normas de funcionamiento</strong> de la escuela (OBLIGATORIO).</span>
-            </label>
-            <label className="flex gap-2 cursor-pointer items-start">
-              <input type="checkbox" className="mt-1" checked={autorizaFotos} onChange={e => setAutorizaFotos(e.target.checked)} />
-              <span>Autorizo la toma de imágenes para uso interno/promocional del club.</span>
-            </label>
-          </div>
-        )}
-
-        <label className="text-sm font-bold text-gray-600 mb-1">Selecciona el día:</label>
-        <select 
-          className="w-full border-2 border-blue-100 p-3 rounded-lg mb-4 font-bold text-blue-900 bg-blue-50 focus:border-blue-500 outline-none"
-          value={diaIdSeleccionado}
-          onChange={e => setDiaIdSeleccionado(e.target.value)}
-        >
-          {diasPrueba.map(d => (
-            <option key={getDateId(d)} value={getDateId(d)}>{getHumanDate(d)}</option>
-          ))}
-        </select>
-
-        <p className="text-xs text-center text-gray-500 mb-2">Huecos disponibles cada 5 minutos (Máx 2 alumnos)</p>
-
-        <div className="flex-1 overflow-y-auto grid grid-cols-4 gap-2 pr-1">
-          {horas.map(h => {
-            const ocupacion = citasOcupadas[`${diaIdSeleccionado}_${h}`] || 0;
-            const lleno = ocupacion >= CAPACIDAD_POR_HUECO;
-            return (
-              <button
-                key={h}
-                disabled={lleno}
-                onClick={() => confirmarCita(h)}
-                className={`p-2 rounded-lg text-xs font-bold transition ${
-                  lleno 
-                    ? 'bg-gray-100 text-gray-300 cursor-not-allowed border border-gray-200' 
-                    : 'bg-white text-green-700 border border-green-200 hover:bg-green-500 hover:text-white shadow-sm'
-                }`}
-              >
-                {h}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-    </div>
-  );
-};
 
 // ==========================================
-// 📝 MODAL DE INSCRIPCIÓN
-// ==========================================
-const PantallaInscripcion = ({ alumno, close, onRequirePrueba, user, refresh }) => {
-  // Estado local para permitir edición antes de inscribir
-  const [datosAlumno, setDatosAlumno] = useState({ 
-    nombre: alumno.nombre, 
-    curso: alumno.curso, 
-    fechaNacimiento: alumno.fechaNacimiento || '' 
-  });
-  
-  // Filtrar actividades disponibles según el curso seleccionado en tiempo real
-  const actividadesDisponibles = OFERTA_ACTIVIDADES.filter((act) => act.cursos.includes(datosAlumno.curso));
-  
-  const [aceptaNormas, setAceptaNormas] = useState(alumno.aceptaNormas || false);
-  const [autorizaFotos, setAutorizaFotos] = useState(alumno.autorizaFotos || false);
-
-  const inscribir = async (act, op) => {
-    if (!aceptaNormas) return alert("⚠️ Debes aceptar las normas para continuar.");
-    if (!datosAlumno.nombre) return alert("⚠️ El nombre es obligatorio.");
-
-    // Lógica de Prueba de Nivel
-    if (act.requierePrueba && !alumno.esAntiguoAlumno && !alumno.citaNivel && alumno.estado !== 'prueba_reservada') {
-      // Guardamos los cambios de nombre/curso y los checks antes de ir a la prueba
-      await updateDoc(doc(db, 'students', alumno.id), { 
-          ...datosAlumno, 
-          aceptaNormas: true, 
-          autorizaFotos 
-      });
-      
-      if (confirm(`La actividad "${act.nombre}" requiere prueba de nivel.\n¿Deseas reservar cita ahora?`)) {
-        onRequirePrueba(); // Abrir modal de prueba
-      }
-      return;
-    }
-
-    if (!confirm(`¿Confirmar inscripción en:\n${act.nombre}\n📅 ${op.dias}\n⏰ ${op.horario}?`)) return;
-
-    // Guardar Inscripción Definitiva
-    await updateDoc(doc(db, 'students', alumno.id), {
-      nombre: datosAlumno.nombre,
-      curso: datosAlumno.curso,
-      fechaNacimiento: datosAlumno.fechaNacimiento,
-      estado: 'inscrito',
-      actividad: act.nombre,
-      dias: op.dias,
-      horario: op.horario,
-      precio: op.precio,
-      fechaInscripcion: new Date().toISOString(),
-      autorizaFotos,
-      aceptaNormas: true
-    });
-    
-    refresh(user.uid);
-    close();
-  };
-
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
-      <div className="bg-white p-6 rounded-2xl max-w-lg w-full h-[90vh] flex flex-col shadow-2xl animate-fade-in-up">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-bold text-blue-900">Inscripción y Datos</h2>
-          <button onClick={close} className="text-gray-400 hover:text-gray-800 font-bold text-xl">✕</button>
-        </div>
-
-        {/* SECCIÓN DATOS ALUMNO (EDITABLES) */}
-        <div className="bg-blue-50 p-4 rounded-xl mb-4 border border-blue-100 space-y-3">
-          <div>
-            <label className="text-xs font-bold text-blue-800 uppercase">Nombre del Alumno</label>
-            <input 
-                className="w-full border border-blue-200 p-2 rounded bg-white text-sm focus:ring-2 focus:ring-blue-400 outline-none"
-                value={datosAlumno.nombre}
-                onChange={e => setDatosAlumno({ ...datosAlumno, nombre: e.target.value })}
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs font-bold text-blue-800 uppercase">Curso Escolar</label>
-              <select 
-                className="w-full border border-blue-200 p-2 rounded bg-white text-sm focus:ring-2 focus:ring-blue-400 outline-none"
-                value={datosAlumno.curso}
-                onChange={e => setDatosAlumno({ ...datosAlumno, curso: e.target.value })}
-              >
-                {LISTA_CURSOS.map(c => <option key={c.val} value={c.val}>{c.label}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="text-xs font-bold text-blue-800 uppercase">Fecha Nac.</label>
-              <input 
-                type="date"
-                className="w-full border border-blue-200 p-2 rounded bg-white text-sm focus:ring-2 focus:ring-blue-400 outline-none"
-                value={datosAlumno.fechaNacimiento}
-                onChange={e => setDatosAlumno({ ...datosAlumno, fechaNacimiento: e.target.value })}
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* SECCIÓN NORMAS */}
-        <div className="bg-gray-50 p-3 rounded mb-4 text-xs border border-gray-200">
-            <label className="flex gap-2 mb-2 items-start cursor-pointer">
-                <input 
-                    type="checkbox" 
-                    className="mt-0.5"
-                    checked={aceptaNormas} 
-                    onChange={e => setAceptaNormas(e.target.checked)} 
-                    disabled={alumno.aceptaNormas} // Si ya aceptó antes, no se puede quitar
-                /> 
-                <span className={alumno.aceptaNormas ? 'text-green-700 font-bold' : ''}>
-                    {alumno.aceptaNormas ? '✅ Normas y Condiciones aceptadas' : 'He leído y acepto las normas (OBLIGATORIO)'}
-                </span>
-            </label>
-            <label className="flex gap-2 items-start cursor-pointer">
-                <input 
-                    type="checkbox" 
-                    className="mt-0.5"
-                    checked={autorizaFotos} 
-                    onChange={e => setAutorizaFotos(e.target.checked)} 
-                /> 
-                <span>Autorizo fotos/vídeos del menor con fines educativos.</span>
-            </label>
-        </div>
-
-        <h3 className="font-bold text-gray-700 mb-2 text-sm border-b pb-1">Actividades Disponibles ({actividadesDisponibles.length})</h3>
-
-        {/* LISTADO DE ACTIVIDADES */}
-        <div className="overflow-y-auto pr-2 space-y-4 flex-1">
-          {actividadesDisponibles.length === 0 ? (
-             <p className="text-center text-gray-500 py-10">No hay actividades para este curso escolar.</p>
-          ) : (
-             actividadesDisponibles.map(act => (
-                <div key={act.id} className="border border-gray-200 rounded-xl p-3 hover:border-blue-400 hover:shadow-md transition bg-white">
-                  <div className="flex justify-between items-start mb-2">
-                    <h3 className="font-bold text-blue-900 text-sm">{act.nombre}</h3>
-                    {act.requierePrueba && (
-                        <span className="bg-red-100 text-red-700 text-[10px] px-1.5 py-0.5 rounded font-bold uppercase">Requiere Prueba</span>
-                    )}
-                  </div>
-                  <p className="text-xs text-gray-500 mb-3 whitespace-pre-line">{act.descripcion}</p>
-                  
-                  <div className="grid gap-2">
-                    {act.opciones.map((op, i) => (
-                      <button
-                        key={i}
-                        onClick={() => inscribir(act, op)}
-                        className="border border-gray-100 bg-gray-50 p-2 rounded hover:bg-blue-600 hover:text-white text-left text-xs flex justify-between items-center transition group"
-                      >
-                        <span className="font-medium">{op.dias}</span>
-                        <div className="text-right">
-                            <span className="block font-bold">{op.horario}</span>
-                            <span className="block text-[10px] text-gray-500 group-hover:text-blue-200">{op.precio}</span>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-             ))
-          )}
-        </div>
-      </div>
-    </div>
-  );
-};
-
-// ==========================================
-// ➕ FORMULARIO ALTA HIJO (Inicial)
+// ➕ FORMULARIO ALTA HIJO
 // ==========================================
 const FormularioHijo = ({ close, user, refresh }) => {
   const [data, setData] = useState({ 
@@ -1161,7 +901,253 @@ const FormularioHijo = ({ close, user, refresh }) => {
 };
 
 // ==========================================
-// 🔐 LOGIN Y REGISTRO (COMPLEJO)
+// 📅 MODAL DE PRUEBA DE NIVEL
+// ==========================================
+const PantallaPruebaNivel = ({ alumno, close, onSuccess, user, refresh }) => {
+  const [citasOcupadas, setCitasOcupadas] = useState({});
+  const diasPrueba = getNextMondays();
+  const [diaIdSeleccionado, setDiaIdSeleccionado] = useState(getDateId(diasPrueba[0]));
+  const [aceptaNormas, setAceptaNormas] = useState(alumno.aceptaNormas || false);
+  const [autorizaFotos, setAutorizaFotos] = useState(alumno.autorizaFotos || false);
+
+  const horas = [];
+  for (let h = 16; h < 18; h++) {
+    for (let m = 0; m < 60; m += 5) {
+      horas.push(`${h}:${m.toString().padStart(2, '0')}`);
+    }
+  }
+
+  useEffect(() => {
+    const unsub = onSnapshot(query(collection(db, 'students')), s => {
+      const c = {};
+      s.forEach(d => {
+        const dt = d.data();
+        if (dt.citaId) c[dt.citaId] = (c[dt.citaId] || 0) + 1;
+      });
+      setCitasOcupadas(c);
+    });
+    return () => unsub();
+  }, []);
+
+  const confirmarCita = async (hora) => {
+    if (!aceptaNormas) return alert("⚠️ Debes aceptar las normas de funcionamiento.");
+    
+    const citaId = `${diaIdSeleccionado}_${hora}`;
+    const textoCita = `${getHumanDate(diasPrueba.find(d => getDateId(d) === diaIdSeleccionado))} a las ${hora}`;
+
+    if ((citasOcupadas[citaId] || 0) >= CAPACIDAD_POR_HUECO) return alert('⚠️ Esa hora ya está completa. Por favor elige otra.');
+
+    if (!window.confirm(`¿Confirmar reserva de prueba?\n\n📅 ${textoCita}\n📍 Portón Azul`)) return;
+
+    try {
+      await updateDoc(doc(db, 'students', alumno.id), {
+        estado: 'prueba_reservada',
+        citaId,
+        citaNivel: textoCita,
+        aceptaNormas: true,
+        autorizaFotos
+      });
+      await enviarEmailConfirmacion(auth.currentUser.email, alumno.nombre, textoCita);
+      alert('✅ Cita Confirmada correctamente.');
+      refresh(user.uid);
+      onSuccess();
+    } catch (e) {
+      alert('Error al reservar: ' + e.message);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
+      <div className="bg-white p-6 rounded-2xl max-w-lg w-full h-[85vh] flex flex-col shadow-2xl animate-fade-in-up">
+        <div className="flex justify-between items-center mb-4 border-b pb-2">
+           <h2 className="text-2xl font-bold text-blue-900">Reserva de Prueba</h2>
+           <button onClick={close} className="text-gray-400 hover:text-gray-800 font-bold text-xl">✕</button>
+        </div>
+        {!alumno.aceptaNormas && (
+          <div className="bg-yellow-50 p-4 rounded-lg mb-4 text-xs border border-yellow-200">
+            <h4 className="font-bold text-yellow-800 mb-2">Requisitos Previos</h4>
+            <label className="flex gap-2 mb-2 cursor-pointer items-start">
+              <input type="checkbox" className="mt-1" checked={aceptaNormas} onChange={e => setAceptaNormas(e.target.checked)} />
+              <span>He leído y acepto las <strong>normas de funcionamiento</strong> de la escuela (OBLIGATORIO).</span>
+            </label>
+            <label className="flex gap-2 cursor-pointer items-start">
+              <input type="checkbox" className="mt-1" checked={autorizaFotos} onChange={e => setAutorizaFotos(e.target.checked)} />
+              <span>Autorizo la toma de imágenes para uso interno/promocional del club.</span>
+            </label>
+          </div>
+        )}
+        <label className="text-sm font-bold text-gray-600 mb-1">Selecciona el día:</label>
+        <select 
+          className="w-full border-2 border-blue-100 p-3 rounded-lg mb-4 font-bold text-blue-900 bg-blue-50 focus:border-blue-500 outline-none"
+          value={diaIdSeleccionado}
+          onChange={e => setDiaIdSeleccionado(e.target.value)}
+        >
+          {diasPrueba.map(d => (
+            <option key={getDateId(d)} value={getDateId(d)}>{getHumanDate(d)}</option>
+          ))}
+        </select>
+        <p className="text-xs text-center text-gray-500 mb-2">Huecos disponibles cada 5 minutos (Máx 2 alumnos)</p>
+        <div className="flex-1 overflow-y-auto grid grid-cols-4 gap-2 pr-1">
+          {horas.map(h => {
+            const ocupacion = citasOcupadas[`${diaIdSeleccionado}_${h}`] || 0;
+            const lleno = ocupacion >= CAPACIDAD_POR_HUECO;
+            return (
+              <button
+                key={h}
+                disabled={lleno}
+                onClick={() => confirmarCita(h)}
+                className={`p-2 rounded-lg text-xs font-bold transition ${
+                  lleno 
+                    ? 'bg-gray-100 text-gray-300 cursor-not-allowed border border-gray-200' 
+                    : 'bg-white text-green-700 border border-green-200 hover:bg-green-500 hover:text-white shadow-sm'
+                }`}
+              >
+                {h}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ==========================================
+// 📝 MODAL DE INSCRIPCIÓN
+// ==========================================
+const PantallaInscripcion = ({ alumno, close, onRequirePrueba, user, refresh }) => {
+  const [datosAlumno, setDatosAlumno] = useState({ 
+    nombre: alumno.nombre, 
+    curso: alumno.curso, 
+    fechaNacimiento: alumno.fechaNacimiento || '' 
+  });
+  
+  const actividadesDisponibles = OFERTA_ACTIVIDADES.filter((act) => act.cursos.includes(datosAlumno.curso));
+  const [aceptaNormas, setAceptaNormas] = useState(alumno.aceptaNormas || false);
+  const [autorizaFotos, setAutorizaFotos] = useState(alumno.autorizaFotos || false);
+
+  const inscribir = async (act, op) => {
+    if (!aceptaNormas) return alert("⚠️ Debes aceptar las normas para continuar.");
+    if (!datosAlumno.nombre) return alert("⚠️ El nombre es obligatorio.");
+
+    if (act.requierePrueba && !alumno.esAntiguoAlumno && !alumno.citaNivel && alumno.estado !== 'prueba_reservada') {
+      await updateDoc(doc(db, 'students', alumno.id), { 
+          ...datosAlumno, 
+          aceptaNormas: true, 
+          autorizaFotos 
+      });
+      if (confirm(`La actividad "${act.nombre}" requiere prueba de nivel.\n¿Deseas reservar cita ahora?`)) {
+        onRequirePrueba();
+      }
+      return;
+    }
+
+    if (!confirm(`¿Confirmar inscripción en:\n${act.nombre}\n📅 ${op.dias}\n⏰ ${op.horario}?`)) return;
+
+    await updateDoc(doc(db, 'students', alumno.id), {
+      nombre: datosAlumno.nombre,
+      curso: datosAlumno.curso,
+      fechaNacimiento: datosAlumno.fechaNacimiento,
+      estado: 'inscrito',
+      actividad: act.nombre,
+      dias: op.dias,
+      horario: op.horario,
+      precio: op.precio,
+      fechaInscripcion: new Date().toISOString(),
+      autorizaFotos,
+      aceptaNormas: true
+    });
+    refresh(user.uid);
+    close();
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
+      <div className="bg-white p-6 rounded-2xl max-w-lg w-full h-[90vh] flex flex-col shadow-2xl animate-fade-in-up">
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-xl font-bold text-blue-900">Inscripción y Datos</h2>
+          <button onClick={close} className="text-gray-400 hover:text-gray-800 font-bold text-xl">✕</button>
+        </div>
+        <div className="bg-blue-50 p-4 rounded-xl mb-4 border border-blue-100 space-y-3">
+          <div>
+            <label className="text-xs font-bold text-blue-800 uppercase">Nombre del Alumno</label>
+            <input 
+                className="w-full border border-blue-200 p-2 rounded bg-white text-sm focus:ring-2 focus:ring-blue-400 outline-none"
+                value={datosAlumno.nombre}
+                onChange={e => setDatosAlumno({ ...datosAlumno, nombre: e.target.value })}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-bold text-blue-800 uppercase">Curso Escolar</label>
+              <select 
+                className="w-full border border-blue-200 p-2 rounded bg-white text-sm focus:ring-2 focus:ring-blue-400 outline-none"
+                value={datosAlumno.curso}
+                onChange={e => setDatosAlumno({ ...datosAlumno, curso: e.target.value })}
+              >
+                {LISTA_CURSOS.map(c => <option key={c.val} value={c.val}>{c.label}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs font-bold text-blue-800 uppercase">Fecha Nac.</label>
+              <input 
+                type="date"
+                className="w-full border border-blue-200 p-2 rounded bg-white text-sm focus:ring-2 focus:ring-blue-400 outline-none"
+                value={datosAlumno.fechaNacimiento}
+                onChange={e => setDatosAlumno({ ...datosAlumno, fechaNacimiento: e.target.value })}
+              />
+            </div>
+          </div>
+        </div>
+        <div className="bg-gray-50 p-3 rounded mb-4 text-xs border border-gray-200">
+            <label className="flex gap-2 mb-2 items-start cursor-pointer">
+                <input type="checkbox" className="mt-0.5" checked={aceptaNormas} onChange={e => setAceptaNormas(e.target.checked)} disabled={alumno.aceptaNormas} /> 
+                <span className={alumno.aceptaNormas ? 'text-green-700 font-bold' : ''}>{alumno.aceptaNormas ? '✅ Normas y Condiciones aceptadas' : 'He leído y acepto las normas (OBLIGATORIO)'}</span>
+            </label>
+            <label className="flex gap-2 items-start cursor-pointer">
+                <input type="checkbox" className="mt-0.5" checked={autorizaFotos} onChange={e => setAutorizaFotos(e.target.checked)} /> 
+                <span>Autorizo fotos/vídeos del menor con fines educativos.</span>
+            </label>
+        </div>
+        <h3 className="font-bold text-gray-700 mb-2 text-sm border-b pb-1">Actividades Disponibles ({actividadesDisponibles.length})</h3>
+        <div className="overflow-y-auto pr-2 space-y-4 flex-1">
+          {actividadesDisponibles.length === 0 ? (
+             <p className="text-center text-gray-500 py-10">No hay actividades para este curso escolar.</p>
+          ) : (
+             actividadesDisponibles.map(act => (
+                <div key={act.id} className="border border-gray-200 rounded-xl p-3 hover:border-blue-400 hover:shadow-md transition bg-white">
+                  <div className="flex justify-between items-start mb-2">
+                    <h3 className="font-bold text-blue-900 text-sm">{act.nombre}</h3>
+                    {act.requierePrueba && (
+                        <span className="bg-red-100 text-red-700 text-[10px] px-1.5 py-0.5 rounded font-bold uppercase">Requiere Prueba</span>
+                    )}
+                  </div>
+                  <div className="grid gap-2">
+                    {act.opciones.map((op, i) => (
+                      <button
+                        key={i}
+                        onClick={() => inscribir(act, op)}
+                        className="border border-gray-100 bg-gray-50 p-2 rounded hover:bg-blue-600 hover:text-white text-left text-xs flex justify-between items-center transition group"
+                      >
+                        <span className="font-medium">{op.dias}</span>
+                        <div className="text-right">
+                            <span className="block font-bold">{op.horario}</span>
+                            <span className="block text-[10px] text-gray-500 group-hover:text-blue-200">{op.precio}</span>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+             ))
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ==========================================
+// 🔐 LOGIN Y REGISTRO (COMPLETO)
 // ==========================================
 const Login = ({ setView }) => {
   const [isRegister, setIsRegister] = useState(false);
@@ -1181,14 +1167,8 @@ const Login = ({ setView }) => {
     try {
       const email = regData.tipo === 'externo' ? regData.emailPagador : regData.emailContacto;
       if(!email) return alert("El email es obligatorio.");
-
-      // 1. Crear usuario en Auth
       const cred = await createUserWithEmailAndPassword(auth, email, regData.password);
-      
-      // 2. Guardar datos del padre/usuario
       await setDoc(doc(db, 'users', cred.user.uid), { email, ...regData });
-      
-      // 3. Crear el primer alumno automáticamente
       await addDoc(collection(db, 'students'), {
         parentId: cred.user.uid,
         nombre: regData.nombreAlumno,
@@ -1200,7 +1180,7 @@ const Login = ({ setView }) => {
         aceptaNormas: false,
         autorizaFotos: false
       });
-
+      alert("✅ Usuario creado con éxito");
     } catch (e) {
       alert('Error en registro: ' + e.message);
     }
@@ -1216,21 +1196,18 @@ const Login = ({ setView }) => {
   };
 
   if (isRegister) return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-      <button onClick={() => setView('landing')} className="absolute top-4 left-4 font-bold text-gray-500 hover:text-black">⬅ Volver al Inicio</button>
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4 relative">
+      <button onClick={() => setView('landing')} className="absolute top-4 left-4 font-bold text-gray-500 hover:text-black flex items-center gap-2">⬅ Volver al Inicio</button>
       <div className="bg-white p-8 rounded-xl shadow-xl w-full max-w-2xl mt-10 animate-fade-in-up">
         <div className="text-center mb-6">
           <h2 className="text-2xl font-bold text-blue-900">Registro de Familia</h2>
           <p className="text-sm text-gray-500">Crea tu cuenta para gestionar inscripciones</p>
         </div>
-        
         <form onSubmit={validateAndRegister} className="space-y-6">
-          {/* SELECTOR TIPO */}
           <div className="flex gap-4 p-1 bg-gray-100 rounded-lg">
             <button type="button" onClick={() => setRegData({ ...regData, tipo: 'interno' })} className={`flex-1 py-2 font-bold rounded-md transition ${regData.tipo === 'interno' ? 'bg-white shadow text-blue-600' : 'text-gray-500'}`}>Alumno del Colegio</button>
             <button type="button" onClick={() => setRegData({ ...regData, tipo: 'externo' })} className={`flex-1 py-2 font-bold rounded-md transition ${regData.tipo === 'externo' ? 'bg-white shadow text-blue-600' : 'text-gray-500'}`}>Externo</button>
           </div>
-
           {regData.tipo === 'externo' && (
             <div className="bg-yellow-50 p-5 rounded-xl border border-yellow-200">
               <h3 className="font-bold text-yellow-800 mb-2">👤 Datos del Pagador (Padre/Madre/Tutor)</h3>
@@ -1242,21 +1219,21 @@ const Login = ({ setView }) => {
               </div>
             </div>
           )}
-
           <div className="bg-blue-50 p-5 rounded-xl border border-blue-200">
             <h3 className="font-bold text-blue-800 mb-2">🎓 Datos del Primer Alumno</h3>
             <div className="grid md:grid-cols-2 gap-4">
               <input className="border p-2 rounded md:col-span-2" placeholder="Nombre del Alumno" onChange={e => setRegData({ ...regData, nombreAlumno: e.target.value })} />
-              <select className="border p-2 rounded" onChange={e => setRegData({ ...regData, curso: e.target.value })}>
-                {LISTA_CURSOS.map(c => <option key={c.val} value={c.val}>{c.label}</option>)}
-              </select>
-              <select className="border p-2 rounded" onChange={e => setRegData({ ...regData, letra: e.target.value })}>
-                <option>A</option><option>B</option><option>C</option>
-              </select>
+              <select className="border p-2 rounded" onChange={e => setRegData({ ...regData, curso: e.target.value })}>{LISTA_CURSOS.map(c => <option key={c.val} value={c.val}>{c.label}</option>)}</select>
+              <select className="border p-2 rounded" onChange={e => setRegData({ ...regData, letra: e.target.value })}><option>A</option><option>B</option><option>C</option></select>
               <input type="date" className="border p-2 rounded md:col-span-2" placeholder="Fecha Nacimiento" onChange={e => setRegData({ ...regData, fechaNacAlumno: e.target.value })} />
             </div>
+            <div className="mt-2 flex gap-4">
+               <label className="flex items-center gap-2 text-sm text-blue-900 cursor-pointer">
+                  <input type="checkbox" onChange={e => setRegData({ ...regData, esAntiguoAlumno: e.target.checked })} />
+                  ¿Es antiguo alumno?
+               </label>
+            </div>
           </div>
-
           <div className="border-t pt-4">
             <h3 className="font-bold text-gray-700 mb-2">🔐 Datos de Acceso</h3>
             <div className="grid md:grid-cols-2 gap-4">
@@ -1266,7 +1243,6 @@ const Login = ({ setView }) => {
                 <input className="w-full border p-3 bg-white rounded md:col-span-2" type="password" placeholder="Contraseña (Mínimo 6 caracteres)" onChange={e => setRegData({ ...regData, password: e.target.value })} />
             </div>
           </div>
-
           <button className="w-full bg-blue-600 text-white p-3 rounded-lg font-bold hover:bg-blue-700 shadow-lg transition">Registrar Familia</button>
         </form>
         <button onClick={() => setIsRegister(false)} className="w-full mt-4 text-gray-500 hover:text-blue-600 font-medium">¿Ya tienes cuenta? Inicia Sesión</button>
@@ -1275,6 +1251,65 @@ const Login = ({ setView }) => {
   );
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4">
-      <button onClick={() => setView('landing')} className="absolute top-4 left-4 font-bold text-gray-500 hover:text-black">⬅ Volver al Inicio</button>
-      <div className="bg-white p-8 rounded-xl shadow-xl w-full max-w-
+    <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4 relative">
+      <button onClick={() => setView('landing')} className="absolute top-4 left-4 font-bold text-gray-500 hover:text-black flex items-center gap-2">⬅ Volver al Inicio</button>
+      <div className="bg-white p-8 rounded-xl shadow-xl w-full max-w-md animate-fade-in">
+        <div className="text-center mb-6">
+            <img src={IMG_ESCUDO} className="h-16 mx-auto mb-4" alt="Logo" />
+            <h2 className="text-2xl font-bold mb-2 text-blue-900">Acceso Familias</h2>
+            <p className="text-gray-500 text-sm">Gestiona tus inscripciones y pruebas</p>
+        </div>
+        <form onSubmit={handleAuth} className="space-y-4">
+          <input className="w-full border p-3 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" type="email" placeholder="Tu Email" onChange={e => setLoginData({ ...loginData, email: e.target.value })} />
+          <input className="w-full border p-3 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" type="password" placeholder="Contraseña" onChange={e => setLoginData({ ...loginData, password: e.target.value })} />
+          <button className="w-full bg-blue-600 text-white p-3 rounded-lg font-bold hover:bg-blue-700 shadow-md transition">Entrar</button>
+        </form>
+        <div className="mt-6 text-center border-t pt-4">
+          <p className="text-gray-500 text-sm mb-2">¿Es tu primera vez?</p>
+          <button onClick={() => setIsRegister(true)} className="text-blue-600 font-bold hover:underline">Crear Cuenta Nueva</button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ==========================================
+// 🚀 COMPONENTE PRINCIPAL (ROUTER)
+// ==========================================
+export default function App() {
+  const [user, setUser] = useState(null);
+  const [view, setView] = useState('landing');
+  const [misHijos, setMisHijos] = useState([]);
+
+  useEffect(() => {
+    onAuthStateChanged(auth, (u) => {
+      if (u) {
+        setUser(u);
+        if (u.email === ADMIN_EMAIL) {
+            setView('admin');
+        } else {
+            cargarHijos(u.uid);
+            setView('dashboard');
+        }
+      } else {
+        setUser(null);
+        setView('landing');
+      }
+    });
+  }, []);
+
+  const cargarHijos = async (uid) => {
+    const q = query(collection(db, 'students'), where('parentId', '==', uid));
+    const s = await getDocs(q);
+    setMisHijos(s.docs.map(d => ({ id: d.id, ...d.data() })));
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-50 text-gray-900">
+      {view === 'landing' && <LandingPage setView={setView} />}
+      {view === 'login' && <Login setView={setView} />}
+      {view === 'dashboard' && <Dashboard user={user} misHijos={misHijos} logout={() => signOut(auth)} refresh={cargarHijos} />}
+      {view === 'admin' && <AdminDashboard logout={() => signOut(auth)} />}
+    </div>
+  );
+}
