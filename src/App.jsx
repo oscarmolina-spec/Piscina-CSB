@@ -467,267 +467,178 @@ const LandingPage = ({ setView }) => {
 };
 
 // ==========================================
-// 🛡️ ADMIN DASHBOARD (GESTIÓN DE EQUIPO Y ROLES)
+// 🛡️ ADMIN DASHBOARD (CON GESTIÓN DE BAJAS)
 // ==========================================
-const AdminDashboard = ({ userRole, logout }) => {
+const AdminDashboard = ({ userRole, logout, userEmail }) => {
   const [alumnos, setAlumnos] = useState([]);
   const [padres, setPadres] = useState({});
   const [avisos, setAvisos] = useState([]);
-  const [equipo, setEquipo] = useState([]); // Lista de profes/admins
-  
+  const [equipo, setEquipo] = useState([]);
   const [tab, setTab] = useState('global');
   const [busqueda, setBusqueda] = useState('');
   const [nuevoAviso, setNuevoAviso] = useState('');
-
-  // Formulario para crear nuevo miembro del equipo
-  const [staffData, setStaffData] = useState({ email: '', password: '', role: 'profe' });
+  
+  const [newStaff, setNewStaff] = useState({ email: '', password: '', role: 'profe' });
   const [loadingStaff, setLoadingStaff] = useState(false);
 
-  // 👑 DETECTAR AL JEFE SUPREMO (TÚ)
-  const currentUser = auth.currentUser;
-  const SOY_SUPER_ADMIN = currentUser && currentUser.email.toLowerCase() === ADMIN_EMAIL.toLowerCase();
-  
-  // Si soy Super Admin, fuerzo el rol visual a admin por si acaso
-  const rolReal = SOY_SUPER_ADMIN ? 'admin' : userRole;
+  const soySuperAdmin = userEmail && userEmail.toLowerCase() === ADMIN_EMAIL.toLowerCase();
 
   useEffect(() => {
-    // Cargar Alumnos
     const unsubStudents = onSnapshot(query(collection(db, 'students')), (s) => setAlumnos(s.docs.map(d => ({ id: d.id, ...d.data() }))));
-    
-    // Cargar Usuarios (Padres y Equipo)
     const unsubUsers = onSnapshot(query(collection(db, 'users')), (s) => {
-        const p = {};
-        const team = [];
-        s.forEach(d => { 
-            const data = d.data();
-            p[d.id] = data; 
-            // Filtramos al equipo docente
-            if (data.role === 'admin' || data.role === 'profe') {
-                team.push({ id: d.id, ...data });
-            }
-        });
-        setPadres(p);
-        setEquipo(team);
+        const p = {}, t = [];
+        s.forEach(d => { const data = d.data(); p[d.id] = data; if (data.role === 'admin' || data.role === 'profe') t.push({ id: d.id, ...data }); });
+        setPadres(p); setEquipo(t);
     });
-
-    // Cargar Avisos
     const unsubAvisos = onSnapshot(query(collection(db, 'avisos'), orderBy('fecha', 'desc')), (s) => setAvisos(s.docs.map(d => ({ id: d.id, ...d.data() }))));
-    
     return () => { unsubStudents(); unsubUsers(); unsubAvisos(); };
   }, []);
 
-  const alumnosFiltrados = alumnos.filter(a => 
-    (a.nombre || '').toLowerCase().includes(busqueda.toLowerCase()) || 
-    (a.curso && a.curso.toLowerCase().includes(busqueda.toLowerCase())) || 
-    (a.actividad && (a.actividad || '').toLowerCase().includes(busqueda.toLowerCase()))
-  );
+  const alumnosFiltrados = alumnos.filter(a => (a.nombre || '').toLowerCase().includes(busqueda.toLowerCase()) || (a.curso && a.curso.toLowerCase().includes(busqueda.toLowerCase())));
 
-  // --- FUNCIONES DE GESTIÓN ---
-
-  const descargarExcel = () => {
-    const cabecera = ['Alumno,Curso,Letra,Actividad,Precio,Pagador,DNI,IBAN,Email\n'];
-    const filas = alumnosFiltrados.map(a => {
-      const padre = padres[a.parentId] || {};
-      return `"${a.nombre || ''}","${a.curso || ''}","${a.letra || ''}","${a.actividad || 'Sin Actividad'}","${a.precio || '0€'}","${padre.nombrePagador || '?' }","${padre.dniPagador || ''}","${padre.iban || 'PENDIENTE'}","${padre.email || ''}"`;
-    });
-    const csvContent = "data:text/csv;charset=utf-8," + cabecera + filas.join("\n");
-    const link = document.createElement("a"); link.setAttribute("href", encodeURI(csvContent)); link.setAttribute("download", "listado_alumnos.csv"); document.body.appendChild(link); link.click();
+  // --- 1. FUNCIÓN PARA CALCULAR FIN DE MES ---
+  const getFinDeMes = (fechaISO) => {
+      if (!fechaISO) return "Pendiente";
+      const fecha = new Date(fechaISO);
+      // Obtenemos el último día del mes de la fecha de solicitud
+      const ultimoDia = new Date(fecha.getFullYear(), fecha.getMonth() + 1, 0); 
+      return ultimoDia.toLocaleDateString();
   };
 
+  // --- 2. FINALIZAR BAJA (BORRADO DEFINITIVO) ---
+  const finalizarBaja = async (alumno) => {
+      if (userRole !== 'admin') return;
+      if (confirm(`⚠️ ¿FINALIZAR LA BAJA DE ${alumno.nombre}?\n\nAl confirmar, el alumno se quedará "Sin Actividad" y saldrá de los listados.`)) {
+          await updateDoc(doc(db, 'students', alumno.id), {
+              estado: 'sin_inscripcion',
+              actividad: null, dias: null, horario: null, precio: null,
+              fechaInscripcion: null, citaId: null, citaNivel: null, fechaSolicitudBaja: null
+          });
+      }
+  };
+
+  const validarPlaza = async (alumno) => {
+      if (userRole !== 'admin') return alert("⛔ Solo coordinadores.");
+      if (!alumno.actividad) return alert("⚠️ Error: No seleccionó grupo.");
+      if (confirm(`✅ ¿ACEPTAR ALUMNO?\n\n${alumno.nombre} -> ${alumno.actividad}`)) {
+          await updateDoc(doc(db, 'students', alumno.id), { estado: 'inscrito' });
+      }
+  };
+
+  // Funciones auxiliares
+  const borrarAlumno = async (id) => { if (userRole !== 'admin') return; if(confirm('⚠️ ¿Borrar alumno?')) await deleteDoc(doc(db, 'students', id)); }
   const agregarAviso = async (e) => { e.preventDefault(); if (!nuevoAviso) return; await addDoc(collection(db, 'avisos'), { texto: nuevoAviso, fecha: new Date().toISOString() }); setNuevoAviso(''); };
   const borrarAviso = async (id) => { if (confirm('¿Borrar aviso?')) await deleteDoc(doc(db, 'avisos', id)); };
-  
-  const borrarAlumno = async (id) => { 
-      if (rolReal === 'profe') return alert("⛔ Solo los coordinadores pueden borrar alumnos.");
-      if (confirm('⚠️ ¿Estás seguro de borrar este alumno y todo su historial?')) await deleteDoc(doc(db, 'students', id)); 
-  };
-
-  // --- FUNCIONES DE EQUIPO (NUEVAS) ---
-
-  const crearMiembroEquipo = async (e) => {
-      e.preventDefault();
-      if (rolReal !== 'admin') return alert("⛔ No tienes permisos para crear usuarios.");
-      if (staffData.password.length < 6) return alert("⚠️ La contraseña debe tener al menos 6 caracteres.");
-
-      setLoadingStaff(true);
-      try {
-          // Llama a la función auxiliar definida al principio del archivo
-          await crearUsuarioSecundario(staffData.email, staffData.password, staffData.role);
-          alert(`✅ Usuario creado correctamente:\n${staffData.email} (${staffData.role.toUpperCase()})`);
-          setStaffData({ email: '', password: '', role: 'profe' });
-      } catch (error) {
-          alert("Error al crear usuario: " + error.message);
-      } finally {
-          setLoadingStaff(false);
-      }
-  };
-
-  const borrarMiembroEquipo = async (miembro) => {
-      // 1. Nadie puede borrar al Super Admin
-      if (miembro.email.toLowerCase() === ADMIN_EMAIL.toLowerCase()) {
-          return alert("⛔ ¡ERROR CRÍTICO! El Super Admin es intocable.");
-      }
-      
-      // 2. Solo Super Admin borra a otros Admins
-      if (miembro.role === 'admin' && !SOY_SUPER_ADMIN) {
-          return alert("⛔ Solo el Super Admin puede eliminar a otros Coordinadores.");
-      }
-
-      if (confirm(`⚠️ ¿Eliminar acceso a ${miembro.email}?`)) {
-          await deleteDoc(doc(db, 'users', miembro.id));
-      }
+  const handleCrearStaff = async (e) => { e.preventDefault(); if (userRole !== 'admin') return; setLoadingStaff(true); try { await crearUsuarioSecundario(newStaff.email, newStaff.password, newStaff.role); alert("Usuario creado"); setNewStaff({ email: '', password: '', role: 'profe' }); } catch (e) { alert(e.message); } finally { setLoadingStaff(false); } };
+  const borrarMiembroEquipo = async (miembro) => { if (miembro.email.toLowerCase() === ADMIN_EMAIL.toLowerCase()) return alert("No puedes borrar al Super Admin"); if (confirm("¿Borrar usuario?")) await deleteDoc(doc(db, 'users', miembro.id)); };
+  const descargarExcel = () => { 
+    const cabecera = ['Alumno,Actividad,Pagador,Email,Estado\n'];
+    const filas = alumnos.map(a => `"${a.nombre}","${a.actividad||'-'}","${padres[a.parentId]?.nombrePagador||''}","${padres[a.parentId]?.email||''}","${a.estado}"`);
+    const link = document.createElement("a"); link.href = "data:text/csv;charset=utf-8," + encodeURI(cabecera + filas.join("\n")); link.download = "listado_alumnos.csv"; link.click();
   };
 
   return (
     <div className="min-h-screen bg-gray-100 font-sans flex flex-col">
-      {/* BARRA SUPERIOR CON RANGO */}
       <div className="bg-white shadow-sm border-b p-4 flex justify-between items-center sticky top-0 z-50">
-        <div className="flex items-center gap-3">
-            <div className={`text-white p-2 rounded-lg font-bold shadow-sm ${SOY_SUPER_ADMIN ? 'bg-yellow-500' : rolReal === 'admin' ? 'bg-blue-900' : 'bg-purple-600'}`}>
-                {SOY_SUPER_ADMIN ? '👑 SUPER ADMIN' : rolReal === 'admin' ? '🛡️ COORDINADOR' : '👓 PROFESOR'}
-            </div>
-            <h1 className="text-xl font-bold text-gray-800 hidden md:block">Panel de Gestión</h1>
-        </div>
-        <div className="flex gap-4">
-           {rolReal === 'admin' && <button onClick={descargarExcel} className="bg-green-600 text-white px-4 py-2 rounded font-bold hover:bg-green-700 text-sm shadow-sm">📥 Excel</button>}
-           <button onClick={logout} className="bg-red-50 text-red-600 border border-red-200 px-4 py-2 rounded font-bold hover:bg-red-100 text-sm">Salir</button>
+        <h1 className="text-xl font-bold text-gray-800">Panel de Gestión ({soySuperAdmin ? 'Super Admin' : userRole})</h1>
+        <div className="flex gap-2">
+            {userRole === 'admin' && <button onClick={descargarExcel} className="bg-green-600 text-white px-3 py-1 rounded text-sm font-bold">Excel</button>}
+            <button onClick={logout} className="text-red-500 border border-red-200 px-3 py-1 rounded text-sm font-bold">Salir</button>
         </div>
       </div>
 
       <div className="p-6 max-w-7xl mx-auto w-full flex-1">
-        
-        {/* PESTAÑAS */}
-        <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
-          {['global', 'pruebas', 'avisos', 'alta_manual', 'equipo'].map(t => {
-             // Ocultar pestañas sensibles a profesores
-             if ((t === 'equipo' || t === 'alta_manual') && rolReal !== 'admin') return null;
-             return (
-                <button key={t} onClick={() => setTab(t)} className={`px-5 py-2 rounded-full font-bold text-sm uppercase transition ${tab === t ? 'bg-blue-900 text-white shadow' : 'bg-white text-gray-600 hover:bg-gray-200'}`}>
-                    {t.replace('_', ' ')}
-                </button>
-             );
+        <div className="flex gap-2 mb-6 border-b pb-2 overflow-x-auto">
+          {['global', 'pruebas', 'bajas', 'avisos', 'alta_manual', 'equipo'].map(t => {
+             if ((t === 'equipo' || t === 'alta_manual' || t === 'bajas') && userRole !== 'admin') return null;
+             return (<button key={t} onClick={() => setTab(t)} className={`px-4 py-2 font-bold uppercase text-sm whitespace-nowrap ${tab === t ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500'}`}>{t.replace('_', ' ')}</button>);
           })}
         </div>
 
-        {/* 🌍 TABLA GLOBAL */}
         {tab === 'global' && (
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden animate-fade-in">
-            <div className="p-4 border-b bg-gray-50 flex gap-4"><input type="text" placeholder="🔍 Buscar alumno..." className="flex-1 border p-2 rounded" value={busqueda} onChange={e => setBusqueda(e.target.value)}/></div>
-            <div className="overflow-x-auto">
-                <table className="w-full text-sm text-left">
-                    <thead className="bg-gray-100 text-gray-600 uppercase text-xs"><tr><th className="p-3">Alumno</th><th className="p-3">Actividad</th><th className="p-3">Contacto</th><th className="p-3 text-right">Acciones</th></tr></thead>
-                    <tbody className="divide-y">
-                        {alumnosFiltrados.map(a => {
-                            const p = padres[a.parentId] || {};
-                            return (
-                                <tr key={a.id} className="hover:bg-blue-50">
-                                    <td className="p-3 font-bold">{a.nombre || '❌ SIN NOMBRE'}<br/><span className="text-xs text-gray-400">{a.curso}</span></td>
-                                    <td className="p-3"><span className="font-bold text-blue-900">{a.actividad || '-'}</span><br/><span className="text-xs text-gray-500">{a.precio}</span></td>
-                                    <td className="p-3 text-xs">
-                                        <div className="font-bold text-gray-700">{p.nombrePagador || 'Tutor'}</div>
-                                        <div className="text-gray-500">{p.telefono1 || p.email}</div>
-                                    </td>
-                                    <td className="p-3 text-right">
-                                        {rolReal === 'admin' && <button onClick={() => borrarAlumno(a.id)} className="text-red-400 hover:text-red-600 p-2">🗑️</button>}
-                                    </td>
-                                </tr>
-                            );
-                        })}
-                    </tbody>
-                </table>
-            </div>
+          <div className="bg-white rounded shadow overflow-hidden">
+              <input className="w-full p-3 border-b" placeholder="🔍 Buscar alumno..." value={busqueda} onChange={e => setBusqueda(e.target.value)} />
+              <table className="w-full text-sm text-left">
+                  <thead className="bg-gray-100 text-gray-600 uppercase text-xs"><tr><th className="p-3">Alumno</th><th className="p-3">Grupo</th><th className="p-3 text-right">Acción</th></tr></thead>
+                  <tbody className="divide-y">
+                      {alumnosFiltrados.map(a => (
+                          <tr key={a.id} className={`hover:bg-gray-50 ${a.estado === 'baja_pendiente' ? 'bg-red-50' : ''}`}>
+                              <td className="p-3 font-bold">
+                                  {a.nombre}
+                                  {a.estado === 'baja_pendiente' && <span className="ml-2 text-[10px] bg-red-100 text-red-800 px-2 py-0.5 rounded font-bold">BAJA TRAMITADA</span>}
+                                  <br/><span className="text-gray-400 text-xs">{a.curso}</span>
+                              </td>
+                              <td className="p-3">{a.actividad || <span className="text-gray-300">-</span>}</td>
+                              <td className="p-3 text-right">{userRole === 'admin' && <button onClick={() => borrarAlumno(a.id)} className="text-red-400 hover:text-red-600 p-2">🗑️</button>}</td>
+                          </tr>
+                      ))}
+                  </tbody>
+              </table>
           </div>
         )}
 
-        {/* 📝 ALTA MANUAL */}
-        {tab === 'alta_manual' && (
-            <div className="max-w-2xl mx-auto bg-white p-8 rounded-xl shadow-lg border border-blue-100 text-center animate-fade-in">
-                <h2 className="text-2xl font-bold text-blue-900 mb-4">Alta Manual de Familias</h2>
-                <p className="mb-6 text-gray-600">Para inscribir familias presenciales, abre el formulario en una pestaña nueva.</p>
-                <button className="bg-blue-600 text-white px-6 py-3 rounded-lg font-bold shadow hover:bg-blue-700" onClick={() => window.open(window.location.href, '_blank')}>
-                    Abrir Formulario de Registro ↗
-                </button>
-            </div>
+        {/* 👇 NUEVA PESTAÑA: BAJAS */}
+        {tab === 'bajas' && (
+          <div className="bg-white rounded shadow overflow-hidden">
+              <div className="p-3 bg-red-50 text-red-800 text-xs font-bold border-b border-red-100">
+                  📉 Alumnos que han solicitado baja. Se cobra este mes y se borran el día 1 del siguiente.
+              </div>
+              <table className="w-full text-sm text-left">
+                  <thead className="bg-gray-100 text-gray-600 uppercase text-xs"><tr><th className="p-3">Alumno</th><th className="p-3">Grupo Actual</th><th className="p-3">Solicitada el</th><th className="p-3 text-red-600">Baja Efectiva</th><th className="p-3 text-right">Acción</th></tr></thead>
+                  <tbody className="divide-y">
+                      {alumnos.filter(a => a.estado === 'baja_pendiente').map(a => (
+                          <tr key={a.id} className="hover:bg-red-50">
+                              <td className="p-3 font-bold">{a.nombre}</td>
+                              <td className="p-3 text-gray-600">{a.actividad}</td>
+                              <td className="p-3">{new Date(a.fechaSolicitudBaja).toLocaleDateString()}</td>
+                              <td className="p-3 font-bold text-red-700">{getFinDeMes(a.fechaSolicitudBaja)}</td>
+                              <td className="p-3 text-right">
+                                  <button onClick={() => finalizarBaja(a)} className="bg-red-100 text-red-700 border border-red-300 px-3 py-1 rounded font-bold text-xs hover:bg-red-600 hover:text-white">
+                                      🗑️ Finalizar Baja
+                                  </button>
+                              </td>
+                          </tr>
+                      ))}
+                      {alumnos.filter(a => a.estado === 'baja_pendiente').length === 0 && <tr><td colSpan="5" className="p-6 text-center text-gray-400">No hay bajas pendientes.</td></tr>}
+                  </tbody>
+              </table>
+          </div>
         )}
 
-        {/* 👥 EQUIPO DOCENTE */}
-        {tab === 'equipo' && (
-             <div className="grid md:grid-cols-2 gap-8 animate-fade-in">
-                 {/* CREAR USUARIO */}
-                 <div className="bg-white p-6 rounded-xl shadow border border-purple-100 h-fit">
-                    <h2 className="text-lg font-bold text-purple-900 mb-4 flex items-center gap-2">🦸 Alta de Equipo</h2>
-                    <form onSubmit={crearMiembroEquipo} className="space-y-3">
-                        <div>
-                            <label className="text-xs font-bold text-gray-500 uppercase">Email Corporativo</label>
-                            <input className="w-full border p-2 rounded" type="email" value={staffData.email} onChange={e => setStaffData({...staffData, email: e.target.value})} placeholder="profesor@colegio.com" />
-                        </div>
-                        <div>
-                            <label className="text-xs font-bold text-gray-500 uppercase">Contraseña</label>
-                            <input className="w-full border p-2 rounded" type="password" value={staffData.password} onChange={e => setStaffData({...staffData, password: e.target.value})} placeholder="Mínimo 6 caracteres" />
-                        </div>
-                        <div>
-                            <label className="text-xs font-bold text-gray-500 uppercase">Rol</label>
-                            <select className="w-full border p-2 rounded bg-white" value={staffData.role} onChange={e => setStaffData({...staffData, role: e.target.value})}>
-                                <option value="profe">👓 Profesor (Lectura)</option>
-                                <option value="admin">🛡️ Coordinador (Gestión)</option>
-                            </select>
-                        </div>
-                        <button disabled={loadingStaff} className="w-full bg-purple-600 text-white py-2 rounded-lg font-bold hover:bg-purple-700 disabled:opacity-50">
-                            {loadingStaff ? 'Creando...' : 'Dar de Alta'}
-                        </button>
-                    </form>
-                 </div>
+        {tab === 'pruebas' && (
+          <div className="bg-white rounded shadow overflow-hidden">
+              <table className="w-full text-sm text-left">
+                  <thead className="bg-gray-100 uppercase text-xs"><tr><th className="p-3">Cita</th><th className="p-3">Alumno</th><th className="p-3">Solicita</th><th className="p-3 text-right">Validar</th></tr></thead>
+                  <tbody className="divide-y">
+                  {alumnos.filter(a => (a.estado === 'prueba_reservada' || (a.citaNivel && a.estado !== 'inscrito'))).map(a => (
+                          <tr key={a.id} className="hover:bg-orange-50">
+                              <td className="p-3 text-blue-600 font-bold">{a.citaNivel}</td>
+                              <td className="p-3 font-bold">{a.nombre}</td>
+                              <td className="p-3"><span className="bg-orange-100 text-orange-800 px-2 py-1 rounded text-xs font-bold">{a.actividad || 'Sin elegir'}</span></td>
+                              <td className="p-3 text-right"><button onClick={() => validarPlaza(a)} className="bg-green-500 text-white px-4 py-1.5 rounded font-bold text-xs shadow hover:bg-green-600">✅ Aceptar</button></td>
+                          </tr>
+                      ))}
+                      {alumnos.filter(a => a.estado === 'prueba_reservada').length === 0 && <tr><td colSpan="4" className="p-6 text-center text-gray-400">No hay pruebas pendientes.</td></tr>}
+                  </tbody>
+              </table>
+          </div>
+        )}
 
-                 {/* LISTADO */}
-                 <div className="bg-white p-6 rounded-xl shadow border border-gray-200">
-                    <h2 className="text-lg font-bold text-gray-800 mb-4">Equipo Actual ({equipo.length})</h2>
-                    <div className="space-y-2 overflow-y-auto max-h-[500px]">
-                        {equipo.map(u => {
-                            const esElJefe = u.email.toLowerCase() === ADMIN_EMAIL.toLowerCase();
-                            return (
-                                <div key={u.id} className={`flex justify-between items-center p-3 rounded border ${esElJefe ? 'bg-yellow-50 border-yellow-200' : 'bg-gray-50 border-gray-100'}`}>
-                                    <div>
-                                        <div className="text-sm font-bold text-gray-800">{u.email}</div>
-                                        <div className="flex gap-2 mt-1">
-                                            <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded ${u.role === 'admin' ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800'}`}>
-                                                {esElJefe ? '👑 SUPER ADMIN' : u.role === 'admin' ? '🛡️ ADMIN' : '👓 PROFE'}
-                                            </span>
-                                        </div>
-                                    </div>
-                                    {/* BOTÓN BORRAR: SOLO SI NO ES EL JEFE Y TENGO PERMISO */}
-                                    {!esElJefe && (SOY_SUPER_ADMIN || u.role !== 'admin') && (
-                                        <button 
-                                            onClick={() => borrarMiembroEquipo(u)} 
-                                            className="text-gray-400 hover:text-red-600 p-2 transition"
-                                            title="Eliminar acceso"
-                                        >
-                                            🗑️
-                                        </button>
-                                    )}
-                                </div>
-                            );
-                        })}
-                    </div>
-                 </div>
+        {tab === 'equipo' && userRole === 'admin' && (
+             <div className="grid md:grid-cols-2 gap-4">
+                 <div className="bg-white p-4 rounded shadow"><h3 className="font-bold mb-2">Crear Usuario</h3><form onSubmit={handleCrearStaff} className="space-y-2"><input className="border p-2 w-full rounded" placeholder="Email" value={newStaff.email} onChange={e => setNewStaff({...newStaff, email: e.target.value})} /><input className="border p-2 w-full rounded" placeholder="Contraseña" type="password" value={newStaff.password} onChange={e => setNewStaff({...newStaff, password: e.target.value})} /><select className="border p-2 w-full rounded" value={newStaff.role} onChange={e => setNewStaff({...newStaff, role: e.target.value})}><option value="profe">Profesor</option><option value="admin">Coordinador</option></select><button disabled={loadingStaff} className="bg-purple-600 text-white w-full py-2 rounded font-bold">Crear</button></form></div>
+                 <div className="bg-white p-4 rounded shadow"><h3 className="font-bold mb-2">Lista Equipo</h3>{equipo.map(u => (<div key={u.id} className="flex justify-between items-center border-b py-2"><span>{u.email} <small className="text-gray-500">({u.role})</small></span><button onClick={() => borrarMiembroEquipo(u)} className="text-red-500">🗑️</button></div>))}</div>
              </div>
         )}
 
-        {/* RESTO DE TABS */}
-        {tab === 'pruebas' && (
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden"><table className="w-full text-sm text-left"><thead className="bg-gray-100 text-gray-600 uppercase text-xs"><tr><th className="p-3">Fecha</th><th className="p-3">Alumno</th><th className="p-3">Curso</th></tr></thead><tbody className="divide-y">{alumnos.filter(a => a.estado === 'prueba_reservada' || a.citaNivel).map(a => (<tr key={a.id} className="hover:bg-orange-50"><td className="p-3 font-bold text-blue-600">{a.citaNivel}</td><td className="p-3 font-bold">{a.nombre || '❌ SIN NOMBRE'}</td><td className="p-3 text-gray-500">{a.curso}</td></tr>))}</tbody></table></div>
-        )}
-        {tab === 'avisos' && (
-          <div className="grid md:grid-cols-2 gap-6">
-             <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200"><h3 className="font-bold mb-4">Nuevo Aviso</h3><form onSubmit={agregarAviso}><textarea className="w-full border p-3 rounded mb-4" rows="3" value={nuevoAviso} onChange={e => setNuevoAviso(e.target.value)} /><button className="w-full bg-blue-600 text-white py-2 rounded font-bold">Publicar</button></form></div>
-             <div className="space-y-3">{avisos.map(a => (<div key={a.id} className="bg-yellow-50 border border-yellow-200 p-4 rounded-lg flex justify-between"><div><p className="text-yellow-900 font-medium">{a.texto}</p></div>{rolReal === 'admin' && <button onClick={() => borrarAviso(a.id)} className="text-red-500">🗑️</button>}</div>))}</div>
-          </div>
-        )}
+        {tab === 'avisos' && (<div className="grid md:grid-cols-2 gap-6"><div className="bg-white p-4 rounded shadow"><h3 className="font-bold mb-2">Nuevo Aviso</h3><form onSubmit={agregarAviso}><textarea className="w-full border p-2 rounded mb-2" rows="3" value={nuevoAviso} onChange={e => setNuevoAviso(e.target.value)} /><button className="bg-blue-600 text-white px-4 py-2 rounded font-bold w-full">Publicar</button></form></div><div className="space-y-2">{avisos.map(a => (<div key={a.id} className="bg-yellow-50 p-3 rounded border border-yellow-200 flex justify-between"><span>{a.texto}</span>{userRole === 'admin' && <button onClick={() => borrarAviso(a.id)} className="text-red-500">🗑️</button>}</div>))}</div></div>)}
+        {tab === 'alta_manual' && (<div className="bg-white p-8 rounded shadow text-center"><h2 className="text-xl font-bold text-blue-900 mb-4">Alta Manual</h2><button className="bg-blue-600 text-white px-6 py-3 rounded font-bold" onClick={() => window.open(window.location.href, '_blank')}>Abrir Formulario ↗</button></div>)}
       </div>
     </div>
   );
 };
 // ==========================================
-// 👨‍👩‍👧‍👦 DASHBOARD FAMILIAS (CON VISUALIZACIÓN DE GRUPO PRE-INSCRITO)
+// 👨‍👩‍👧‍👦 DASHBOARD FAMILIAS (CON GESTIÓN DE BAJAS DIFERIDA)
 // ==========================================
 const Dashboard = ({ user, misHijos, logout, refresh }) => {
   const [showForm, setShowForm] = useState(false);
@@ -746,63 +657,54 @@ const Dashboard = ({ user, misHijos, logout, refresh }) => {
   }, []);
 
   const alTerminarPrueba = () => {
-      setModoModal('inscripcion'); // Por si acaso no tenía grupo, le mandamos a elegir
+      setModoModal('inscripcion'); 
       refresh(user.uid);
   };
 
   const gestionarBaja = async (hijo) => {
+    // 1. Si no tiene actividad, borramos el perfil directamente
     if (hijo.estado === 'sin_inscripcion') {
-        if (window.confirm(`⚠️ ¿Quieres eliminar definitivamente el perfil de ${hijo.nombre}?`)) {
+        if (window.confirm(`🗑️ ¿Eliminar perfil de ${hijo.nombre}?`)) {
             await deleteDoc(doc(db, 'students', hijo.id));
             refresh(user.uid);
         }
         return;
     }
-    if (new Date().getDate() > 25) return alert('⛔ Plazo cerrado (día 25). Contacta con secretaría.');
-    if (window.confirm(`⚠️ ¿Seguro que desea tramitar la BAJA de ${hijo.nombre}?\nPerderá su plaza actual.`)) {
+
+    const diaActual = new Date().getDate();
+
+    // 2. Bloqueo después del día 25
+    if (diaActual > 25) {
+        return alert('⛔ PLAZO CERRADO.\n\nLas bajas para el mes siguiente deben tramitarse antes del día 25.\n\nContacta con secretaría.');
+    }
+
+    // 3. Tramitación de Baja (NO BORRA, SOLO MARCA)
+    if (window.confirm(`⚠️ ¿Solicitar BAJA de ${hijo.nombre}?\n\nℹ️ AVISO: Al ser día ${diaActual}, se cobrará el mes en curso completo. La baja será efectiva el último día de este mes.`)) {
       await updateDoc(doc(db, 'students', hijo.id), {
-        estado: 'sin_inscripcion',
-        actividad: null, dias: null, horario: null, precio: null, fechaInscripcion: null, citaId: null, citaNivel: null
+        estado: 'baja_pendiente', // Nuevo estado intermedio
+        fechaSolicitudBaja: new Date().toISOString()
       });
       refresh(user.uid);
-      alert('✅ Baja tramitada correctamente.');
+      alert('✅ Solicitud de baja registrada.\nTu plaza se mantendrá activa hasta final de mes.');
     }
   };
 
   return (
     <div className="p-4 max-w-4xl mx-auto font-sans bg-gray-50 min-h-screen">
-      
-      {/* CABECERA */}
       <div className="flex flex-col md:flex-row justify-between items-center mb-6 bg-white p-5 rounded-xl shadow-sm border border-gray-100 gap-4">
         <div className="flex items-center gap-3">
           <div className="bg-blue-100 p-3 rounded-full text-2xl">👨‍👩‍👧‍👦</div>
-          <div>
-            <h1 className="text-2xl font-bold text-gray-800">Panel Familiar</h1>
-            <p className="text-sm text-gray-500">{user.email}</p>
-          </div>
+          <div><h1 className="text-2xl font-bold text-gray-800">Panel Familiar</h1><p className="text-sm text-gray-500">{user.email}</p></div>
         </div>
-        <button onClick={logout} className="text-red-500 font-medium border border-red-100 px-5 py-2 rounded-lg hover:bg-red-50 w-full md:w-auto">
-          Cerrar Sesión
-        </button>
+        <button onClick={logout} className="text-red-500 font-medium border border-red-100 px-5 py-2 rounded-lg hover:bg-red-50 w-full md:w-auto">Cerrar Sesión</button>
       </div>
 
-      {/* AVISOS */}
-      {avisos.length > 0 && (
-        <div className="mb-6 space-y-2">
-          {avisos.map(aviso => (
-            <div key={aviso.id} className="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded shadow-sm text-yellow-800 font-medium flex items-center gap-3 animate-bounce-subtle">
-              <span className="text-2xl">📢</span> <span>{aviso.texto}</span>
-            </div>
-          ))}
-        </div>
-      )}
+      {avisos.length > 0 && (<div className="mb-6 space-y-2">{avisos.map(aviso => (<div key={aviso.id} className="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded shadow-sm text-yellow-800 font-medium flex items-center gap-3"><span className="text-2xl">📢</span><span>{aviso.texto}</span></div>))}</div>)}
 
-      {/* LISTA DE HIJOS */}
       <div className="grid gap-6 md:grid-cols-2 mb-8">
         {misHijos.map((hijo) => {
           const esPendiente = hijo.estado === 'inscrito' && !hijo.esAntiguoAlumno;
           
-          // Colores según estado
           let bordeColor = 'bg-gray-400';
           let estadoTexto = 'Sin Actividad';
           
@@ -812,97 +714,68 @@ const Dashboard = ({ user, misHijos, logout, refresh }) => {
           } else if (hijo.estado === 'prueba_reservada') {
               bordeColor = 'bg-orange-500';
               estadoTexto = '⏳ Prueba Pendiente';
+          } else if (hijo.estado === 'baja_pendiente') {
+              bordeColor = 'bg-red-500';
+              estadoTexto = '📉 Baja Solicitada';
           }
 
           return (
             <div key={hijo.id} className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 relative overflow-hidden group">
               <div className={`absolute top-0 left-0 w-1.5 h-full ${bordeColor}`}></div>
-              
-              {/* CABECERA TARJETA ALUMNO */}
               <div className="flex justify-between items-start mb-2 pl-3">
                 <div className="flex-1">
                   <h3 className="font-bold text-xl text-gray-800 flex items-center gap-2">
-                    {hijo.nombre} 
-                    <button onClick={() => setAlumnoEditar(hijo)} className="text-gray-400 hover:text-blue-600 bg-gray-50 p-1.5 rounded-full">✏️</button>
+                    {hijo.nombre} <button onClick={() => setAlumnoEditar(hijo)} className="text-gray-400 hover:text-blue-600 bg-gray-50 p-1.5 rounded-full">✏️</button>
                   </h3>
                   <p className="text-gray-500 text-sm font-medium">{hijo.curso} • {hijo.letra}</p>
                 </div>
-                <div className="flex flex-col items-end gap-2">
-                  <span className="px-2 py-1 rounded text-[10px] font-extrabold uppercase bg-gray-100 text-gray-500">{estadoTexto}</span>
-                </div>
+                <div className="flex flex-col items-end gap-2"><span className="px-2 py-1 rounded text-[10px] font-extrabold uppercase bg-gray-100 text-gray-500">{estadoTexto}</span></div>
               </div>
 
-              {/* 🟢 ESTADO: INSCRITO */}
-              {hijo.estado === 'inscrito' && (
-                <div className="ml-3 mt-4 p-3 rounded-lg border text-sm bg-green-50 border-green-100">
+              {/* SI ESTÁ INSCRITO O BAJA PENDIENTE (Muestra datos porque aún asiste) */}
+              {(hijo.estado === 'inscrito' || hijo.estado === 'baja_pendiente') && (
+                <div className={`ml-3 mt-4 p-3 rounded-lg border text-sm ${hijo.estado === 'baja_pendiente' ? 'bg-red-50 border-red-200' : 'bg-green-50 border-green-100'}`}>
                   <p className="font-bold mb-1 text-gray-800">{hijo.actividad}</p>
                   <div className="flex items-center gap-2 text-gray-600"><span>📅 {hijo.dias}</span><span>⏰ {hijo.horario}</span></div>
+                  {hijo.estado === 'baja_pendiente' && <p className="text-red-600 font-bold text-xs mt-2">⚠️ Baja efectiva a fin de mes</p>}
                 </div>
               )}
               
-              {/* 🟠 ESTADO: PRUEBA RESERVADA (AQUÍ ES DONDE QUERÍAS EL CAMBIO) */}
+              {/* SI ESTÁ EN PRUEBA */}
               {hijo.estado === 'prueba_reservada' && (
                 <div className="ml-3 mt-4 bg-orange-50 p-3 rounded-lg border border-orange-200 text-sm">
-                  
-                  {/* 1. MUESTRA EL GRUPO PRE-ELEGIDO */}
                   <div className="mb-3 pb-3 border-b border-orange-200">
-                      <p className="text-[10px] font-bold text-orange-800 uppercase tracking-wider mb-1">🎯 Solicitud de Plaza en:</p>
-                      {hijo.actividad ? (
-                          <div>
-                              <p className="text-lg font-black text-orange-900 leading-tight">{hijo.actividad}</p>
-                              {hijo.dias && <p className="text-xs text-orange-800 font-medium mt-1">📅 {hijo.dias} | ⏰ {hijo.horario}</p>}
-                          </div>
-                      ) : (
-                          // Si es un registro antiguo y no tiene actividad guardada
-                          <button onClick={() => { setAlumnoSeleccionado(hijo); setModoModal('inscripcion'); }} className="w-full bg-white border border-orange-300 text-orange-700 py-1.5 rounded text-xs font-bold hover:bg-orange-100 shadow-sm">
-                             👉 Seleccionar Grupo Preferente
-                          </button>
-                      )}
+                      <p className="text-[10px] font-bold text-orange-800 uppercase tracking-wider mb-1">🎯 Solicitud:</p>
+                      {hijo.actividad ? (<div><p className="text-lg font-black text-orange-900 leading-tight">{hijo.actividad}</p></div>) : (<button onClick={() => { setAlumnoSeleccionado(hijo); setModoModal('inscripcion'); }} className="w-full bg-white border border-orange-300 text-orange-700 py-1.5 rounded text-xs font-bold">👉 Elegir Grupo</button>)}
                   </div>
-
-                  {/* 2. MUESTRA LA CITA */}
                   <div className="flex items-center gap-2">
                       <span className="text-2xl">🗓️</span>
-                      <div>
-                          <p className="font-bold text-orange-900 text-xs uppercase">Prueba de Nivel</p>
-                          {hijo.citaNivel ? (
-                              <p className="text-orange-800 font-bold">{hijo.citaNivel}</p>
-                          ) : (
-                              <button onClick={() => { setAlumnoSeleccionado(hijo); setModoModal('prueba'); }} className="text-red-600 font-bold underline cursor-pointer animate-pulse">
-                                  ¡Falta Reservar Hora! Pulsa aquí.
-                              </button>
-                          )}
-                      </div>
+                      <div><p className="font-bold text-orange-900 text-xs uppercase">Prueba de Nivel</p>{hijo.citaNivel ? (<p className="text-orange-800 font-bold">{hijo.citaNivel}</p>) : (<button onClick={() => { setAlumnoSeleccionado(hijo); setModoModal('prueba'); }} className="text-red-600 font-bold underline cursor-pointer animate-pulse">¡Reservar Hora!</button>)}</div>
                   </div>
                 </div>
               )}
 
-              {/* BOTONES ACCIÓN */}
               <div className="mt-6 pt-4 ml-3 border-t border-gray-100 flex gap-2">
-                {hijo.estado === 'inscrito' ? (
-                    <button onClick={() => gestionarBaja(hijo)} className="w-full bg-white text-red-600 px-3 py-2 rounded-lg text-sm font-bold border border-red-200 hover:bg-red-50">Baja</button>
-                ) : hijo.estado !== 'prueba_reservada' && (
+                {/* BOTÓN BAJA (Solo si está inscrito y no ha pedido ya la baja) */}
+                {hijo.estado === 'inscrito' && (
+                    <button onClick={() => gestionarBaja(hijo)} className="w-full bg-white text-red-600 px-3 py-2 rounded-lg text-sm font-bold border border-red-200 hover:bg-red-50">Tramitar Baja</button>
+                )}
+                
+                {hijo.estado === 'sin_inscripcion' && (
                   <div className="flex w-full gap-2">
                     <button onClick={() => { setAlumnoSeleccionado(hijo); setModoModal('inscripcion'); }} className="flex-1 bg-blue-600 text-white py-2 rounded-lg text-sm font-bold shadow-sm hover:bg-blue-700">Inscribir</button>
                     <button onClick={() => gestionarBaja(hijo)} className="bg-white text-red-500 px-3 py-2 rounded-lg text-sm font-bold border border-red-200 hover:bg-red-50">🗑️</button>
                   </div>
                 )}
                 
-                {/* Permite cancelar la solicitud si está en prueba */}
-                {hijo.estado === 'prueba_reservada' && (
-                    <button onClick={() => gestionarBaja(hijo)} className="w-full bg-white text-red-500 px-3 py-2 rounded-lg text-sm font-bold border border-red-200 hover:bg-red-50">
-                        Cancelar Solicitud
-                    </button>
-                )}
+                {hijo.estado === 'prueba_reservada' && (<button onClick={() => gestionarBaja(hijo)} className="w-full bg-white text-red-500 px-3 py-2 rounded-lg text-sm font-bold border border-red-200 hover:bg-red-50">Cancelar Solicitud</button>)}
               </div>
             </div>
           );
         })}
       </div>
       
-      <button onClick={() => setShowForm(true)} className="w-full py-5 border-2 border-dashed border-blue-200 text-blue-400 rounded-xl font-bold hover:bg-blue-50 transition flex items-center justify-center gap-2 mb-10">
-        <span className="text-2xl">+</span> Añadir Otro Alumno
-      </button>
+      <button onClick={() => setShowForm(true)} className="w-full py-5 border-2 border-dashed border-blue-200 text-blue-400 rounded-xl font-bold hover:bg-blue-50 transition flex items-center justify-center gap-2 mb-10"><span className="text-2xl">+</span> Añadir Otro Alumno</button>
       
       {showForm && (<FormularioHijo close={() => setShowForm(false)} user={user} refresh={refresh} />)}
       {alumnoEditar && (<FormularioEdicionHijo alumno={alumnoEditar} close={() => setAlumnoEditar(null)} refresh={refresh} />)}
