@@ -467,15 +467,17 @@ const LandingPage = ({ setView }) => {
 };
 
 // ==========================================
-// 🛡️ ADMIN DASHBOARD (CON GESTIÓN DE BAJAS)
+// 🛡️ ADMIN DASHBOARD (FINAL: DÍAS VISIBLES + ETIQUETAS)
 // ==========================================
 const AdminDashboard = ({ userRole, logout, userEmail }) => {
   const [alumnos, setAlumnos] = useState([]);
   const [padres, setPadres] = useState({});
   const [avisos, setAvisos] = useState([]);
   const [equipo, setEquipo] = useState([]);
+  
   const [tab, setTab] = useState('global');
   const [busqueda, setBusqueda] = useState('');
+  const [filtroGrupo, setFiltroGrupo] = useState('');
   const [nuevoAviso, setNuevoAviso] = useState('');
   
   const [newStaff, setNewStaff] = useState({ email: '', password: '', role: 'profe' });
@@ -487,153 +489,212 @@ const AdminDashboard = ({ userRole, logout, userEmail }) => {
     const unsubStudents = onSnapshot(query(collection(db, 'students')), (s) => setAlumnos(s.docs.map(d => ({ id: d.id, ...d.data() }))));
     const unsubUsers = onSnapshot(query(collection(db, 'users')), (s) => {
         const p = {}, t = [];
-        s.forEach(d => { const data = d.data(); p[d.id] = data; if (data.role === 'admin' || data.role === 'profe') t.push({ id: d.id, ...data }); });
+        s.forEach(d => { 
+            const data = d.data();
+            p[d.id] = data; 
+            if (data.role === 'admin' || data.role === 'profe') t.push({ id: d.id, ...data });
+        });
         setPadres(p); setEquipo(t);
     });
     const unsubAvisos = onSnapshot(query(collection(db, 'avisos'), orderBy('fecha', 'desc')), (s) => setAvisos(s.docs.map(d => ({ id: d.id, ...d.data() }))));
     return () => { unsubStudents(); unsubUsers(); unsubAvisos(); };
   }, []);
 
-  const alumnosFiltrados = alumnos.filter(a => (a.nombre || '').toLowerCase().includes(busqueda.toLowerCase()) || (a.curso && a.curso.toLowerCase().includes(busqueda.toLowerCase())));
+  // ==========================================
+  // 🧠 CÁLCULOS DE LISTAS
+  // ==========================================
 
-  // --- 1. FUNCIÓN PARA CALCULAR FIN DE MES ---
-  const getFinDeMes = (fechaISO) => {
-      if (!fechaISO) return "Pendiente";
-      const fecha = new Date(fechaISO);
-      // Obtenemos el último día del mes de la fecha de solicitud
-      const ultimoDia = new Date(fecha.getFullYear(), fecha.getMonth() + 1, 0); 
-      return ultimoDia.toLocaleDateString();
+  // 1. LISTA GLOBAL
+  const gruposUnicos = [...new Set(alumnos.map(a => a.actividad).filter(g => g))].sort();
+  const listadoGlobal = alumnos.filter(a => {
+      const coincideNombre = (a.nombre || '').toLowerCase().includes(busqueda.toLowerCase());
+      const coincideGrupo = filtroGrupo ? a.actividad === filtroGrupo : true;
+      // Mostramos todo salvo perfiles vacíos borrados
+      const esRelevante = a.estado !== 'sin_inscripcion' || a.actividad; 
+      return coincideNombre && coincideGrupo && esRelevante;
+  });
+
+  // 2. LISTA PRUEBAS (PENDIENTES DE VALIDAR)
+  const listadoPruebas = alumnos.filter(a => {
+      if (a.estado === 'baja_pendiente' || a.esAntiguoAlumno) return false;
+      const esPruebaOficial = a.estado === 'prueba_reservada';
+      // Detectamos "Falsos Inscritos" (tienen plaza pero no han sido validados por Admin)
+      const esFalsoInscrito = a.estado === 'inscrito' && a.citaNivel && !a.validadoAdmin;
+      return esPruebaOficial || esFalsoInscrito;
+  });
+
+  // 3. LISTA BAJAS
+  const listadoBajas = alumnos.filter(a => a.estado === 'baja_pendiente');
+
+
+  // ==========================================
+  // ⚡ ACCIONES
+  // ==========================================
+  
+  const validarPlaza = async (alumno) => {
+      if (userRole !== 'admin') return alert("⛔ Solo coordinadores.");
+      const grupoFinal = alumno.actividad || "GRUPO A DETERMINAR (Editar)";
+      
+      if (confirm(`✅ ¿VALIDAR PLAZA?\n\nAlumno: ${alumno.nombre}\nGrupo: ${grupoFinal}\nHorario: ${alumno.dias || '?'} ${alumno.horario || ''}`)) {
+          await updateDoc(doc(db, 'students', alumno.id), { 
+              estado: 'inscrito',
+              actividad: grupoFinal,
+              validadoAdmin: true 
+          });
+          alert("🎉 Alumno validado correctamente.");
+      }
   };
 
-  // --- 2. FINALIZAR BAJA (BORRADO DEFINITIVO) ---
   const finalizarBaja = async (alumno) => {
-      if (userRole !== 'admin') return;
-      if (confirm(`⚠️ ¿FINALIZAR LA BAJA DE ${alumno.nombre}?\n\nAl confirmar, el alumno se quedará "Sin Actividad" y saldrá de los listados.`)) {
+      if (userRole !== 'admin') return alert("⛔ Solo coordinadores.");
+      if (confirm(`🗑️ ¿HACER EFECTIVA LA BAJA?\n\n${alumno.nombre} saldrá de los listados.`)) {
           await updateDoc(doc(db, 'students', alumno.id), {
-              estado: 'sin_inscripcion',
-              actividad: null, dias: null, horario: null, precio: null,
-              fechaInscripcion: null, citaId: null, citaNivel: null, fechaSolicitudBaja: null
+              estado: 'sin_inscripcion', actividad: null, dias: null, horario: null, precio: null,
+              fechaInscripcion: null, citaId: null, citaNivel: null, fechaSolicitudBaja: null, validadoAdmin: null
           });
       }
   };
 
-  const validarPlaza = async (alumno) => {
-      if (userRole !== 'admin') return alert("⛔ Solo coordinadores.");
-      if (!alumno.actividad) return alert("⚠️ Error: No seleccionó grupo.");
-      if (confirm(`✅ ¿ACEPTAR ALUMNO?\n\n${alumno.nombre} -> ${alumno.actividad}`)) {
-          await updateDoc(doc(db, 'students', alumno.id), { estado: 'inscrito' });
-      }
-  };
-
-  // Funciones auxiliares
-  const borrarAlumno = async (id) => { if (userRole !== 'admin') return; if(confirm('⚠️ ¿Borrar alumno?')) await deleteDoc(doc(db, 'students', id)); }
+  const borrarAlumno = async (id) => { if (userRole !== 'admin') return; if(confirm('⚠️ ¿Borrar definitivamente?')) await deleteDoc(doc(db, 'students', id)); }
   const agregarAviso = async (e) => { e.preventDefault(); if (!nuevoAviso) return; await addDoc(collection(db, 'avisos'), { texto: nuevoAviso, fecha: new Date().toISOString() }); setNuevoAviso(''); };
   const borrarAviso = async (id) => { if (confirm('¿Borrar aviso?')) await deleteDoc(doc(db, 'avisos', id)); };
-  const handleCrearStaff = async (e) => { e.preventDefault(); if (userRole !== 'admin') return; setLoadingStaff(true); try { await crearUsuarioSecundario(newStaff.email, newStaff.password, newStaff.role); alert("Usuario creado"); setNewStaff({ email: '', password: '', role: 'profe' }); } catch (e) { alert(e.message); } finally { setLoadingStaff(false); } };
+  const handleCrearStaff = async (e) => { e.preventDefault(); if (userRole !== 'admin') return; setLoadingStaff(true); try { await crearUsuarioSecundario(newStaff.email, newStaff.password, newStaff.role); alert("Creado"); setNewStaff({ email: '', password: '', role: 'profe' }); } catch (e) { alert(e.message); } finally { setLoadingStaff(false); } };
   const borrarMiembroEquipo = async (miembro) => { if (miembro.email.toLowerCase() === ADMIN_EMAIL.toLowerCase()) return alert("No puedes borrar al Super Admin"); if (confirm("¿Borrar usuario?")) await deleteDoc(doc(db, 'users', miembro.id)); };
-  const descargarExcel = () => { 
-    const cabecera = ['Alumno,Actividad,Pagador,Email,Estado\n'];
-    const filas = alumnos.map(a => `"${a.nombre}","${a.actividad||'-'}","${padres[a.parentId]?.nombrePagador||''}","${padres[a.parentId]?.email||''}","${a.estado}"`);
-    const link = document.createElement("a"); link.href = "data:text/csv;charset=utf-8," + encodeURI(cabecera + filas.join("\n")); link.download = "listado_alumnos.csv"; link.click();
+  const getFinDeMes = (fecha) => { if(!fecha) return "-"; const d = new Date(fecha); return new Date(d.getFullYear(), d.getMonth() + 1, 0).toLocaleDateString(); };
+  
+  const descargarExcel = () => {
+    const cabecera = ['Alumno,Estado,Grupo,Día,Horario,Pagador\n'];
+    const filas = listadoGlobal.map(a => `"${a.nombre}","${a.estado}","${a.actividad||'-'}","${a.dias||''}","${a.horario||''}","${padres[a.parentId]?.nombrePagador||''}"`);
+    const link = document.createElement("a"); link.href = "data:text/csv;charset=utf-8," + encodeURI(cabecera + filas.join("\n")); link.download = "listado_completo.csv"; link.click();
   };
 
   return (
-    <div className="min-h-screen bg-gray-100 font-sans flex flex-col">
-      <div className="bg-white shadow-sm border-b p-4 flex justify-between items-center sticky top-0 z-50">
-        <h1 className="text-xl font-bold text-gray-800">Panel de Gestión ({soySuperAdmin ? 'Super Admin' : userRole})</h1>
+    <div className="min-h-screen bg-gray-100 p-6 font-sans">
+      <div className="flex justify-between items-center mb-6 bg-white p-4 rounded shadow">
+        <div><h1 className="text-xl font-bold text-gray-800">Panel de Gestión</h1><p className="text-xs text-gray-500">{userEmail} ({soySuperAdmin ? 'Super Admin' : userRole})</p></div>
         <div className="flex gap-2">
             {userRole === 'admin' && <button onClick={descargarExcel} className="bg-green-600 text-white px-3 py-1 rounded text-sm font-bold">Excel</button>}
             <button onClick={logout} className="text-red-500 border border-red-200 px-3 py-1 rounded text-sm font-bold">Salir</button>
         </div>
       </div>
 
-      <div className="p-6 max-w-7xl mx-auto w-full flex-1">
-        <div className="flex gap-2 mb-6 border-b pb-2 overflow-x-auto">
-          {['global', 'pruebas', 'bajas', 'avisos', 'alta_manual', 'equipo'].map(t => {
+      <div className="flex gap-2 mb-6 border-b pb-2 overflow-x-auto">
+          {['global', 'pruebas', 'bajas', 'equipo', 'avisos', 'alta_manual'].map(t => {
              if ((t === 'equipo' || t === 'alta_manual' || t === 'bajas') && userRole !== 'admin') return null;
-             return (<button key={t} onClick={() => setTab(t)} className={`px-4 py-2 font-bold uppercase text-sm whitespace-nowrap ${tab === t ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500'}`}>{t.replace('_', ' ')}</button>);
+             let count = 0;
+             if (t === 'pruebas') count = listadoPruebas.length;
+             if (t === 'bajas') count = listadoBajas.length;
+             return (<button key={t} onClick={() => setTab(t)} className={`px-4 py-2 font-bold uppercase text-sm whitespace-nowrap flex items-center gap-2 ${tab === t ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500'}`}>{t.replace('_', ' ')}{count > 0 && <span className="bg-red-500 text-white text-[10px] px-1.5 rounded-full">{count}</span>}</button>);
           })}
-        </div>
+      </div>
 
-        {tab === 'global' && (
+      {/* 1. GLOBAL */}
+      {tab === 'global' && (
           <div className="bg-white rounded shadow overflow-hidden">
-              <input className="w-full p-3 border-b" placeholder="🔍 Buscar alumno..." value={busqueda} onChange={e => setBusqueda(e.target.value)} />
+              <div className="p-4 border-b bg-gray-50 flex flex-col md:flex-row gap-4">
+                  <input className="flex-1 border p-2 rounded" placeholder="🔍 Buscar..." value={busqueda} onChange={e => setBusqueda(e.target.value)} />
+                  <select className="border p-2 rounded bg-white font-bold text-gray-700 md:w-1/3" value={filtroGrupo} onChange={e => setFiltroGrupo(e.target.value)}>
+                      <option value="">📂 Todos los Grupos</option>
+                      {gruposUnicos.map(g => (<option key={g} value={g}>{g}</option>))}
+                  </select>
+              </div>
               <table className="w-full text-sm text-left">
-                  <thead className="bg-gray-100 text-gray-600 uppercase text-xs"><tr><th className="p-3">Alumno</th><th className="p-3">Grupo</th><th className="p-3 text-right">Acción</th></tr></thead>
-                  <tbody className="divide-y">
-                      {alumnosFiltrados.map(a => (
-                          <tr key={a.id} className={`hover:bg-gray-50 ${a.estado === 'baja_pendiente' ? 'bg-red-50' : ''}`}>
-                              <td className="p-3 font-bold">
-                                  {a.nombre}
-                                  {a.estado === 'baja_pendiente' && <span className="ml-2 text-[10px] bg-red-100 text-red-800 px-2 py-0.5 rounded font-bold">BAJA TRAMITADA</span>}
-                                  <br/><span className="text-gray-400 text-xs">{a.curso}</span>
-                              </td>
-                              <td className="p-3">{a.actividad || <span className="text-gray-300">-</span>}</td>
-                              <td className="p-3 text-right">{userRole === 'admin' && <button onClick={() => borrarAlumno(a.id)} className="text-red-400 hover:text-red-600 p-2">🗑️</button>}</td>
-                          </tr>
-                      ))}
+                  <thead className="bg-gray-100 uppercase text-xs"><tr><th className="p-3">Alumno</th><th className="p-3">Actividad / Horario</th><th className="p-3 text-right">Acción</th></tr></thead>
+                  <tbody>
+                      {listadoGlobal.length > 0 ? listadoGlobal.map(a => {
+                          const esPendiente = (a.estado === 'inscrito' && !a.validadoAdmin) || a.estado === 'prueba_reservada';
+                          
+                          return (
+                              <tr key={a.id} className={`border-b ${a.estado === 'baja_pendiente' ? 'bg-red-50' : 'hover:bg-gray-50'}`}>
+                                  <td className="p-3 font-bold">
+                                      {a.nombre} 
+                                      {a.estado === 'baja_pendiente' && <span className="text-[10px] bg-red-100 text-red-600 px-1 rounded ml-1">BAJA</span>}
+                                      <br/><span className="text-gray-400 text-xs">{a.curso}</span>
+                                  </td>
+                                  <td className="p-3">
+                                      <div className="font-bold text-blue-900 text-sm">{a.actividad || '-'}</div>
+                                      
+                                      {/* ETIQUETA AMARILLA SI NO HA HECHO PRUEBA */}
+                                      {esPendiente && (
+                                          <div className="my-1">
+                                              <span className="bg-yellow-100 text-yellow-800 text-[10px] px-2 py-0.5 rounded border border-yellow-300 font-bold">
+                                                  ⏳ Falta Prueba / Validar
+                                              </span>
+                                          </div>
+                                      )}
+                                      
+                                      {/* DÍAS Y HORAS SIEMPRE VISIBLES */}
+                                      {(a.dias || a.horario) && (
+                                          <div className="text-xs text-gray-600 font-medium mt-1">
+                                              📅 {a.dias} • ⏰ {a.horario}
+                                          </div>
+                                      )}
+                                  </td>
+                                  <td className="p-3 text-right">{userRole === 'admin' && <button onClick={() => borrarAlumno(a.id)} className="text-red-400 hover:text-red-600 p-2">🗑️</button>}</td>
+                              </tr>
+                          );
+                      }) : <tr><td colSpan="3" className="p-8 text-center text-gray-400">No hay resultados.</td></tr>}
                   </tbody>
               </table>
           </div>
-        )}
+      )}
 
-        {/* 👇 NUEVA PESTAÑA: BAJAS */}
-        {tab === 'bajas' && (
+      {/* 2. PRUEBAS */}
+      {tab === 'pruebas' && (
           <div className="bg-white rounded shadow overflow-hidden">
-              <div className="p-3 bg-red-50 text-red-800 text-xs font-bold border-b border-red-100">
-                  📉 Alumnos que han solicitado baja. Se cobra este mes y se borran el día 1 del siguiente.
-              </div>
+              <div className="p-3 bg-blue-50 text-blue-800 text-xs font-bold border-b">ℹ️ Validar Plazas: Alumnos pendientes de prueba o confirmación.</div>
               <table className="w-full text-sm text-left">
-                  <thead className="bg-gray-100 text-gray-600 uppercase text-xs"><tr><th className="p-3">Alumno</th><th className="p-3">Grupo Actual</th><th className="p-3">Solicitada el</th><th className="p-3 text-red-600">Baja Efectiva</th><th className="p-3 text-right">Acción</th></tr></thead>
-                  <tbody className="divide-y">
-                      {alumnos.filter(a => a.estado === 'baja_pendiente').map(a => (
+                  <thead className="bg-gray-100 uppercase text-xs"><tr><th className="p-3">Cita</th><th className="p-3">Alumno</th><th className="p-3">Solicita (Día/Hora)</th><th className="p-3 text-right">Validar</th></tr></thead>
+                  <tbody>
+                      {listadoPruebas.length > 0 ? listadoPruebas.map(a => (
+                          <tr key={a.id} className="hover:bg-orange-50">
+                              <td className="p-3 text-blue-600 font-bold">{a.citaNivel || 'Sin hora'}</td>
+                              <td className="p-3 font-bold">{a.nombre}<br/><span className="text-xs font-normal text-gray-400">Estado: {a.estado}</span></td>
+                              
+                              <td className="p-3">
+                                  <span className="bg-orange-100 text-orange-800 px-2 py-1 rounded text-xs font-bold block w-fit mb-1">{a.actividad || 'Sin elegir'}</span>
+                                  {/* AQUÍ TAMBIÉN SALE EL DÍA Y HORA */}
+                                  {(a.dias || a.horario) && <div className="text-xs text-gray-600 font-bold">{a.dias} - {a.horario}</div>}
+                              </td>
+                              
+                              <td className="p-3 text-right"><button onClick={() => validarPlaza(a)} className="bg-green-500 text-white px-3 py-1 rounded font-bold text-xs shadow hover:bg-green-600">✅ Aceptar</button></td>
+                          </tr>
+                      )) : <tr><td colSpan="4" className="p-6 text-center text-gray-400">Todo validado.</td></tr>}
+                  </tbody>
+              </table>
+          </div>
+      )}
+
+      {/* 3. BAJAS */}
+      {tab === 'bajas' && (
+          <div className="bg-white rounded shadow overflow-hidden">
+              <div className="p-3 bg-red-50 text-red-800 text-xs font-bold border-b">ℹ️ Bajas solicitadas (Pendientes de finalizar).</div>
+              <table className="w-full text-sm text-left">
+                  <thead className="bg-gray-100 uppercase text-xs"><tr><th className="p-3">Alumno</th><th className="p-3">Grupo</th><th className="p-3">Solicitada</th><th className="p-3 text-red-600">Efectiva</th><th className="p-3 text-right">Acción</th></tr></thead>
+                  <tbody>
+                      {listadoBajas.length > 0 ? listadoBajas.map(a => (
                           <tr key={a.id} className="hover:bg-red-50">
                               <td className="p-3 font-bold">{a.nombre}</td>
                               <td className="p-3 text-gray-600">{a.actividad}</td>
-                              <td className="p-3">{new Date(a.fechaSolicitudBaja).toLocaleDateString()}</td>
+                              <td className="p-3">{a.fechaSolicitudBaja ? new Date(a.fechaSolicitudBaja).toLocaleDateString() : '-'}</td>
                               <td className="p-3 font-bold text-red-700">{getFinDeMes(a.fechaSolicitudBaja)}</td>
-                              <td className="p-3 text-right">
-                                  <button onClick={() => finalizarBaja(a)} className="bg-red-100 text-red-700 border border-red-300 px-3 py-1 rounded font-bold text-xs hover:bg-red-600 hover:text-white">
-                                      🗑️ Finalizar Baja
-                                  </button>
-                              </td>
+                              <td className="p-3 text-right"><button onClick={() => finalizarBaja(a)} className="bg-red-100 text-red-700 border border-red-300 px-3 py-1 rounded font-bold text-xs hover:bg-red-600 hover:text-white">🗑️ Finalizar</button></td>
                           </tr>
-                      ))}
-                      {alumnos.filter(a => a.estado === 'baja_pendiente').length === 0 && <tr><td colSpan="5" className="p-6 text-center text-gray-400">No hay bajas pendientes.</td></tr>}
+                      )) : <tr><td colSpan="5" className="p-6 text-center text-gray-400">No hay bajas pendientes.</td></tr>}
                   </tbody>
               </table>
           </div>
-        )}
+      )}
 
-        {tab === 'pruebas' && (
-          <div className="bg-white rounded shadow overflow-hidden">
-              <table className="w-full text-sm text-left">
-                  <thead className="bg-gray-100 uppercase text-xs"><tr><th className="p-3">Cita</th><th className="p-3">Alumno</th><th className="p-3">Solicita</th><th className="p-3 text-right">Validar</th></tr></thead>
-                  <tbody className="divide-y">
-                  {alumnos.filter(a => (a.estado === 'prueba_reservada' || (a.citaNivel && a.estado !== 'inscrito'))).map(a => (
-                          <tr key={a.id} className="hover:bg-orange-50">
-                              <td className="p-3 text-blue-600 font-bold">{a.citaNivel}</td>
-                              <td className="p-3 font-bold">{a.nombre}</td>
-                              <td className="p-3"><span className="bg-orange-100 text-orange-800 px-2 py-1 rounded text-xs font-bold">{a.actividad || 'Sin elegir'}</span></td>
-                              <td className="p-3 text-right"><button onClick={() => validarPlaza(a)} className="bg-green-500 text-white px-4 py-1.5 rounded font-bold text-xs shadow hover:bg-green-600">✅ Aceptar</button></td>
-                          </tr>
-                      ))}
-                      {alumnos.filter(a => a.estado === 'prueba_reservada').length === 0 && <tr><td colSpan="4" className="p-6 text-center text-gray-400">No hay pruebas pendientes.</td></tr>}
-                  </tbody>
-              </table>
+      {tab === 'equipo' && userRole === 'admin' && (
+          <div className="grid md:grid-cols-2 gap-4">
+              <div className="bg-white p-4 rounded shadow"><h3 className="font-bold mb-2">Crear Usuario</h3><form onSubmit={handleCrearStaff} className="space-y-2"><input className="border p-2 w-full rounded" placeholder="Email" value={newStaff.email} onChange={e => setNewStaff({...newStaff, email: e.target.value})} /><input className="border p-2 w-full rounded" placeholder="Contraseña" type="password" value={newStaff.password} onChange={e => setNewStaff({...newStaff, password: e.target.value})} /><select className="border p-2 w-full rounded" value={newStaff.role} onChange={e => setNewStaff({...newStaff, role: e.target.value})}><option value="profe">Profesor</option><option value="admin">Coordinador</option></select><button disabled={loadingStaff} className="bg-purple-600 text-white w-full py-2 rounded font-bold">Crear</button></form></div>
+              <div className="bg-white p-4 rounded shadow"><h3 className="font-bold mb-2">Lista Equipo</h3>{equipo.map(u => (<div key={u.id} className="flex justify-between items-center border-b py-2"><span>{u.email} <small className="text-gray-500">({u.role})</small></span><button onClick={() => borrarMiembroEquipo(u)} className="text-red-500">🗑️</button></div>))}</div>
           </div>
-        )}
+      )}
 
-        {tab === 'equipo' && userRole === 'admin' && (
-             <div className="grid md:grid-cols-2 gap-4">
-                 <div className="bg-white p-4 rounded shadow"><h3 className="font-bold mb-2">Crear Usuario</h3><form onSubmit={handleCrearStaff} className="space-y-2"><input className="border p-2 w-full rounded" placeholder="Email" value={newStaff.email} onChange={e => setNewStaff({...newStaff, email: e.target.value})} /><input className="border p-2 w-full rounded" placeholder="Contraseña" type="password" value={newStaff.password} onChange={e => setNewStaff({...newStaff, password: e.target.value})} /><select className="border p-2 w-full rounded" value={newStaff.role} onChange={e => setNewStaff({...newStaff, role: e.target.value})}><option value="profe">Profesor</option><option value="admin">Coordinador</option></select><button disabled={loadingStaff} className="bg-purple-600 text-white w-full py-2 rounded font-bold">Crear</button></form></div>
-                 <div className="bg-white p-4 rounded shadow"><h3 className="font-bold mb-2">Lista Equipo</h3>{equipo.map(u => (<div key={u.id} className="flex justify-between items-center border-b py-2"><span>{u.email} <small className="text-gray-500">({u.role})</small></span><button onClick={() => borrarMiembroEquipo(u)} className="text-red-500">🗑️</button></div>))}</div>
-             </div>
-        )}
-
-        {tab === 'avisos' && (<div className="grid md:grid-cols-2 gap-6"><div className="bg-white p-4 rounded shadow"><h3 className="font-bold mb-2">Nuevo Aviso</h3><form onSubmit={agregarAviso}><textarea className="w-full border p-2 rounded mb-2" rows="3" value={nuevoAviso} onChange={e => setNuevoAviso(e.target.value)} /><button className="bg-blue-600 text-white px-4 py-2 rounded font-bold w-full">Publicar</button></form></div><div className="space-y-2">{avisos.map(a => (<div key={a.id} className="bg-yellow-50 p-3 rounded border border-yellow-200 flex justify-between"><span>{a.texto}</span>{userRole === 'admin' && <button onClick={() => borrarAviso(a.id)} className="text-red-500">🗑️</button>}</div>))}</div></div>)}
-        {tab === 'alta_manual' && (<div className="bg-white p-8 rounded shadow text-center"><h2 className="text-xl font-bold text-blue-900 mb-4">Alta Manual</h2><button className="bg-blue-600 text-white px-6 py-3 rounded font-bold" onClick={() => window.open(window.location.href, '_blank')}>Abrir Formulario ↗</button></div>)}
-      </div>
+      {tab === 'avisos' && (<div className="grid md:grid-cols-2 gap-6"><div className="bg-white p-4 rounded shadow"><h3 className="font-bold mb-2">Nuevo Aviso</h3><form onSubmit={agregarAviso}><textarea className="w-full border p-2 rounded mb-2" rows="3" value={nuevoAviso} onChange={e => setNuevoAviso(e.target.value)} /><button className="bg-blue-600 text-white px-4 py-2 rounded font-bold w-full">Publicar</button></form></div><div className="space-y-2">{avisos.map(a => (<div key={a.id} className="bg-yellow-50 p-3 rounded border border-yellow-200 flex justify-between"><span>{a.texto}</span>{userRole === 'admin' && <button onClick={() => borrarAviso(a.id)} className="text-red-500">🗑️</button>}</div>))}</div></div>)}
+      {tab === 'alta_manual' && (<div className="bg-white p-8 rounded shadow text-center"><h2 className="text-xl font-bold mb-4">Alta Manual</h2><button className="bg-blue-600 text-white px-6 py-3 rounded font-bold" onClick={() => window.open(window.location.href, '_blank')}>Abrir Formulario ↗</button></div>)}
     </div>
   );
 };
