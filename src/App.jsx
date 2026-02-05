@@ -36,10 +36,17 @@ const CAPACIDAD_POR_HUECO = 2;
 // ==========================================
 const IMG_ESCUDO = 'https://i.ibb.co/v6gvHDfv/logo-BLANCO.png';
 const IMG_PRINCIPAL = 'https://i.ibb.co/HLt30jVK/20241210-084606.jpg';
-const IMG_GALERIA_1 = 'https://i.ibb.co/hJxW45tC/20241210-084225.jpg';
-const IMG_GALERIA_2 = 'https://i.ibb.co/mrJHGscm/Screenshot-2025-05-09-15-04-17.png';
 const MAPA_IMAGEN_URL = "https://i.ibb.co/35RNNBLz/Info-piscina.png";
 
+// HE CREADO ESTA LISTA NUEVA CON LAS VIEJAS + LAS NUEVAS
+const GALERIA = [
+  'https://i.ibb.co/hJxW45tC/20241210-084225.jpg',
+  'https://i.ibb.co/mrJHGscm/Screenshot-2025-05-09-15-04-17.png',
+  'https://i.ibb.co/Psstvn93/20241210-084647.jpg',
+  'https://i.ibb.co/gFT6zfHC/20241210-083956.jpg',
+  'https://i.ibb.co/pvDBMSbv/20241210-083700.jpg',
+  'https://i.ibb.co/9B0Fb23/20241210-083619.jpg'
+];
 // ==========================================
 // 📚 LISTADO MAESTRO DE CURSOS ESCOLARES
 // ==========================================
@@ -68,7 +75,7 @@ const LISTA_CURSOS = [
 const OFERTA_ACTIVIDADES = [
   {
     id: 'chapoteo', 
-    nombre: '🚼 Chapoteo (Infantil)', 
+    nombre: '🚼 Chapoteo "Infantil" (16:00-17:00)', 
     cursos: ['INF3', 'INF4', 'INF5'], 
     requierePrueba: false, 
     diasResumen: 'L-V', 
@@ -85,7 +92,7 @@ const OFERTA_ACTIVIDADES = [
   },
   {
     id: 'primaria_1615', 
-    nombre: '🏅 Natación Primaria (16:15)', 
+    nombre: '🏅 Natación Primaria (16:15-17:15)', 
     cursos: ['1PRI', '2PRI', '3PRI', '4PRI', '5PRI', '6PRI'], 
     requierePrueba: true, 
     diasResumen: 'L-V', 
@@ -104,7 +111,7 @@ const OFERTA_ACTIVIDADES = [
   },
   {
     id: 'primaria_123_tarde', 
-    nombre: '🐟 Natación 1º-3º Prim (17:30)', 
+    nombre: '🐟 Natación 1º-3º Prim (17:30-18:00)', 
     cursos: ['1PRI', '2PRI', '3PRI'], 
     requierePrueba: true, 
     diasResumen: 'L-V', 
@@ -123,26 +130,26 @@ const OFERTA_ACTIVIDADES = [
   },
   {
     id: 'primaria_456_tarde', 
-    nombre: '🏊 Natación 4º-6º Prim (Mixto)', 
+    nombre: '🏊 Natación 4º-6º Prim (17:30-18:00)', 
     cursos: ['4PRI', '5PRI', '6PRI'], 
     requierePrueba: true, 
     diasResumen: 'L-V', 
     precioResumen: '37€ / 50€', 
-    descripcion: 'Para quienes quieren seguir mejorando técnica y condición física. Ideal como complemento a otras actividades deportivas.\n\n⬇️ ELIGE TU OPCIÓN ⬇️\n⭐ PACK 2 DÍAS (50€).\n⭐ DÍA SUELTO (37€).\n(L-X-V es 1h | M-J es 30min).', 
+    descripcion: 'Para quienes quieren seguir mejorando técnica y condición física. Ideal como complemento a otras actividades deportivas.\n\n⬇️ ELIGE TU OPCIÓN ⬇️\n⭐ PACK 2 DÍAS (50€).\n⭐ DÍA SUELTO (37€).', 
     aviso: 'Mínimo 4 alumnos.',
     opciones: [
-        { dias: '[PACK 2 DÍAS] Lunes (1h) y Miércoles (1h)', horario: '17:30-18:30', precio: '50€' },
-        { dias: '[PACK 2 DÍAS] Martes (30m) y Jueves (30m)', horario: '18:00-18:30', precio: '50€' },
-        { dias: '[1 DÍA] Lunes', horario: '17:30-18:30', precio: '37€' },
-        { dias: '[1 DÍA] Martes', horario: '18:00-18:30', precio: '37€' },
-        { dias: '[1 DÍA] Miércoles', horario: '17:30-18:30', precio: '37€' },
-        { dias: '[1 DÍA] Jueves', horario: '18:00-18:30', precio: '37€' },
-        { dias: '[1 DÍA] Viernes', horario: '17:30-18:30', precio: '37€' }
+        { dias: '[PACK 2 DÍAS] Lunes (30m) y Miércoles (30m)', horario: '17:30-18:00', precio: '50€' },
+        { dias: '[PACK 2 DÍAS] Martes (30m) y Jueves (30m)', horario: '17:30-18:00', precio: '50€' },
+        { dias: '[1 DÍA] Lunes', horario: '17:30-18:00', precio: '37€' },
+        { dias: '[1 DÍA] Martes', horario: '17:30-18:00', precio: '37€' },
+        { dias: '[1 DÍA] Miércoles', horario: '17:30-18:00', precio: '37€' },
+        { dias: '[1 DÍA] Jueves', horario: '17:30-18:00', precio: '37€' },
+        { dias: '[1 DÍA] Viernes', horario: '17:30-18:00', precio: '37€' }
     ]
   },
   {
     id: 'waterpolo', 
-    nombre: '🤽‍♂️ Waterpolo', 
+    nombre: '🤽‍♂️ Waterpolo (17:30-18:30)', 
     cursos: ['3PRI', '4PRI', '5PRI', '6PRI'], 
     requierePrueba: false, 
     diasResumen: 'L-V', 
@@ -161,7 +168,7 @@ const OFERTA_ACTIVIDADES = [
   },
   {
     id: 'aquagym', 
-    nombre: '💧 Aquagym (+16 años)', 
+    nombre: '💧 Aquagym "+16 años" (17:30-18:15)', 
     cursos: ['ADULTO', '1BACH', '2BACH'], 
     requierePrueba: false, 
     diasResumen: 'M y J', 
@@ -174,7 +181,7 @@ const OFERTA_ACTIVIDADES = [
   },
   {
     id: 'adultos', 
-    nombre: '👨‍👩‍👧 Adultos', 
+    nombre: '👨‍👩‍👧 Adultos (L-X-V 18:00-18:30) (M-J 18:30-19:00)', 
     cursos: ['ADULTO'], 
     requierePrueba: false, 
     diasResumen: 'L-V', 
@@ -283,9 +290,9 @@ const LandingPage = ({ setView }) => {
         </div>
         <div className="relative z-20 text-center px-4 max-w-4xl mx-auto flex flex-col items-center">
           <img src={IMG_ESCUDO} className="h-28 mx-auto mb-6 drop-shadow-2xl" alt="Escudo" />
-          <h1 className="text-4xl md:text-6xl font-extrabold mb-4 drop-shadow-md">
-            Escuela de Natación <br /> San Buenaventura
-          </h1>
+          <h1 className="text-4xl md:text-6xl font-extrabold mb-4 drop-shadow-md text-white [-webkit-text-stroke:2px_#2563eb]">
+  Escuela de Natación <br /> San Buenaventura
+</h1>
           
           {/* 👇 AQUÍ ESTÁN LAS FRASES QUE FALTABAN 👇 */}
           <p className="text-xl md:text-2xl font-light mb-2 drop-shadow-sm opacity-90">
@@ -445,23 +452,31 @@ const LandingPage = ({ setView }) => {
             </div>
           )}
 
-          {/* VISTA INSTALACIONES */}
-          {tab === 'instalaciones' && (
-            <div className="grid md:grid-cols-2 gap-6 animate-fade-in">
-              <img src={IMG_GALERIA_1} className="w-full h-64 object-cover rounded-xl shadow hover:scale-105 transition" alt="Galeria 1" />
-              <img src={IMG_GALERIA_2} className="w-full h-64 object-cover rounded-xl shadow hover:scale-105 transition" alt="Galeria 2" />
+{/* VISTA INSTALACIONES */}
+{tab === 'instalaciones' && (
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 animate-fade-in">
+              {GALERIA.map((foto, index) => (
+                <img 
+                  key={index} 
+                  src={foto} 
+                  className="w-full h-64 object-cover rounded-xl shadow hover:scale-105 transition duration-300" 
+                  alt={`Instalación ${index + 1}`} 
+                />
+              ))}
             </div>
           )}
+
         </div>
       </div>
-      
+
       {/* FOOTER */}
-      <footer className="bg-gray-900 text-white py-8 text-center text-sm text-gray-400">
+      <footer className="bg-gray-900 text-white py-8 text-center text-sm text-gray-400 mt-10 rounded-xl">
         <p>© 2026 Colegio San Buenaventura - Escuela de Natación</p>
       </footer>
+
     </div>
   );
-};
+}
 
 // ==========================================
 // 🛡️ ADMIN DASHBOARD (SOLUCIÓN: PRUEBAS RESERVADAS + INSCRITOS SIN VALIDAR)
