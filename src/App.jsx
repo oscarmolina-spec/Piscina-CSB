@@ -200,7 +200,7 @@ const OFERTA_ACTIVIDADES = [
   },
   {
     id: 'eso_bach', 
-    nombre: '🎓 ESO/Bachillerato', 
+    nombre: '🎓 ESO/Bach (L-X 18:30-19:00) (V 14:15-15:00)', 
     cursos: ['1ESO', '2ESO', '3ESO', '4ESO', '1BACH', '2BACH'], 
     requierePrueba: true, 
     diasResumen: 'L/X o V', 
