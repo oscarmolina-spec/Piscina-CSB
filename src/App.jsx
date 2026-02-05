@@ -431,7 +431,9 @@ const LandingPage = ({ setView }) => {
                 </ul>
               </div>
 
-              {/* BAJAS Y ALTAS */}
+{/* ======================================================== */}
+              {/* ⚠️ NORMATIVA DE BAJAS Y ALTAS (SE MANTIENE IGUAL)        */}
+              {/* ======================================================== */}
               <div className="bg-amber-50 border-2 border-amber-200 rounded-xl p-8">
                 <h3 className="text-2xl font-bold text-amber-800 mb-6">⚠️ Normativa de Bajas y Altas</h3>
                 <div className="grid md:grid-cols-1 gap-6">
@@ -449,6 +451,73 @@ const LandingPage = ({ setView }) => {
                   </div>
                 </div>
               </div>
+
+              {/* ======================================================== */}
+              {/* 📞 NUEVA SECCIÓN: CONTACTO Y UBICACIÓN (AÑADIDA)         */}
+              {/* ======================================================== */}
+              <div className="grid md:grid-cols-2 gap-6 pt-4">
+                
+                {/* TARJETA DE CONTACTO */}
+                <div className="bg-white border-l-4 border-blue-500 rounded-xl p-6 shadow-md hover:shadow-lg transition">
+                  <h3 className="text-xl font-bold text-blue-900 mb-4 flex items-center gap-2">📞 Contacto</h3>
+                  
+                  <div className="space-y-5">
+                    {/* Teléfono */}
+                    <div className="flex items-center gap-3">
+                        <div className="bg-blue-100 p-2 rounded-full text-lg">☎️</div>
+                        <div>
+                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Secretaría</p>
+                            <a href="tel:915267161" className="text-xl font-bold text-blue-700 hover:text-blue-900 transition">
+                                915 26 71 61
+                            </a>
+                        </div>
+                    </div>
+
+                    {/* Emails */}
+                    <div className="flex items-start gap-3 border-t border-gray-100 pt-4">
+                        <div className="bg-orange-100 p-2 rounded-full text-lg">📧</div>
+                        <div className="flex flex-col gap-1 w-full">
+                             <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Correos Electrónicos</p>
+                            <a href="mailto:extraescolarespiscina@sanbuenaventura.org" className="text-sm font-medium text-gray-600 hover:text-blue-600 transition break-all">
+                                • extraescolarespiscina@sanbuenaventura.org
+                            </a>
+                            <a href="mailto:extraescolares@sanbuenaventura.org" className="text-sm font-medium text-gray-600 hover:text-blue-600 transition break-all">
+                                • extraescolares@sanbuenaventura.org
+                            </a>
+                        </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* TARJETA DE UBICACIÓN */}
+                <div className="bg-white border-l-4 border-green-500 rounded-xl p-6 shadow-md hover:shadow-lg transition flex flex-col justify-between">
+                  <div>
+                    <h3 className="text-xl font-bold text-green-800 mb-4 flex items-center gap-2">📍 Ubicación</h3>
+                    
+                    <div className="flex items-start gap-3 mb-6">
+                        <div className="bg-green-100 p-2 rounded-full text-lg">🏫</div>
+                        <div>
+                            <p className="font-bold text-gray-800">Colegio San Buenaventura</p>
+                            <p className="text-sm text-gray-600 mt-1 leading-relaxed">
+                                C. de El Greco, 16,<br/>
+                                Latina, 28011 Madrid
+                            </p>
+                        </div>
+                    </div>
+                  </div>
+
+                  <a 
+                    href="https://www.google.com/maps/search/?api=1&query=Calle+de+El+Greco+16+Madrid" 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-center gap-2 w-full bg-green-600 text-white font-bold py-3 rounded-lg hover:bg-green-700 transition shadow transform hover:-translate-y-1"
+                  >
+                    🗺️ Cómo llegar (Google Maps)
+                  </a>
+                </div>
+
+              </div>
+
             </div>
           )}
 
