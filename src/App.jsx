@@ -34,7 +34,12 @@ const CAPACIDAD_POR_HUECO = 2;
 // ==========================================
 // 🖼️ BANCO DE IMÁGENES
 // ==========================================
-const IMG_ESCUDO = 'https://i.ibb.co/v6gvHDfv/logo-BLANCO.png';
+const IMG_ESCUDO_BLANCO = 'https://i.ibb.co/v6gvHDfv/logo-BLANCO.png';
+const IMG_ESCUDO_COLOR = 'https://i.ibb.co/KjCWNLrc/CSB.png';
+
+// 👇 ¡AÑADE ESTO PARA QUE NO SE QUEDE EN BLANCO! 👇
+const IMG_ESCUDO = IMG_ESCUDO_COLOR; 
+
 const IMG_PRINCIPAL = 'https://i.ibb.co/HLt30jVK/20241210-084606.jpg';
 const MAPA_IMAGEN_URL = "https://i.ibb.co/35RNNBLz/Info-piscina.png";
 
@@ -289,7 +294,7 @@ const LandingPage = ({ setView }) => {
           <img src={IMG_PRINCIPAL} className="w-full h-full object-cover z-0" alt="Piscina" />
         </div>
         <div className="relative z-20 text-center px-4 max-w-4xl mx-auto flex flex-col items-center">
-          <img src={IMG_ESCUDO} className="h-28 mx-auto mb-6 drop-shadow-2xl" alt="Escudo" />
+        <img src={IMG_ESCUDO_BLANCO} className="h-28 mx-auto mb-6 drop-shadow-2xl" alt="Escudo" />
           <h1 className="text-4xl md:text-6xl font-extrabold mb-4 drop-shadow-md text-white [-webkit-text-stroke:2px_#2563eb]">
   Escuela de Natación <br /> San Buenaventura
 </h1>
