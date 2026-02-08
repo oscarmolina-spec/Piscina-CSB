@@ -605,22 +605,72 @@ const AdminDashboard = ({ userRole, logout, userEmail }) => {
   };
 
   const validarPlaza = async (alumno) => {
-      if (userRole !== 'admin') return alert("⛔ Solo coordinadores.");
-      const grupoFinal = alumno.actividad || "GRUPO A DETERMINAR";
-      if (confirm(`✅ ¿Validar plaza para ${alumno.nombre}?`)) {
-          await updateDoc(doc(db, 'students', alumno.id), { estado: 'inscrito', actividad: grupoFinal, validadoAdmin: true });
-      }
-  };
+    if (userRole !== 'admin') return alert("⛔ Solo coordinadores.");
+    
+    const grupoFinal = alumno.actividad || "GRUPO A DETERMINAR";
+    
+    if (confirm(`✅ ¿Validar plaza para ${alumno.nombre}?`)) {
+        // Cogemos la fecha de HOY (AAAA-MM-DD)
+        const hoy = new Date().toISOString().split('T')[0];
 
-  const finalizarBaja = async (alumno) => {
-      if (userRole !== 'admin') return alert("⛔ Solo coordinadores.");
-      if (confirm(`🗑️ ¿Finalizar baja de ${alumno.nombre}?`)) {
-          await updateDoc(doc(db, 'students', alumno.id), {
-              estado: 'sin_inscripcion', actividad: null, dias: null, horario: null, precio: null,
-              fechaInscripcion: null, citaId: null, citaNivel: null, fechaSolicitudBaja: null, validadoAdmin: null
-          });
-      }
-  };
+        await updateDoc(doc(db, 'students', alumno.id), { 
+            estado: 'inscrito', 
+            actividad: grupoFinal, 
+            validadoAdmin: true,
+            fechaAlta: hoy,      // ✅ Pone la fecha de hoy
+            fechaBaja: null      // 🧹 LIMPIEZA: Borra la fecha de baja si tenía una vieja
+        });
+    }
+};
+// ⚡ FUNCIÓN NUEVA: Pone fecha de hoy a los de Infantil que no la tengan
+const fijarAltaHoy = async (e, alumno) => {
+  e.stopPropagation(); // Para que no se abra la ficha al hacer clic
+  if (userRole !== 'admin') return;
+  
+  const hoy = new Date().toISOString().split('T')[0];
+  if (confirm(`📅 ¿Asignar fecha de HOY (${hoy}) como alta para ${alumno.nombre}?`)) {
+      await updateDoc(doc(db, 'students', alumno.id), { fechaAlta: hoy });
+  }
+};
+
+// ---------------------------------------------------------
+  // 📉 GESTIÓN DE BAJAS (LÓGICA CORREGIDA)
+  // ---------------------------------------------------------
+
+  // A) TRAMITAR: Calcula fecha y la deja en la lista (Estado GRIS)
+  const tramitarBaja = async (alumno) => {
+    if (userRole !== 'admin') return alert("⛔ Solo coordinadores.");
+    
+    // 1. Calcular fecha (Regla día 25)
+    const hoy = new Date();
+    const mesesASumar = hoy.getDate() > 25 ? 2 : 1;
+    const fechaObj = new Date(hoy.getFullYear(), hoy.getMonth() + mesesASumar, 1);
+    
+    const y = fechaObj.getFullYear();
+    const m = String(fechaObj.getMonth() + 1).padStart(2, '0');
+    const d = String(fechaObj.getDate()).padStart(2, '0');
+    const fechaCalculada = `${y}-${m}-${d}`;
+
+    // 2. Confirmar y Guardar (NO BORRAMOS, SOLO CAMBIAMOS ESTADO)
+    if (confirm(`📉 ¿Aceptar baja de ${alumno.nombre}?\n\n📅 Fecha efectiva: ${fechaCalculada}\n\n(Se quedará en la lista como "TRAMITADA" para que tengas constancia)`)) {
+        await updateDoc(doc(db, 'students', alumno.id), {
+            estado: 'baja_finalizada', // 👈 ESTO ES LO QUE LA MANTIENE VISIBLE
+            fechaBaja: fechaCalculada
+        });
+    }
+};
+
+// B) ARCHIVAR: Borrar definitivamente de la lista
+const archivarBaja = async (alumno) => {
+    if (userRole !== 'admin') return;
+    if (confirm(`🗑️ ¿Eliminar DEFINITIVAMENTE a ${alumno.nombre} de la lista?\n\nLa plaza quedará libre.`)) {
+        await updateDoc(doc(db, 'students', alumno.id), {
+            estado: 'sin_inscripcion', // Aquí desaparece de la lista
+            actividad: null, dias: null, horario: null, precio: null,
+            citaId: null, validadoAdmin: null, fechaSolicitudBaja: null
+        });
+    }
+};
 
   const borrarAlumno = async (e, id) => { 
       e.stopPropagation(); // Evita abrir ficha al borrar
@@ -630,7 +680,35 @@ const AdminDashboard = ({ userRole, logout, userEmail }) => {
   
   const agregarAviso = async (e) => { e.preventDefault(); if (!nuevoAviso) return; await addDoc(collection(db, 'avisos'), { texto: nuevoAviso, fecha: new Date().toISOString() }); setNuevoAviso(''); };
   const borrarAviso = async (id) => { if (confirm('¿Borrar aviso?')) await deleteDoc(doc(db, 'avisos', id)); };
-  const handleCrearStaff = async (e) => { e.preventDefault(); alert("Usa la consola de Firebase para crear usuarios."); };
+  // PEGA ESTO EN EL HUECO:
+  const handleCrearStaff = async (e) => { 
+    e.preventDefault(); 
+    
+    // 1. Comprobamos que eres admin
+    if (userRole !== 'admin') return alert("⛔ Solo coordinadores pueden crear usuarios.");
+    
+    setLoadingStaff(true); 
+    try { 
+        // 2. Crea el usuario (Email + Contraseña)
+        const credencial = await createUserWithEmailAndPassword(auth, newStaff.email, newStaff.password);
+        
+        // 3. Guarda el Rol (Profe/Admin) en la base de datos
+        await setDoc(doc(db, 'users', credencial.user.uid), {
+            email: newStaff.email,
+            role: newStaff.role,
+            createdAt: new Date().toISOString()
+        });
+
+        alert(`✅ Usuario ${newStaff.email} creado.\n⚠️ IMPORTANTE: Firebase ha iniciado sesión con el nuevo usuario automáticamente. Cierra sesión y vuelve a entrar como Admin.`);
+        setNewStaff({ email: '', password: '', role: 'profe' }); 
+
+    } catch (error) { 
+        console.error(error);
+        alert("❌ Error: " + error.message); 
+    } finally { 
+        setLoadingStaff(false); 
+    } 
+};
   const borrarMiembroEquipo = async (miembro) => { if (miembro.email === userEmail) return alert("No puedes borrarte a ti mismo"); if (confirm("¿Borrar usuario?")) await deleteDoc(doc(db, 'users', miembro.id)); };
   
   const descargarExcel = () => {
@@ -642,18 +720,43 @@ const AdminDashboard = ({ userRole, logout, userEmail }) => {
   // --- 4. LISTAS FILTRADAS ---
   const gruposUnicos = [...new Set(alumnos.map(a => a.actividad).filter(g => g))].sort();
   
-  const listadoGlobal = alumnos.filter(a => {
-      const coincideNombre = (a.nombre || '').toLowerCase().includes(busqueda.toLowerCase());
-      const coincideGrupo = filtroGrupo ? a.actividad === filtroGrupo : true;
-      const esRelevante = a.estado !== 'sin_inscripcion' || a.actividad; 
-      return coincideNombre && coincideGrupo && esRelevante;
-  });
+// --- 1. LISTADO GLOBAL (MODIFICADO PARA INFANTIL) ---
+const listadoGlobal = alumnos.filter(a => {
+  const coincideNombre = (a.nombre || '').toLowerCase().includes(busqueda.toLowerCase());
+  const coincideGrupo = filtroGrupo ? a.actividad === filtroGrupo : true;
+  
+  // DETECTAMOS SI ES INFANTIL (buscando la palabra en curso o actividad)
+  const esInfantil = (a.curso || '').toUpperCase().includes('INFANTIL') || (a.actividad || '').toUpperCase().includes('INFANTIL');
 
-  const listadoPruebas = alumnos.filter(a => {
-      if (a.estado === 'baja_pendiente' || a.esAntiguoAlumno) return false;
-      return a.estado === 'prueba_reservada' || (a.estado === 'inscrito' && a.citaNivel && !a.validadoAdmin);
-  });
-  const listadoBajas = alumnos.filter(a => a.estado === 'baja_pendiente');
+  // REGLA: Pasa si tiene el OK del admin... O SI ES INFANTIL (Pase VIP)
+  const debeAparecer = (a.validadoAdmin === true) || esInfantil;
+
+  // Importante: Que no sea una baja
+  const noEsBaja = a.estado !== 'baja_pendiente' && a.estado !== 'baja_finalizada';
+
+  return coincideNombre && coincideGrupo && debeAparecer && noEsBaja;
+});
+
+// --- 2. LISTADO PRUEBAS (MODIFICADO PARA QUE NO SALGA INFANTIL) ---
+const listadoPruebas = alumnos.filter(a => {
+  // Excluimos a los que se están dando de baja o son antiguos
+  if (a.estado === 'baja_pendiente' || a.estado === 'baja_finalizada' || a.esAntiguoAlumno) return false;
+  
+  // DETECTAMOS SI ES INFANTIL
+  const esInfantil = (a.curso || '').toUpperCase().includes('INFANTIL') || (a.actividad || '').toUpperCase().includes('INFANTIL');
+  
+  // SI ES INFANTIL, LO ECHAMOS DE AQUÍ (Ya sale en la Global, no hay que validarlo)
+  if (esInfantil) return false;
+
+  // Si tiene cita, sale.
+  if (a.estado === 'prueba_reservada') return true;
+
+  // Si está inscrito (Adulto/Primaria) y NO tiene el OK, sale para que lo valides.
+  return (a.estado === 'inscrito' && !a.validadoAdmin);
+});
+
+// 2. CORRECCIÓN BAJAS: Añadimos 'baja_finalizada' para que no desaparezcan
+const listadoBajas = alumnos.filter(a => a.estado === 'baja_pendiente' || a.estado === 'baja_finalizada');
 
   // --- 5. RENDERIZADO (HTML) ---
   return (
@@ -683,8 +786,8 @@ const AdminDashboard = ({ userRole, logout, userEmail }) => {
           })}
       </div>
 
-      {/* TAB: GLOBAL */}
-      {tab === 'global' && (
+     {/* TAB: GLOBAL (CORREGIDO: INFANTIL SALE DIRECTO SIN BOTONES) */}
+     {tab === 'global' && (
           <div className="bg-white rounded shadow overflow-hidden">
               <div className="p-4 border-b bg-gray-50 flex flex-col md:flex-row gap-4">
                   <input className="flex-1 border p-2 rounded" placeholder="🔍 Buscar..." value={busqueda} onChange={e => setBusqueda(e.target.value)} />
@@ -704,8 +807,11 @@ const AdminDashboard = ({ userRole, logout, userEmail }) => {
                           >
                               <td className="p-3">
                                 <span className="font-bold text-gray-900 block">{a.nombre}</span>
-                                {a.estado === 'baja_pendiente' && <span className="text-[10px] bg-red-100 text-red-600 px-1 rounded">BAJA</span>}
-                                {/* 👉 AQUÍ ESTÁ LA LETRA VISIBLE */}
+                                {a.estado === 'baja_pendiente' && <span className="text-[10px] bg-red-100 text-red-600 px-1 rounded">BAJA PENDIENTE</span>}
+                                
+                                {/* AQUI YA NO HAY BOTÓN DE INFANTIL */}
+
+                                {/* 👉 AQUÍ SIGUE ESTANDO LA LETRA VISIBLE */}
                                 <div className="text-blue-600 font-bold text-xs mt-1 bg-blue-50 w-fit px-2 py-0.5 rounded">
                                     {a.curso} - {a.letra}
                                 </div>
@@ -713,6 +819,9 @@ const AdminDashboard = ({ userRole, logout, userEmail }) => {
                               <td className="p-3">
                                 <div className="font-bold text-gray-800">{a.actividad || '-'}</div>
                                 {a.dias && <div className="text-[10px] text-gray-500 mt-1">📅 {a.dias} | ⏰ {a.horario}</div>}
+                                
+                                {/* Si tiene fecha de alta la mostramos (informativo), si no, no pasa nada */}
+                                {a.fechaAlta && <div className="text-[10px] text-green-600 font-bold mt-1">Alta: {a.fechaAlta}</div>}
                               </td>
                               <td className="p-3 text-right">{userRole === 'admin' && <button onClick={(e) => borrarAlumno(e, a.id)} className="text-red-400 hover:text-red-600 p-2 hover:bg-red-50 rounded-full">🗑️</button>}</td>
                           </tr>
@@ -746,19 +855,64 @@ const AdminDashboard = ({ userRole, logout, userEmail }) => {
           </div>
       )}
 
-      {/* TAB: BAJAS */}
-      {tab === 'bajas' && (
+     {/* TAB: BAJAS (AHORA SE PUEDE ABRIR LA FICHA) */}
+     {tab === 'bajas' && (
           <div className="bg-white rounded shadow overflow-hidden">
               <table className="w-full text-sm text-left">
-                  <thead className="bg-gray-100 uppercase text-xs"><tr><th className="p-3">Alumno</th><th className="p-3">Grupo</th><th className="p-3 text-right">Acción</th></tr></thead>
+                  <thead className="bg-gray-100 uppercase text-xs">
+                      <tr>
+                          <th className="p-3">Alumno</th>
+                          <th className="p-3">Estado</th>
+                          <th className="p-3">Fecha Baja</th>
+                          <th className="p-3 text-right">Acción</th>
+                      </tr>
+                  </thead>
                   <tbody>
                       {listadoBajas.map(a => (
-                          <tr key={a.id} className="hover:bg-red-50 border-b">
-                              <td className="p-3 font-bold">{a.nombre} <br/> <span className="text-xs font-normal text-gray-500">{a.curso}-{a.letra}</span></td>
-                              <td className="p-3 text-gray-600">{a.actividad}</td>
-                              <td className="p-3 text-right"><button onClick={() => finalizarBaja(a)} className="bg-red-100 text-red-700 px-3 py-1 rounded font-bold text-xs">Finalizar</button></td>
+                          <tr 
+                            key={a.id} 
+                            onClick={() => abrirFicha(a)} // 👈 ESTO ABRE LA FICHA
+                            className={`border-b cursor-pointer transition ${
+                                a.estado === 'baja_finalizada' 
+                                ? 'bg-gray-100 text-gray-500 hover:bg-gray-200' 
+                                : 'bg-red-50 hover:bg-red-100'
+                            }`}
+                          >
+                              <td className="p-3 font-bold">
+                                  {a.nombre}
+                                  <div className="text-xs font-normal opacity-75">{a.actividad}</div>
+                              </td>
+                              <td className="p-3">
+                                  {a.estado === 'baja_pendiente' 
+                                    ? <span className="text-red-600 font-bold text-xs animate-pulse">🔴 PENDIENTE</span>
+                                    : <span className="text-gray-600 font-bold text-xs border border-gray-300 px-1 rounded">⚫ TRAMITADA</span>
+                                  }
+                              </td>
+                              <td className="p-3 font-mono text-xs font-bold">
+                                  {a.fechaBaja || '-'}
+                              </td>
+                              <td className="p-3 text-right">
+                                  {a.estado === 'baja_pendiente' ? (
+                                      <button 
+                                          onClick={(e) => { e.stopPropagation(); tramitarBaja(a); }} // 👈 stopPropagation evita abrir ficha
+                                          className="bg-red-600 text-white px-3 py-1 rounded font-bold text-xs shadow hover:bg-red-700"
+                                      >
+                                          Tramitar Baja
+                                      </button>
+                                  ) : (
+                                      <button 
+                                          onClick={(e) => { e.stopPropagation(); archivarBaja(a); }} // 👈 stopPropagation evita abrir ficha
+                                          className="bg-white text-gray-600 px-3 py-1 rounded font-bold text-xs border border-gray-300 hover:bg-gray-200"
+                                      >
+                                          🗑️ Eliminar
+                                      </button>
+                                  )}
+                              </td>
                           </tr>
                       ))}
+                      {listadoBajas.length === 0 && (
+                          <tr><td colSpan="4" className="p-4 text-center text-gray-400">No hay bajas pendientes ni tramitadas.</td></tr>
+                      )}
                   </tbody>
               </table>
           </div>
@@ -777,7 +931,8 @@ const AdminDashboard = ({ userRole, logout, userEmail }) => {
       {alumnoSeleccionado && (
         <FichaAlumno 
             alumno={alumnoSeleccionado} 
-            cerrar={() => setAlumnoSeleccionado(null)} 
+            cerrar={() => setAlumnoSeleccionado(null)}
+            userRole={userRole}  // 👈 ¡IMPORTANTE! AÑADE ESTA LÍNEA
         />
       )}
     </div>
@@ -785,11 +940,29 @@ const AdminDashboard = ({ userRole, logout, userEmail }) => {
 };
 
 // ==========================================
-// 📄 COMPONENTE FICHA ALUMNO (MODAL)
+// 📄 COMPONENTE FICHA (CON FECHAS Y GUARDADO AUTOMÁTICO)
 // ==========================================
-function FichaAlumno({ alumno, cerrar }) {
+function FichaAlumno({ alumno, cerrar, userRole }) {
   if (!alumno) return null;
   const p = alumno.datosPadre || {}; 
+
+  // Función que guarda la fecha en Firebase al instante
+  const cambiarFecha = async (campo, e) => {
+      // 1. Si no eres admin, no dejamos guardar
+      if (userRole !== 'admin') return;
+      
+      const nuevaFecha = e.target.value;
+
+      try {
+          // Usamos las herramientas (db, updateDoc, doc) que importaste al principio del archivo
+          await updateDoc(doc(db, 'students', alumno.id), { 
+              [campo]: nuevaFecha 
+          });
+      } catch (error) {
+          console.error("Error al guardar fecha:", error);
+          alert("❌ Error: No se pudo guardar la fecha. Comprueba tu conexión.");
+      }
+  };
 
   return (
     <div className="fixed inset-0 bg-black/70 z-[60] flex justify-center items-center p-4 backdrop-blur-sm">
@@ -809,6 +982,49 @@ function FichaAlumno({ alumno, cerrar }) {
 
         {/* CONTENIDO */}
         <div className="p-6 space-y-6 text-gray-800">
+          
+          {/* --- AQUÍ ESTÁN LAS FECHAS DE ALTA Y BAJA --- */}
+          <div className="bg-gray-100 p-4 rounded border border-gray-300 grid grid-cols-2 gap-4 shadow-inner">
+              {/* ALTA */}
+              <div>
+                  <label className="block text-xs font-bold text-gray-500 uppercase mb-1">📅 Fecha de Alta</label>
+                  <input 
+                    type="date" 
+                    defaultValue={alumno.fechaAlta || ''}
+                    disabled={userRole !== 'admin'} // Bloqueado si no eres admin
+                    onChange={(e) => cambiarFecha('fechaAlta', e)}
+                    className={`w-full p-2 rounded border font-bold ${
+                        userRole === 'admin' 
+                        ? 'bg-white border-blue-400 cursor-pointer hover:bg-blue-50' 
+                        : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                    }`}
+                  />
+              </div>
+
+              {/* BAJA */}
+              <div>
+                  <label className="block text-xs font-bold text-gray-500 uppercase mb-1">🏁 Fecha de Baja</label>
+                  <input 
+                    type="date" 
+                    defaultValue={alumno.fechaBaja || ''}
+                    disabled={userRole !== 'admin'} // Bloqueado si no eres admin
+                    onChange={(e) => cambiarFecha('fechaBaja', e)}
+                    className={`w-full p-2 rounded border font-bold ${
+                        userRole === 'admin' 
+                        ? 'bg-white border-red-400 cursor-pointer hover:bg-red-50' 
+                        : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                    }`}
+                  />
+              </div>
+              
+              {userRole === 'admin' && (
+                  <p className="col-span-2 text-[10px] text-gray-400 text-center italic mt-1">
+                      * Al cambiar la fecha se guarda automáticamente.
+                  </p>
+              )}
+          </div>
+          {/* --------------------------------------------- */}
+
           <div className="bg-blue-50 p-4 rounded-lg border border-blue-100">
              <h3 className="text-xs font-bold text-blue-800 uppercase tracking-wider mb-1">Actividad Inscrita</h3>
              <p className="text-xl font-bold text-blue-900">{alumno.actividad || 'Pendiente de asignar'}</p>
@@ -816,7 +1032,7 @@ function FichaAlumno({ alumno, cerrar }) {
           </div>
 
           <div className="grid md:grid-cols-2 gap-4">
-            <div className="bg-gray-50 p-3 rounded border"><span className="text-xs text-gray-500 uppercase font-bold">Fecha Nacimiento</span><p className="font-medium">{alumno.fechaNacimiento || '-'}</p></div>
+            <div className="bg-gray-50 p-3 rounded border"><span className="text-xs text-gray-500 uppercase font-bold">Nacimiento</span><p className="font-medium">{alumno.fechaNacimiento || '-'}</p></div>
             <div className="bg-gray-50 p-3 rounded border"><span className="text-xs text-gray-500 uppercase font-bold">Estado</span><p className="font-medium">{alumno.esAntiguoAlumno ? '✅ Antiguo Alumno' : '🆕 Nuevo Alumno'}</p></div>
           </div>
 
@@ -938,26 +1154,43 @@ const Dashboard = ({ user, misHijos, logout, refresh }) => {
       {avisos.length > 0 && (<div className="mb-6 space-y-2">{avisos.map(aviso => (<div key={aviso.id} className="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded shadow-sm text-yellow-800 font-medium flex items-center gap-3"><span className="text-2xl">📢</span><span>{aviso.texto}</span></div>))}</div>)}
 
       <div className="grid gap-6 md:grid-cols-2 mb-8">
-        {misHijos.map((hijo) => {
-          const esPendiente = hijo.estado === 'inscrito' && !hijo.esAntiguoAlumno;
+      {misHijos.map((hijo) => {
+          // 1. LÓGICA DE ESTADO
+          const esInfantil = (hijo.curso || '').toUpperCase().includes('INFANTIL');
+          const estaAdmitido = hijo.validadoAdmin === true || esInfantil;
+          
+          // 👇 CAMBIO CLAVE: Consideramos "Libre" si no tiene inscripción O si ya terminó la baja
+          const estaLibre = hijo.estado === 'sin_inscripcion' || hijo.estado === 'baja_finalizada';
           
           let bordeColor = 'bg-gray-400';
           let estadoTexto = 'Sin Actividad';
           
+          // 2. CONFIGURAMOS COLORES Y TEXTOS
           if (hijo.estado === 'inscrito') {
-              bordeColor = esPendiente ? 'bg-yellow-400' : 'bg-green-500';
-              estadoTexto = esPendiente ? '⏳ Pendiente Validación' : '✅ Inscrito';
+              if (estaAdmitido) {
+                  bordeColor = 'bg-green-500';
+                  estadoTexto = '✅ Inscrito';
+              } else {
+                  bordeColor = 'bg-yellow-400';
+                  estadoTexto = '⏳ Pendiente Validación';
+              }
           } else if (hijo.estado === 'prueba_reservada') {
               bordeColor = 'bg-orange-500';
               estadoTexto = '⏳ Prueba Pendiente';
           } else if (hijo.estado === 'baja_pendiente') {
               bordeColor = 'bg-red-500';
               estadoTexto = '📉 Baja Solicitada';
+          } else if (hijo.estado === 'baja_finalizada') {
+              // 👇 CAMBIO VISUAL: Para que se vea gris oscuro si es una baja antigua
+              bordeColor = 'bg-gray-600';
+              estadoTexto = '⚫ Baja Finalizada';
           }
 
           return (
-            <div key={hijo.id} className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 relative overflow-hidden group">
+            <div key={hijo.id} className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 relative overflow-hidden group mb-4">
               <div className={`absolute top-0 left-0 w-1.5 h-full ${bordeColor}`}></div>
+              
+              {/* CABECERA */}
               <div className="flex justify-between items-start mb-2 pl-3">
                 <div className="flex-1">
                   <h3 className="font-bold text-xl text-gray-800 flex items-center gap-2">
@@ -968,16 +1201,30 @@ const Dashboard = ({ user, misHijos, logout, refresh }) => {
                 <div className="flex flex-col items-end gap-2"><span className="px-2 py-1 rounded text-[10px] font-extrabold uppercase bg-gray-100 text-gray-500">{estadoTexto}</span></div>
               </div>
 
-              {/* DATOS DE ACTIVIDAD (Solo si está inscrito o en baja pendiente) */}
+              {/* DATOS DE ACTIVIDAD (Inscrito o Baja Pendiente) */}
               {(hijo.estado === 'inscrito' || hijo.estado === 'baja_pendiente') && (
-                <div className={`ml-3 mt-4 p-3 rounded-lg border text-sm ${hijo.estado === 'baja_pendiente' ? 'bg-red-50 border-red-200' : 'bg-green-50 border-green-100'}`}>
-                  <p className="font-bold mb-1 text-gray-800">{hijo.actividad}</p>
-                  <div className="flex items-center gap-2 text-gray-600"><span>📅 {hijo.dias}</span><span>⏰ {hijo.horario}</span></div>
-                  {hijo.estado === 'baja_pendiente' && <p className="text-red-600 font-bold text-xs mt-2">⚠️ Baja efectiva a fin de mes</p>}
+                <div className={`ml-3 mt-4 p-3 rounded-lg border text-sm 
+                    ${hijo.estado === 'baja_pendiente' ? 'bg-red-50 border-red-200' : 
+                      !estaAdmitido ? 'bg-yellow-50 border-yellow-200' : 
+                      'bg-green-50 border-green-100'
+                    }`}>
+                  
+                  {!estaAdmitido && hijo.estado === 'inscrito' ? (
+                      <div className="text-center">
+                          <p className="font-bold text-yellow-800 mb-1">Solicitud Recibida</p>
+                          <p className="text-xs text-yellow-700">El coordinador está revisando tu nivel.</p>
+                      </div>
+                  ) : (
+                      <>
+                        <p className="font-bold mb-1 text-gray-800">{hijo.actividad}</p>
+                        <div className="flex items-center gap-2 text-gray-600"><span>📅 {hijo.dias}</span><span>⏰ {hijo.horario}</span></div>
+                        {hijo.estado === 'baja_pendiente' && <p className="text-red-600 font-bold text-xs mt-2">⚠️ Baja efectiva a fin de mes</p>}
+                      </>
+                  )}
                 </div>
               )}
               
-              {/* DATOS DE PRUEBA (Solo si está reservada) */}
+              {/* DATOS DE PRUEBA */}
               {hijo.estado === 'prueba_reservada' && (
                 <div className="ml-3 mt-4 bg-orange-50 p-3 rounded-lg border border-orange-200 text-sm">
                   <div className="mb-3 pb-3 border-b border-orange-200">
@@ -991,21 +1238,34 @@ const Dashboard = ({ user, misHijos, logout, refresh }) => {
                 </div>
               )}
 
+              {/* MENSAJE SI ESTÁ DADO DE BAJA FINALIZADA */}
+              {hijo.estado === 'baja_finalizada' && (
+                 <div className="text-center py-2 text-gray-400 text-xs italic mt-2 border-t border-gray-100 pt-3">
+                     Este alumno ha finalizado su actividad.
+                 </div>
+              )}
+
               <div className="mt-6 pt-4 ml-3 border-t border-gray-100 flex gap-2">
-                {/* 1. BOTÓN BAJA (Solo si está inscrito OFICIALMENTE) */}
+                {/* 1. BOTÓN BAJA (Solo si está inscrito) */}
                 {hijo.estado === 'inscrito' && (
                     <button onClick={() => gestionarBaja(hijo)} className="w-full bg-white text-red-600 px-3 py-2 rounded-lg text-sm font-bold border border-red-200 hover:bg-red-50">Tramitar Baja</button>
                 )}
                 
-                {/* 2. BOTONES PARA NO INSCRITOS */}
-                {hijo.estado === 'sin_inscripcion' && (
+                {/* 2. BOTONES PARA NO INSCRITOS O BAJAS FINALIZADAS (AQUÍ ESTÁ EL ARREGLO) */}
+                {estaLibre && (
                   <div className="flex w-full gap-2">
-                    <button onClick={() => { setAlumnoSeleccionado(hijo); setModoModal('inscripcion'); }} className="flex-1 bg-blue-600 text-white py-2 rounded-lg text-sm font-bold shadow-sm hover:bg-blue-700">Inscribir</button>
-                    <button onClick={() => gestionarBaja(hijo)} className="bg-white text-red-500 px-3 py-2 rounded-lg text-sm font-bold border border-red-200 hover:bg-red-50">🗑️</button>
+                    <button onClick={() => { setAlumnoSeleccionado(hijo); setModoModal('inscripcion'); }} className="flex-1 bg-blue-600 text-white py-2 rounded-lg text-sm font-bold shadow-sm hover:bg-blue-700">
+                        Inscribir
+                    </button>
+                    
+                    {/* Solo mostramos la papelera si nunca ha estado inscrito (sin_inscripcion) para proteger historial */}
+                    {hijo.estado === 'sin_inscripcion' && (
+                        <button onClick={() => gestionarBaja(hijo)} className="bg-white text-red-500 px-3 py-2 rounded-lg text-sm font-bold border border-red-200 hover:bg-red-50">🗑️</button>
+                    )}
                   </div>
                 )}
                 
-                {/* 3. BOTÓN CANCELAR SOLICITUD (Solo si está pendiente/prueba reservada) */}
+                {/* 3. BOTÓN CANCELAR SOLICITUD */}
                 {hijo.estado === 'prueba_reservada' && (
                     <button onClick={() => cancelarSolicitud(hijo)} className="w-full bg-white text-red-500 px-3 py-2 rounded-lg text-sm font-bold border border-red-200 hover:bg-red-50">
                         ✖️ Cancelar Solicitud
