@@ -261,10 +261,10 @@ const enviarEmailConfirmacion = async (email, alumno, cita) => {
           <div style="font-family: sans-serif; padding: 20px; color: #333; border: 1px solid #ddd; border-radius: 10px;">
             <h2 style="color: #2563EB;">🏊 Piscina San Buenaventura</h2>
             <p>Hola familia de <strong>${nombreAlumno}</strong>,</p>
-            <p>Os confirmamos que la prueba de nivel ha sido reservada correctamente.</p>
+            <p>Os confirmamos que la prueba de nivel ha sido reservada correctamente. Acuda con tiempo suficiente para estar listo a esa hora.</p>
             <div style="background: #EFF6FF; padding: 15px; border-radius: 10px; margin: 20px 0;">
               <p style="margin: 0;">📅 <strong>Fecha:</strong> ${cita}</p>
-              <p style="margin: 10px 0 0 0;">📍 <strong>Lugar:</strong> Piscina Colegio (Portón Azul).</p>
+              <p style="margin: 10px 0 0 0;">📍 <strong>Lugar:</strong> Piscina Colegio San Buenaventura (Acceso por portón azul).</p>
             </div>
             <p>🎒 <strong>Recordad traer:</strong> Bañador, gorro, toalla, gafas y chanclas.</p>
             <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;" />
@@ -1391,6 +1391,7 @@ const FormularioHijo = ({ close, user, refresh }) => {
     nombre: '', 
     // 👇 CAMBIO CLAVE: En vez de '3PRI', ponemos el código de 3 años (1INF o el que uses)
     // O mejor aún: ponemos LISTA_CURSOS[0].val para que coja siempre el primero de la lista.
+    telefono: '',
     curso: LISTA_CURSOS[0].val, 
     letra: 'A', 
     fechaNacimiento: '', 
@@ -1401,82 +1402,116 @@ const FormularioHijo = ({ close, user, refresh }) => {
 
   const save = async (e) => {
     e.preventDefault();
-    if (!data.aceptaNormas) return alert("⚠️ Debes aceptar las normas para crear el perfil.");
-    if (!data.nombre) return alert("⚠️ El nombre es obligatorio.");
 
-    await addDoc(collection(db, 'students'), {
-      parentId: user.uid,
-      ...data,
-      estado: 'sin_inscripcion'
-    });
-    refresh(user.uid);
-    close();
+    // 1. LIMPIEZA: Quitamos espacios delante y detrás del teléfono y nombre
+    const telefonoLimpio = data.telefono ? data.telefono.toString().trim() : "";
+    const nombreLimpio = data.nombre ? data.nombre.toString().trim() : "";
+
+    // 2. EL CANDADO (Validaciones)
+    if (!data.aceptaNormas) {
+        return alert("⚠️ Debes aceptar las normas para crear el perfil.");
+    }
+
+    if (!nombreLimpio) {
+        return alert("⚠️ El nombre es obligatorio.");
+    }
+
+    // Aquí está la clave: validamos sobre 'telefonoLimpio'
+    if (telefonoLimpio.length < 9) {
+      alert(`⚠️ El móvil es demasiado corto (${telefonoLimpio.length} dígitos). Revisa que no falten números.`);
+      return; // <--- FRENO DE MANO: Aquí se detiene y NO sigue bajando.
+    }
+
+    // 3. GUARDADO (Solo llega aquí si pasó los frenos de arriba)
+    try {
+      await addDoc(collection(db, 'students'), {
+        parentId: user.uid,
+        ...data,
+        nombre: nombreLimpio,     // Guardamos el nombre sin espacios extra
+        telefono: telefonoLimpio, // Guardamos el teléfono bueno
+        estado: 'sin_inscripcion'
+      });
+      refresh(user.uid);
+      close();
+    } catch (error) {
+      console.error(error);
+      alert("Error al guardar en la base de datos.");
+    }
   };
 
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
-      <div className="bg-white p-6 rounded-xl max-w-sm w-full shadow-2xl animate-fade-in-up">
-        <h3 className="text-xl font-bold mb-4 text-gray-800">Añadir Nuevo Alumno</h3>
-        <form onSubmit={save} className="space-y-4">
-          <input 
-            className="w-full border p-3 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" 
-            placeholder="Nombre y Apellidos" 
-            onChange={e => setData({ ...data, nombre: e.target.value })} 
-          />
-          
-          <div className="bg-blue-50 p-3 rounded-lg border border-blue-100">
-            <label className="text-sm font-bold text-blue-900 block mb-2">¿Fue alumno el año pasado?</label>
-            <div className="flex gap-4">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input type="radio" name="antiguo" onChange={() => setData({ ...data, esAntiguoAlumno: true })} /> 
-                Sí (No necesita prueba)
-              </label>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input type="radio" name="antiguo" defaultChecked onChange={() => setData({ ...data, esAntiguoAlumno: false })} /> 
-                No
-              </label>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-                <label className="text-xs text-gray-500 font-bold uppercase">Curso</label>
-                <select className="w-full border p-2 rounded-lg" onChange={e => setData({ ...data, curso: e.target.value })}>
-                {LISTA_CURSOS.map(c => <option key={c.val} value={c.val}>{c.label}</option>)}
-                </select>
-            </div>
-            <div>
-                <label className="text-xs text-gray-500 font-bold uppercase">Letra</label>
-                <select className="w-full border p-2 rounded-lg" onChange={e => setData({ ...data, letra: e.target.value })}>
-                <option>A</option><option>B</option><option>C</option>
-                </select>
-            </div>
-          </div>
-          
-          <div>
-            <label className="text-xs text-gray-500 font-bold uppercase">Fecha Nacimiento</label>
-            <input type="date" className="w-full border p-2 rounded-lg" onChange={e => setData({ ...data, fechaNacimiento: e.target.value })} />
-          </div>
-
-          <div className="text-xs space-y-2 pt-2 border-t">
-            <label className="flex gap-2 cursor-pointer items-start">
-                <input type="checkbox" className="mt-0.5" checked={data.aceptaNormas} onChange={e => setData({ ...data, aceptaNormas: e.target.checked })} /> 
-                Acepto normas de funcionamiento (OBLIGATORIO)
-            </label>
-            <label className="flex gap-2 cursor-pointer items-start">
-                <input type="checkbox" className="mt-0.5" checked={data.autorizaFotos} onChange={e => setData({ ...data, autorizaFotos: e.target.checked })} /> 
-                Autorizo fotos/vídeos
-            </label>
-          </div>
-
-          <div className="flex gap-2 pt-2">
-            <button type="button" onClick={close} className="flex-1 text-gray-500 font-bold py-2 hover:bg-gray-100 rounded-lg">Cancelar</button>
-            <button className="flex-1 bg-blue-600 text-white py-2 rounded-lg font-bold hover:bg-blue-700 shadow-md">Crear Perfil</button>
-          </div>
-        </form>
+return (
+<div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
+  <div className="bg-white p-6 rounded-xl max-w-sm w-full shadow-2xl animate-fade-in-up">
+    <h3 className="text-xl font-bold mb-4 text-gray-800">Añadir Nuevo Alumno</h3>
+    <form onSubmit={save} className="space-y-4">
+      <input 
+        className="w-full border p-3 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" 
+        placeholder="Nombre y Apellidos" 
+        onChange={e => setData({ ...data, nombre: e.target.value })} 
+      />
+      <div className="mt-4">
+        <label className="text-[10px] font-bold text-gray-400 uppercase">Móvil de Contacto (Obligatorio)</label>
+        <input 
+          type="tel"
+          className="w-full border p-3 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none font-bold text-blue-600" 
+          placeholder="Ej: 600000000" 
+          onChange={e => setData({ ...data, telefono: e.target.value })} 
+        />
       </div>
-    </div>
-  );
+      
+      <div className="bg-blue-50 p-3 rounded-lg border border-blue-100">
+        <label className="text-sm font-bold text-blue-900 block mb-2">¿Fue alumno el año pasado?</label>
+        <div className="flex gap-4">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input type="radio" name="antiguo" onChange={() => setData({ ...data, esAntiguoAlumno: true })} /> 
+            Sí (No necesita prueba)
+          </label>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input type="radio" name="antiguo" defaultChecked onChange={() => setData({ ...data, esAntiguoAlumno: false })} /> 
+            No
+          </label>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+            <label className="text-xs text-gray-500 font-bold uppercase">Curso</label>
+            <select className="w-full border p-2 rounded-lg" onChange={e => setData({ ...data, curso: e.target.value })}>
+            {LISTA_CURSOS.map(c => <option key={c.val} value={c.val}>{c.label}</option>)}
+            </select>
+        </div>
+        <div>
+            <label className="text-xs text-gray-500 font-bold uppercase">Letra</label>
+            <select className="w-full border p-2 rounded-lg" onChange={e => setData({ ...data, letra: e.target.value })}>
+            <option>A</option><option>B</option><option>C</option>
+            </select>
+        </div>
+      </div>
+      
+      <div>
+        <label className="text-xs text-gray-500 font-bold uppercase">Fecha Nacimiento</label>
+        <input type="date" className="w-full border p-2 rounded-lg" onChange={e => setData({ ...data, fechaNacimiento: e.target.value })} />
+      </div>
+
+      <div className="text-xs space-y-2 pt-2 border-t">
+        <label className="flex gap-2 cursor-pointer items-start">
+            <input type="checkbox" className="mt-0.5" checked={data.aceptaNormas} onChange={e => setData({ ...data, aceptaNormas: e.target.checked })} /> 
+            Acepto normas de funcionamiento (OBLIGATORIO)
+        </label>
+        <label className="flex gap-2 cursor-pointer items-start">
+            <input type="checkbox" className="mt-0.5" checked={data.autorizaFotos} onChange={e => setData({ ...data, autorizaFotos: e.target.checked })} /> 
+            Autorizo fotos/vídeos
+        </label>
+      </div>
+
+      <div className="flex gap-2 pt-2">
+        <button type="button" onClick={close} className="flex-1 text-gray-500 font-bold py-2 hover:bg-gray-100 rounded-lg">Cancelar</button>
+        <button className="flex-1 bg-blue-600 text-white py-2 rounded-lg font-bold hover:bg-blue-700 shadow-md">Crear Perfil</button>
+      </div>
+    </form>
+  </div>
+</div>
+);
 };
 
 // ==========================================
@@ -1658,6 +1693,161 @@ const PantallaInscripcion = ({ alumno, close, onRequirePrueba, user, refresh }) 
     </div>
   );
 };
+// ==========================================
+// 📅 PANTALLA PRUEBA DE NIVEL (SOLO LUNES + 5 MIN + EMAIL)
+// ==========================================
+const PantallaPruebaNivel = ({ alumno, close, onSuccess, user }) => {
+  const [fecha, setFecha] = useState('');
+  const [hora, setHora] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [ocupacion, setOcupacion] = useState({});
+
+  if (!alumno) return null;
+
+  // 1. FUNCIÓN PARA VALIDAR SI ES LUNES
+  const validarSiEsLunes = (e) => {
+    const seleccionada = new Date(e.target.value);
+    const diaSemana = seleccionada.getUTCDay(); // 1 es Lunes
+
+    if (diaSemana !== 1) {
+      alert("📅 Las pruebas de nivel solo se realizan los LUNES. Por favor, selecciona otro día.");
+      setFecha('');
+      return;
+    }
+    setFecha(e.target.value);
+    setHora(null);
+  };
+
+  // 2. GENERAR TURNOS DE 5 MINUTOS
+  const franjas = [];
+  for (let h = 16; h < 20; h++) {
+    for (let m = 0; m < 60; m += 5) {
+      franjas.push(`${h}:${m.toString().padStart(2, '0')}`);
+    }
+  }
+
+  // 3. CONSULTAR AFORO
+  useEffect(() => {
+    if (!fecha) return;
+    const consultarAforo = async () => {
+      try {
+        const q = query(collection(db, 'students'), 
+          where('estado', '==', 'prueba_reservada'),
+          where('citaFecha', '==', fecha)
+        );
+        const snap = await getDocs(q);
+        const counts = {};
+        snap.forEach(d => {
+          const h = d.data().citaHora;
+          if (h) counts[h] = (counts[h] || 0) + 1;
+        });
+        setOcupacion(counts);
+      } catch (e) { console.error("Error:", e); }
+    };
+    consultarAforo();
+  }, [fecha]);
+
+  const confirmarReserva = async () => {
+    if (!fecha || !hora) return alert("⚠️ Selecciona un lunes y una hora.");
+    setLoading(true);
+    try {
+      const citaTexto = `${fecha} a las ${hora}`;
+      
+      await updateDoc(doc(db, 'students', alumno.id), {
+        estado: 'prueba_reservada',
+        citaNivel: citaTexto,
+        citaFecha: fecha,
+        citaHora: hora,
+        fechaSolicitud: new Date().toISOString()
+      });
+
+      if (user?.email) {
+        // Llamamos a tu función personalizada del Portón Azul
+        await enviarEmailConfirmacion(user.email, alumno.nombre, citaTexto);
+      }
+
+      alert("✅ ¡Cita confirmada! Revisa tu email.");
+      if (onSuccess) onSuccess();
+      close();
+    } catch (e) {
+      alert("Error: " + e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-[999] backdrop-blur-sm">
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
+        
+        <div className="bg-blue-600 p-5 text-white flex justify-between items-center shadow-lg">
+          <div>
+            <h3 className="font-black text-xl flex items-center gap-2">🏊 Prueba de Nivel: LUNES</h3>
+            <p className="text-blue-100 text-xs font-medium uppercase">{alumno.nombre}</p>
+          </div>
+          <button onClick={close} className="text-2xl hover:bg-white/20 rounded-full px-2">✕</button>
+        </div>
+        
+        <div className="p-6 overflow-y-auto flex-1">
+          <div className="mb-6 bg-orange-50 border border-orange-200 p-4 rounded-2xl flex items-start gap-3">
+             <span className="text-xl">ℹ️</span>
+             <p className="text-orange-900 text-sm">Las pruebas son exclusivas para los <strong>lunes</strong> por la tarde. Recuerda traer el equipo de natación.</p>
+          </div>
+
+          <div className="space-y-6">
+            <div>
+              <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">1. Selecciona un Lunes</label>
+              <input 
+                type="date" 
+                className="w-full p-4 border-2 border-gray-100 rounded-2xl bg-gray-50 font-bold"
+                min={new Date().toISOString().split('T')[0]}
+                value={fecha}
+                onChange={validarSiEsLunes}
+              />
+            </div>
+
+            {fecha && (
+              <div className="animate-in fade-in slide-in-from-bottom-4">
+                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">2. Turnos de 5 min (Aforo máx. 2)</label>
+                <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
+                  {franjas.map(f => {
+                    const ocupados = ocupacion[f] || 0;
+                    const estaLleno = ocupados >= 2;
+                    return (
+                      <button
+                        key={f}
+                        disabled={estaLleno}
+                        onClick={() => setHora(f)}
+                        className={`p-2 rounded-xl text-xs font-bold border-2 transition-all ${
+                          estaLleno ? 'bg-gray-100 text-gray-300 border-gray-100' : 
+                          hora === f ? 'bg-blue-600 text-white border-blue-600 scale-105' : 
+                          'bg-white text-blue-600 border-blue-50 hover:border-blue-500'
+                        }`}
+                      >
+                        {f}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="p-4 bg-gray-50 border-t flex justify-end gap-4">
+          <button onClick={close} className="px-6 py-2 font-bold text-gray-400">Cancelar</button>
+          <button 
+            onClick={confirmarReserva}
+            disabled={loading || !hora}
+            className="px-10 py-3 bg-blue-600 text-white rounded-2xl font-black shadow-xl disabled:bg-gray-200"
+          >
+            {loading ? 'Confirmando...' : 'Confirmar Lunes'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 // ==========================================
 // 🔐 LOGIN Y REGISTRO (CON VALIDACIÓN ESTRICTA Y DOBLE CONTRASEÑA)
@@ -1825,21 +2015,47 @@ const Login = ({ setView }) => {
           <div className="bg-gray-50 p-5 rounded-xl border border-gray-200">
             <h3 className="font-bold text-gray-800 mb-3 border-b pb-1">🎓 Primer Alumno</h3>
             <div className="grid md:grid-cols-2 gap-4">
-              <input className="border p-2 rounded md:col-span-2 bg-white" placeholder="Nombre y Apellidos del Alumno *" onChange={e => setRegData({ ...regData, nombreAlumno: e.target.value })} />
-              <select className="border p-2 rounded bg-white" onChange={e => setRegData({ ...regData, curso: e.target.value })}>{LISTA_CURSOS.map(c => <option key={c.val} value={c.val}>{c.label}</option>)}</select>
-              <select className="border p-2 rounded bg-white" onChange={e => setRegData({ ...regData, letra: e.target.value })}><option>A</option><option>B</option><option>C</option></select>
-              <div className="md:col-span-2">
-                  <label className="text-xs text-gray-500 uppercase font-bold ml-1">Fecha de Nacimiento *</label>
-                  <input type="date" className="border p-2 rounded w-full bg-white" onChange={e => setRegData({ ...regData, fechaNacAlumno: e.target.value })} />
-              </div>
-              <textarea className="border p-2 rounded md:col-span-2 text-sm bg-white" placeholder="Alergias o problemas médicos (Opcional)" rows="2" onChange={e => setRegData({ ...regData, alergias: e.target.value })}></textarea>
-            </div>
-            <div className="mt-3 bg-white p-2 rounded border border-gray-200">
-               <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer select-none">
-                  <input type="checkbox" className="accent-blue-600 w-4 h-4" onChange={e => setRegData({ ...regData, esAntiguoAlumno: e.target.checked })} />
-                  ¿Asistió a las extraescolares de natación del colegio el año pasado?
-               </label>
-            </div>
+  {/* Nombre: Ocupa todo el ancho */}
+  <input 
+    className="border p-2 rounded md:col-span-2 bg-white" 
+    placeholder="Nombre y Apellidos del Alumno *" 
+    onChange={e => setRegData({ ...regData, nombreAlumno: e.target.value })} 
+  />
+
+  {/* Curso y Letra: Comparten fila */}
+  <select className="border p-2 rounded bg-white" onChange={e => setRegData({ ...regData, curso: e.target.value })}>
+    {LISTA_CURSOS.map(c => <option key={c.val} value={c.val}>{c.label}</option>)}
+  </select>
+  <select className="border p-2 rounded bg-white" onChange={e => setRegData({ ...regData, letra: e.target.value })}>
+    <option>A</option><option>B</option><option>C</option>
+  </select>
+
+  {/* Móvil: Ocupa todo el ancho (md:col-span-2) para que no empuje a la fecha */}
+  <input 
+    type="tel"
+    className="border p-2 rounded md:col-span-2 bg-white font-bold text-blue-600 outline-none" 
+    placeholder="Móvil de Contacto (Obligatorio) *" 
+    onChange={e => setRegData({ ...regData, telefono: e.target.value })} 
+  />
+
+  {/* Fecha de Nacimiento: También en su propia fila */}
+  <div className="md:col-span-2">
+    <label className="text-[10px] font-bold text-gray-400 uppercase block mb-1">Fecha de Nacimiento *</label>
+    <input 
+      type="date" 
+      className="w-full border p-2 rounded bg-white" 
+      onChange={e => setRegData({ ...regData, fechaNacAlumno: e.target.value })} 
+    />
+  </div>
+
+  {/* Alergias */}
+  <textarea 
+    className="border p-2 rounded md:col-span-2 text-sm bg-white" 
+    placeholder="Alergias o problemas médicos (Opcional)" 
+    rows="2" 
+    onChange={e => setRegData({ ...regData, alergias: e.target.value })}
+  ></textarea>
+</div>
           </div>
 
           {/* 4. CONTRASEÑA (SIEMPRE AL FINAL) */}
