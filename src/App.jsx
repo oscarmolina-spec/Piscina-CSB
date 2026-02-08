@@ -553,9 +553,10 @@ const LandingPage = ({ setView }) => {
 }
 
 // ==========================================
-// 🛡️ ADMIN DASHBOARD (SOLUCIÓN: PRUEBAS RESERVADAS + INSCRITOS SIN VALIDAR)
+// 🛡️ ADMIN DASHBOARD (PANEL DE GESTIÓN)
 // ==========================================
 const AdminDashboard = ({ userRole, logout, userEmail }) => {
+  // --- 1. ESTADOS ---
   const [alumnos, setAlumnos] = useState([]);
   const [padres, setPadres] = useState({});
   const [avisos, setAvisos] = useState([]);
@@ -569,10 +570,17 @@ const AdminDashboard = ({ userRole, logout, userEmail }) => {
   const [newStaff, setNewStaff] = useState({ email: '', password: '', role: 'profe' });
   const [loadingStaff, setLoadingStaff] = useState(false);
 
-  const soySuperAdmin = userEmail && userEmail.toLowerCase() === ADMIN_EMAIL.toLowerCase();
+  // ESTADO PARA LA FICHA (ALUMNO SELECCIONADO)
+  const [alumnoSeleccionado, setAlumnoSeleccionado] = useState(null);
 
+  const soySuperAdmin = userRole === 'admin'; 
+
+  // --- 2. CARGA DE DATOS (EFECTOS) ---
   useEffect(() => {
+    // Alumnos
     const unsubStudents = onSnapshot(query(collection(db, 'students')), (s) => setAlumnos(s.docs.map(d => ({ id: d.id, ...d.data() }))));
+    
+    // Usuarios (Padres y Profes)
     const unsubUsers = onSnapshot(query(collection(db, 'users')), (s) => {
         const p = {}, t = [];
         s.forEach(d => { 
@@ -582,64 +590,31 @@ const AdminDashboard = ({ userRole, logout, userEmail }) => {
         });
         setPadres(p); setEquipo(t);
     });
+
+    // Avisos
     const unsubAvisos = onSnapshot(query(collection(db, 'avisos'), orderBy('fecha', 'desc')), (s) => setAvisos(s.docs.map(d => ({ id: d.id, ...d.data() }))));
     return () => { unsubStudents(); unsubUsers(); unsubAvisos(); };
   }, []);
 
-  // ==========================================
-  // 🧠 CÁLCULOS DE LISTAS
-  // ==========================================
-
-  // 1. LISTA GLOBAL
-  const gruposUnicos = [...new Set(alumnos.map(a => a.actividad).filter(g => g))].sort();
-  const listadoGlobal = alumnos.filter(a => {
-      const coincideNombre = (a.nombre || '').toLowerCase().includes(busqueda.toLowerCase());
-      const coincideGrupo = filtroGrupo ? a.actividad === filtroGrupo : true;
-      const esRelevante = a.estado !== 'sin_inscripcion' || a.actividad; 
-      return coincideNombre && coincideGrupo && esRelevante;
-  });
-
-  // 2. LISTA PRUEBAS (CORRECCIÓN: DETECTA A LOS "FALSOS INSCRITOS")
-  const listadoPruebas = alumnos.filter(a => {
-      // Regla 0: Si es baja o antiguo alumno, fuera.
-      if (a.estado === 'baja_pendiente' || a.esAntiguoAlumno) return false;
-
-      // Regla 1: Estado explícito de prueba
-      const esPruebaOficial = a.estado === 'prueba_reservada';
-      
-      // Regla 2: El caso del error -> Está 'inscrito' Y tiene cita Y NO ha sido validado por el admin aun
-      // (Usamos la propiedad 'validadoAdmin' para marcar los que ya revisaste)
-      const esFalsoInscrito = a.estado === 'inscrito' && a.citaNivel && !a.validadoAdmin;
-
-      return esPruebaOficial || esFalsoInscrito;
-  });
-
-  // 3. LISTA BAJAS
-  const listadoBajas = alumnos.filter(a => a.estado === 'baja_pendiente');
-
-
-  // ==========================================
-  // ⚡ ACCIONES
-  // ==========================================
+  // --- 3. FUNCIONES ---
   
+  // Abrir Ficha: Combina datos del alumno con los del padre
+  const abrirFicha = (alumno) => {
+      const datosPadre = padres[alumno.parentId] || {};
+      setAlumnoSeleccionado({ ...alumno, datosPadre });
+  };
+
   const validarPlaza = async (alumno) => {
       if (userRole !== 'admin') return alert("⛔ Solo coordinadores.");
-      
-      const grupoFinal = alumno.actividad || "GRUPO A DETERMINAR (Editar)";
-      
-      if (confirm(`✅ ¿VALIDAR PLAZA?\n\nAlumno: ${alumno.nombre}\nGrupo: ${grupoFinal}\n\nSe confirmará su inscripción definitivamente.`)) {
-          await updateDoc(doc(db, 'students', alumno.id), { 
-              estado: 'inscrito',
-              actividad: grupoFinal,
-              validadoAdmin: true // <--- ESTA ES LA CLAVE: Lo marcamos para que salga de la lista de pruebas
-          });
-          alert("🎉 Alumno validado correctamente.");
+      const grupoFinal = alumno.actividad || "GRUPO A DETERMINAR";
+      if (confirm(`✅ ¿Validar plaza para ${alumno.nombre}?`)) {
+          await updateDoc(doc(db, 'students', alumno.id), { estado: 'inscrito', actividad: grupoFinal, validadoAdmin: true });
       }
   };
 
   const finalizarBaja = async (alumno) => {
       if (userRole !== 'admin') return alert("⛔ Solo coordinadores.");
-      if (confirm(`🗑️ ¿HACER EFECTIVA LA BAJA?\n\n${alumno.nombre} saldrá de los listados.`)) {
+      if (confirm(`🗑️ ¿Finalizar baja de ${alumno.nombre}?`)) {
           await updateDoc(doc(db, 'students', alumno.id), {
               estado: 'sin_inscripcion', actividad: null, dias: null, horario: null, precio: null,
               fechaInscripcion: null, citaId: null, citaNivel: null, fechaSolicitudBaja: null, validadoAdmin: null
@@ -647,26 +622,47 @@ const AdminDashboard = ({ userRole, logout, userEmail }) => {
       }
   };
 
-  // Auxiliares
-  const borrarAlumno = async (id) => { if (userRole !== 'admin') return; if(confirm('⚠️ ¿Borrar definitivamente?')) await deleteDoc(doc(db, 'students', id)); }
+  const borrarAlumno = async (e, id) => { 
+      e.stopPropagation(); // Evita abrir ficha al borrar
+      if (userRole !== 'admin') return; 
+      if(confirm('⚠️ ¿Borrar definitivamente?')) await deleteDoc(doc(db, 'students', id)); 
+  }
+  
   const agregarAviso = async (e) => { e.preventDefault(); if (!nuevoAviso) return; await addDoc(collection(db, 'avisos'), { texto: nuevoAviso, fecha: new Date().toISOString() }); setNuevoAviso(''); };
   const borrarAviso = async (id) => { if (confirm('¿Borrar aviso?')) await deleteDoc(doc(db, 'avisos', id)); };
-  const handleCrearStaff = async (e) => { e.preventDefault(); if (userRole !== 'admin') return; setLoadingStaff(true); try { await crearUsuarioSecundario(newStaff.email, newStaff.password, newStaff.role); alert("Creado"); setNewStaff({ email: '', password: '', role: 'profe' }); } catch (e) { alert(e.message); } finally { setLoadingStaff(false); } };
-  const borrarMiembroEquipo = async (miembro) => { if (miembro.email.toLowerCase() === ADMIN_EMAIL.toLowerCase()) return alert("No puedes borrar al Super Admin"); if (confirm("¿Borrar usuario?")) await deleteDoc(doc(db, 'users', miembro.id)); };
-  const getFinDeMes = (fecha) => { if(!fecha) return "-"; const d = new Date(fecha); return new Date(d.getFullYear(), d.getMonth() + 1, 0).toLocaleDateString(); };
+  const handleCrearStaff = async (e) => { e.preventDefault(); alert("Usa la consola de Firebase para crear usuarios."); };
+  const borrarMiembroEquipo = async (miembro) => { if (miembro.email === userEmail) return alert("No puedes borrarte a ti mismo"); if (confirm("¿Borrar usuario?")) await deleteDoc(doc(db, 'users', miembro.id)); };
   
   const descargarExcel = () => {
-    const cabecera = ['Alumno,Estado,Grupo,Pagador\n'];
-    const filas = listadoGlobal.map(a => `"${a.nombre}","${a.estado}","${a.actividad||'-'}","${padres[a.parentId]?.nombrePagador||''}"`);
+    const cabecera = ['Alumno,Curso,Letra,Actividad,Pagador,Telefono\n'];
+    const filas = listadoGlobal.map(a => `"${a.nombre}","${a.curso}","${a.letra}","${a.actividad||'-'}","${padres[a.parentId]?.nombrePagador||''}","${padres[a.parentId]?.telefono1||''}"`);
     const link = document.createElement("a"); link.href = "data:text/csv;charset=utf-8," + encodeURI(cabecera + filas.join("\n")); link.download = "listado.csv"; link.click();
   };
 
+  // --- 4. LISTAS FILTRADAS ---
+  const gruposUnicos = [...new Set(alumnos.map(a => a.actividad).filter(g => g))].sort();
+  
+  const listadoGlobal = alumnos.filter(a => {
+      const coincideNombre = (a.nombre || '').toLowerCase().includes(busqueda.toLowerCase());
+      const coincideGrupo = filtroGrupo ? a.actividad === filtroGrupo : true;
+      const esRelevante = a.estado !== 'sin_inscripcion' || a.actividad; 
+      return coincideNombre && coincideGrupo && esRelevante;
+  });
+
+  const listadoPruebas = alumnos.filter(a => {
+      if (a.estado === 'baja_pendiente' || a.esAntiguoAlumno) return false;
+      return a.estado === 'prueba_reservada' || (a.estado === 'inscrito' && a.citaNivel && !a.validadoAdmin);
+  });
+  const listadoBajas = alumnos.filter(a => a.estado === 'baja_pendiente');
+
+  // --- 5. RENDERIZADO (HTML) ---
   return (
-    <div className="min-h-screen bg-gray-100 p-6 font-sans">
+    <div className="min-h-screen bg-gray-100 p-6 font-sans relative">
+      {/* HEADER */}
       <div className="flex justify-between items-center mb-6 bg-white p-4 rounded shadow">
         <div>
             <h1 className="text-xl font-bold text-gray-800">Panel de Gestión</h1>
-            <p className="text-xs text-gray-500">{userEmail} ({soySuperAdmin ? 'Super Admin' : userRole})</p>
+            <p className="text-xs text-gray-500">{userEmail} ({userRole})</p>
         </div>
         <div className="flex gap-2">
             {userRole === 'admin' && <button onClick={descargarExcel} className="bg-green-600 text-white px-3 py-1 rounded text-sm font-bold">Excel</button>}
@@ -674,40 +670,51 @@ const AdminDashboard = ({ userRole, logout, userEmail }) => {
         </div>
       </div>
 
+      {/* PESTAÑAS */}
       <div className="flex gap-2 mb-6 border-b pb-2 overflow-x-auto">
-          {['global', 'pruebas', 'bajas', 'equipo', 'avisos', 'alta_manual'].map(t => {
-             if ((t === 'equipo' || t === 'alta_manual' || t === 'bajas') && userRole !== 'admin') return null;
-             
-             let count = 0;
-             if (t === 'pruebas') count = listadoPruebas.length;
-             if (t === 'bajas') count = listadoBajas.length;
-
+          {['global', 'pruebas', 'bajas', 'equipo', 'avisos'].map(t => {
+             if ((t === 'equipo' || t === 'bajas') && userRole !== 'admin') return null;
+             let count = 0; if (t === 'pruebas') count = listadoPruebas.length; if (t === 'bajas') count = listadoBajas.length;
              return (
                 <button key={t} onClick={() => setTab(t)} className={`px-4 py-2 font-bold uppercase text-sm whitespace-nowrap flex items-center gap-2 ${tab === t ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500'}`}>
-                    {t.replace('_', ' ')}
-                    {count > 0 && <span className="bg-red-500 text-white text-[10px] px-1.5 rounded-full">{count}</span>}
+                    {t.toUpperCase()} {count > 0 && <span className="bg-red-500 text-white text-[10px] px-1.5 rounded-full">{count}</span>}
                 </button>
              );
           })}
       </div>
 
+      {/* TAB: GLOBAL */}
       {tab === 'global' && (
           <div className="bg-white rounded shadow overflow-hidden">
               <div className="p-4 border-b bg-gray-50 flex flex-col md:flex-row gap-4">
                   <input className="flex-1 border p-2 rounded" placeholder="🔍 Buscar..." value={busqueda} onChange={e => setBusqueda(e.target.value)} />
-                  <select className="border p-2 rounded bg-white font-bold text-gray-700 md:w-1/3" value={filtroGrupo} onChange={e => setFiltroGrupo(e.target.value)}>
+                  <select className="border p-2 rounded md:w-1/3" value={filtroGrupo} onChange={e => setFiltroGrupo(e.target.value)}>
                       <option value="">📂 Todos los Grupos</option>
                       {gruposUnicos.map(g => (<option key={g} value={g}>{g}</option>))}
                   </select>
               </div>
               <table className="w-full text-sm text-left">
-                  <thead className="bg-gray-100 uppercase text-xs"><tr><th className="p-3">Alumno</th><th className="p-3">Grupo</th><th className="p-3 text-right">Acción</th></tr></thead>
+                  <thead className="bg-gray-100 uppercase text-xs"><tr><th className="p-3">Alumno</th><th className="p-3">Actividad</th><th className="p-3 text-right"></th></tr></thead>
                   <tbody>
                       {listadoGlobal.length > 0 ? listadoGlobal.map(a => (
-                          <tr key={a.id} className={`border-b ${a.estado === 'baja_pendiente' ? 'bg-red-50' : 'hover:bg-gray-50'}`}>
-                              <td className="p-3 font-bold">{a.nombre} {a.estado === 'baja_pendiente' && <span className="text-[10px] bg-red-100 text-red-600 px-1 rounded ml-1">BAJA</span>}<br/><span className="text-gray-400 text-xs">{a.curso}</span></td>
-                              <td className="p-3">{a.actividad || '-'}</td>
-                              <td className="p-3 text-right">{userRole === 'admin' && <button onClick={() => borrarAlumno(a.id)} className="text-red-400 hover:text-red-600 p-2">🗑️</button>}</td>
+                          <tr 
+                            key={a.id} 
+                            onClick={() => abrirFicha(a)} 
+                            className={`border-b cursor-pointer transition ${a.estado === 'baja_pendiente' ? 'bg-red-50' : 'hover:bg-blue-50'}`}
+                          >
+                              <td className="p-3">
+                                <span className="font-bold text-gray-900 block">{a.nombre}</span>
+                                {a.estado === 'baja_pendiente' && <span className="text-[10px] bg-red-100 text-red-600 px-1 rounded">BAJA</span>}
+                                {/* 👉 AQUÍ ESTÁ LA LETRA VISIBLE */}
+                                <div className="text-blue-600 font-bold text-xs mt-1 bg-blue-50 w-fit px-2 py-0.5 rounded">
+                                    {a.curso} - {a.letra}
+                                </div>
+                              </td>
+                              <td className="p-3">
+                                <div className="font-bold text-gray-800">{a.actividad || '-'}</div>
+                                {a.dias && <div className="text-[10px] text-gray-500 mt-1">📅 {a.dias} | ⏰ {a.horario}</div>}
+                              </td>
+                              <td className="p-3 text-right">{userRole === 'admin' && <button onClick={(e) => borrarAlumno(e, a.id)} className="text-red-400 hover:text-red-600 p-2 hover:bg-red-50 rounded-full">🗑️</button>}</td>
                           </tr>
                       )) : <tr><td colSpan="3" className="p-8 text-center text-gray-400">No hay resultados.</td></tr>}
                   </tbody>
@@ -715,67 +722,134 @@ const AdminDashboard = ({ userRole, logout, userEmail }) => {
           </div>
       )}
 
+      {/* TAB: PRUEBAS */}
       {tab === 'pruebas' && (
           <div className="bg-white rounded shadow overflow-hidden">
-              <div className="p-3 bg-blue-50 text-blue-800 text-xs font-bold border-b">
-                  ℹ️ Validar Plazas: Alumnos con cita de nivel o pendientes de confirmación.
-              </div>
+              <div className="p-3 bg-blue-50 text-blue-800 text-xs font-bold border-b">ℹ️ Validar Plazas</div>
               <table className="w-full text-sm text-left">
-                  <thead className="bg-gray-100 uppercase text-xs"><tr><th className="p-3">Cita</th><th className="p-3">Alumno</th><th className="p-3">Solicita</th><th className="p-3 text-right">Validar</th></tr></thead>
+                  <thead className="bg-gray-100 uppercase text-xs"><tr><th className="p-3">Cita</th><th className="p-3">Alumno</th><th className="p-3">Solicita</th><th className="p-3 text-right">Acción</th></tr></thead>
                   <tbody>
-                      {listadoPruebas.length > 0 ? listadoPruebas.map(a => (
-                          <tr key={a.id} className="hover:bg-orange-50">
+                      {listadoPruebas.map(a => (
+                          <tr key={a.id} onClick={() => abrirFicha(a)} className="hover:bg-orange-50 cursor-pointer border-b">
                               <td className="p-3 text-blue-600 font-bold">{a.citaNivel || 'Sin hora'}</td>
                               <td className="p-3 font-bold">
                                   {a.nombre}
-                                  {/* Debug para que veas por qué salen */}
-                                  <div className="text-[10px] text-gray-400 font-normal">
-                                      {a.estado === 'inscrito' ? 'Pre-inscrito (Falta Validar)' : 'Reserva Prueba'}
-                                  </div>
+                                  <div className="text-[10px] text-gray-400 font-normal">{a.estado === 'inscrito' ? 'Pre-inscrito' : 'Reserva'}</div>
+                                  <span className="text-blue-600 text-xs font-bold">{a.curso} - {a.letra}</span>
                               </td>
                               <td className="p-3"><span className="bg-orange-100 text-orange-800 px-2 py-1 rounded text-xs font-bold">{a.actividad || 'Sin elegir'}</span></td>
-                              <td className="p-3 text-right"><button onClick={() => validarPlaza(a)} className="bg-green-500 text-white px-3 py-1 rounded font-bold text-xs shadow hover:bg-green-600">✅ Aceptar</button></td>
+                              <td className="p-3 text-right"><button onClick={(e) => { e.stopPropagation(); validarPlaza(a); }} className="bg-green-500 text-white px-3 py-1 rounded font-bold text-xs shadow hover:bg-green-600">✅ OK</button></td>
                           </tr>
-                      )) : <tr><td colSpan="4" className="p-6 text-center text-gray-400">Todo validado.</td></tr>}
+                      ))}
                   </tbody>
               </table>
           </div>
       )}
 
+      {/* TAB: BAJAS */}
       {tab === 'bajas' && (
           <div className="bg-white rounded shadow overflow-hidden">
-              <div className="p-3 bg-red-50 text-red-800 text-xs font-bold border-b">ℹ️ Bajas solicitadas (Pendientes de finalizar).</div>
               <table className="w-full text-sm text-left">
-                  <thead className="bg-gray-100 uppercase text-xs"><tr><th className="p-3">Alumno</th><th className="p-3">Grupo</th><th className="p-3">Solicitada</th><th className="p-3 text-red-600">Efectiva</th><th className="p-3 text-right">Acción</th></tr></thead>
+                  <thead className="bg-gray-100 uppercase text-xs"><tr><th className="p-3">Alumno</th><th className="p-3">Grupo</th><th className="p-3 text-right">Acción</th></tr></thead>
                   <tbody>
-                      {listadoBajas.length > 0 ? listadoBajas.map(a => (
-                          <tr key={a.id} className="hover:bg-red-50">
-                              <td className="p-3 font-bold">{a.nombre}</td>
+                      {listadoBajas.map(a => (
+                          <tr key={a.id} className="hover:bg-red-50 border-b">
+                              <td className="p-3 font-bold">{a.nombre} <br/> <span className="text-xs font-normal text-gray-500">{a.curso}-{a.letra}</span></td>
                               <td className="p-3 text-gray-600">{a.actividad}</td>
-                              <td className="p-3">{a.fechaSolicitudBaja ? new Date(a.fechaSolicitudBaja).toLocaleDateString() : '-'}</td>
-                              <td className="p-3 font-bold text-red-700">{getFinDeMes(a.fechaSolicitudBaja)}</td>
-                              <td className="p-3 text-right"><button onClick={() => finalizarBaja(a)} className="bg-red-100 text-red-700 border border-red-300 px-3 py-1 rounded font-bold text-xs hover:bg-red-600 hover:text-white">🗑️ Finalizar</button></td>
+                              <td className="p-3 text-right"><button onClick={() => finalizarBaja(a)} className="bg-red-100 text-red-700 px-3 py-1 rounded font-bold text-xs">Finalizar</button></td>
                           </tr>
-                      )) : <tr><td colSpan="5" className="p-6 text-center text-gray-400">No hay bajas pendientes.</td></tr>}
+                      ))}
                   </tbody>
               </table>
           </div>
       )}
 
+      {/* TABS EXTRA */}
       {tab === 'equipo' && userRole === 'admin' && (
           <div className="grid md:grid-cols-2 gap-4">
-              <div className="bg-white p-4 rounded shadow"><h3 className="font-bold mb-2">Crear Usuario</h3><form onSubmit={handleCrearStaff} className="space-y-2"><input className="border p-2 w-full rounded" placeholder="Email" value={newStaff.email} onChange={e => setNewStaff({...newStaff, email: e.target.value})} /><input className="border p-2 w-full rounded" placeholder="Contraseña" type="password" value={newStaff.password} onChange={e => setNewStaff({...newStaff, password: e.target.value})} /><select className="border p-2 w-full rounded" value={newStaff.role} onChange={e => setNewStaff({...newStaff, role: e.target.value})}><option value="profe">Profesor</option><option value="admin">Coordinador</option></select><button disabled={loadingStaff} className="bg-purple-600 text-white w-full py-2 rounded font-bold">Crear</button></form></div>
-              <div className="bg-white p-4 rounded shadow"><h3 className="font-bold mb-2">Lista Equipo</h3>{equipo.map(u => (<div key={u.id} className="flex justify-between items-center border-b py-2"><span>{u.email} <small className="text-gray-500">({u.role})</small></span><button onClick={() => borrarMiembroEquipo(u)} className="text-red-500">🗑️</button></div>))}</div>
+              <div className="bg-white p-4 rounded shadow"><h3 className="font-bold mb-2">Crear Usuario</h3><p className="text-sm text-gray-500">Para añadir coordinadores o profesores, usa la consola de Firebase Authentication.</p></div>
+              <div className="bg-white p-4 rounded shadow"><h3 className="font-bold mb-2">Equipo Actual</h3>{equipo.map(u => (<div key={u.id} className="flex justify-between items-center border-b py-2"><span>{u.email} <small className="text-gray-500">({u.role})</small></span><button onClick={() => borrarMiembroEquipo(u)} className="text-red-500">🗑️</button></div>))}</div>
           </div>
       )}
+      {tab === 'avisos' && (<div className="p-4 bg-white rounded shadow"><form onSubmit={agregarAviso} className="flex gap-2 mb-4"><input className="border p-2 flex-1 rounded" value={nuevoAviso} onChange={e => setNuevoAviso(e.target.value)} placeholder="Escribe un aviso..." /><button className="bg-blue-600 text-white px-4 rounded font-bold">Publicar</button></form>{avisos.map(a => (<div key={a.id} className="bg-yellow-50 p-2 mb-2 border border-yellow-200 flex justify-between rounded"><span>{a.texto}</span>{userRole === 'admin' && <button onClick={() => borrarAviso(a.id)} className="text-red-500 font-bold ml-2">x</button>}</div>))}</div>)}
 
-      {tab === 'avisos' && (<div className="grid md:grid-cols-2 gap-6"><div className="bg-white p-4 rounded shadow"><h3 className="font-bold mb-2">Nuevo Aviso</h3><form onSubmit={agregarAviso}><textarea className="w-full border p-2 rounded mb-2" rows="3" value={nuevoAviso} onChange={e => setNuevoAviso(e.target.value)} /><button className="bg-blue-600 text-white px-4 py-2 rounded font-bold w-full">Publicar</button></form></div><div className="space-y-2">{avisos.map(a => (<div key={a.id} className="bg-yellow-50 p-3 rounded border border-yellow-200 flex justify-between"><span>{a.texto}</span>{userRole === 'admin' && <button onClick={() => borrarAviso(a.id)} className="text-red-500">🗑️</button>}</div>))}</div></div>)}
-      {tab === 'alta_manual' && (<div className="bg-white p-8 rounded shadow text-center"><h2 className="text-xl font-bold mb-4">Alta Manual</h2><button className="bg-blue-600 text-white px-6 py-3 rounded font-bold" onClick={() => window.open(window.location.href, '_blank')}>Abrir Formulario ↗</button></div>)}
+      {/* COMPONENTE VISUAL: LA FICHA QUE SE ABRE */}
+      {alumnoSeleccionado && (
+        <FichaAlumno 
+            alumno={alumnoSeleccionado} 
+            cerrar={() => setAlumnoSeleccionado(null)} 
+        />
+      )}
     </div>
   );
 };
+
 // ==========================================
-// 👨‍👩‍👧‍👦 DASHBOARD FAMILIAS (CON GESTIÓN DE BAJAS DIFERIDA)
+// 📄 COMPONENTE FICHA ALUMNO (MODAL)
+// ==========================================
+function FichaAlumno({ alumno, cerrar }) {
+  if (!alumno) return null;
+  const p = alumno.datosPadre || {}; 
+
+  return (
+    <div className="fixed inset-0 bg-black/70 z-[60] flex justify-center items-center p-4 backdrop-blur-sm">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto border border-gray-200">
+        
+        {/* CABECERA */}
+        <div className="bg-blue-900 p-5 text-white flex justify-between items-start sticky top-0 z-10">
+          <div>
+            <h2 className="text-2xl font-bold">{alumno.nombre}</h2>
+            <div className="mt-2 flex items-center gap-3">
+              <span className="bg-blue-700 px-3 py-1 rounded text-sm font-bold">{alumno.curso}</span>
+              <span className="bg-yellow-400 text-yellow-900 px-3 py-1 rounded text-sm font-bold shadow-sm">Letra: {alumno.letra || '?'}</span>
+            </div>
+          </div>
+          <button onClick={cerrar} className="bg-white/10 hover:bg-white/20 rounded-full p-2 text-white transition">✕</button>
+        </div>
+
+        {/* CONTENIDO */}
+        <div className="p-6 space-y-6 text-gray-800">
+          <div className="bg-blue-50 p-4 rounded-lg border border-blue-100">
+             <h3 className="text-xs font-bold text-blue-800 uppercase tracking-wider mb-1">Actividad Inscrita</h3>
+             <p className="text-xl font-bold text-blue-900">{alumno.actividad || 'Pendiente de asignar'}</p>
+             {alumno.dias && <p className="text-sm text-blue-700 mt-1 font-medium">📅 {alumno.dias} — ⏰ {alumno.horario}</p>}
+          </div>
+
+          <div className="grid md:grid-cols-2 gap-4">
+            <div className="bg-gray-50 p-3 rounded border"><span className="text-xs text-gray-500 uppercase font-bold">Fecha Nacimiento</span><p className="font-medium">{alumno.fechaNacimiento || '-'}</p></div>
+            <div className="bg-gray-50 p-3 rounded border"><span className="text-xs text-gray-500 uppercase font-bold">Estado</span><p className="font-medium">{alumno.esAntiguoAlumno ? '✅ Antiguo Alumno' : '🆕 Nuevo Alumno'}</p></div>
+          </div>
+
+          <div className="border-t pt-4">
+            <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">💳 Datos del Pagador / Tutor</h3>
+            <div className="grid md:grid-cols-2 gap-y-4 gap-x-8 text-sm">
+              <div><span className="block text-gray-500 text-xs font-bold uppercase">Nombre Titular</span><span className="font-medium text-lg">{alumno.nombrePagador || p.nombrePagador || '-'}</span></div>
+              <div><span className="block text-gray-500 text-xs font-bold uppercase">DNI</span><span className="font-medium">{alumno.dniPagador || p.dniPagador || '-'}</span></div>
+              <div><span className="block text-gray-500 text-xs font-bold uppercase">Teléfono</span><span className="font-medium text-lg">{alumno.telefono1 || p.telefono1 || '-'}</span></div>
+              <div><span className="block text-gray-500 text-xs font-bold uppercase">Email</span><span className="font-medium">{alumno.emailContacto || p.email || '-'}</span></div>
+              <div className="md:col-span-2 bg-gray-100 p-3 rounded font-mono text-gray-700 border"><span className="block text-gray-400 text-[10px] font-bold uppercase mb-1">IBAN</span>{alumno.iban || p.iban || 'No indicado'}</div>
+            </div>
+          </div>
+
+          {(alumno.alergias || alumno.observaciones) && (
+            <div className="grid gap-3 pt-2">
+               {alumno.alergias && <div className="bg-red-50 border-l-4 border-red-500 p-3"><span className="font-bold text-red-700 block text-xs uppercase">⚠️ Alergias / Médico</span><p className="text-red-900 text-sm font-medium">{alumno.alergias}</p></div>}
+               {alumno.observaciones && <div className="bg-yellow-50 border-l-4 border-yellow-400 p-3"><span className="font-bold text-yellow-800 block text-xs uppercase">📝 Observaciones</span><p className="text-yellow-900 text-sm">{alumno.observaciones}</p></div>}
+            </div>
+          )}
+        </div>
+
+        {/* PIE */}
+        <div className="p-4 bg-gray-50 border-t text-right sticky bottom-0 rounded-b-xl">
+          <button onClick={cerrar} className="px-6 py-2 bg-gray-900 text-white rounded hover:bg-black transition font-bold shadow-lg">Cerrar</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ==========================================
+// 👨‍👩‍👧‍👦 DASHBOARD FAMILIAS (VERSIÓN FINAL ARREGLADA)
 // ==========================================
 const Dashboard = ({ user, misHijos, logout, refresh }) => {
   const [showForm, setShowForm] = useState(false);
@@ -798,8 +872,33 @@ const Dashboard = ({ user, misHijos, logout, refresh }) => {
       refresh(user.uid);
   };
 
+  // 👇 1. FUNCIÓN NUEVA: CANCELAR SOLICITUD (Borrado rápido)
+  const cancelarSolicitud = async (hijo) => {
+    if (!window.confirm(`⚠️ ¿Cancelar la solicitud de ${hijo.nombre}?\n\nAl no estar inscrito todavía, se borrará la reserva inmediatamente y podrás empezar de cero.`)) return;
+
+    try {
+        await updateDoc(doc(db, 'students', hijo.id), {
+            estado: 'sin_inscripcion',
+            actividad: null,
+            dias: null,
+            horario: null,
+            precio: null,
+            citaId: null,
+            citaNivel: null,
+            fechaInscripcion: null,
+            aceptaNormas: false,
+            autorizaFotos: false
+        });
+        refresh(user.uid);
+        alert('✅ Solicitud cancelada correctamente.');
+    } catch (e) {
+        alert('Error al cancelar: ' + e.message);
+    }
+  };
+
+  // 👇 2. FUNCIÓN DE SIEMPRE: GESTIONAR BAJA (Trámite administrativo)
   const gestionarBaja = async (hijo) => {
-    // 1. Si no tiene actividad, borramos el perfil directamente
+    // Si por error llama a esto un 'sin_inscripcion', lo borramos directo
     if (hijo.estado === 'sin_inscripcion') {
         if (window.confirm(`🗑️ ¿Eliminar perfil de ${hijo.nombre}?`)) {
             await deleteDoc(doc(db, 'students', hijo.id));
@@ -810,15 +909,15 @@ const Dashboard = ({ user, misHijos, logout, refresh }) => {
 
     const diaActual = new Date().getDate();
 
-    // 2. Bloqueo después del día 25
+    // Bloqueo después del día 25
     if (diaActual > 25) {
         return alert('⛔ PLAZO CERRADO.\n\nLas bajas para el mes siguiente deben tramitarse antes del día 25.\n\nContacta con secretaría.');
     }
 
-    // 3. Tramitación de Baja (NO BORRA, SOLO MARCA)
+    // Tramitación de Baja
     if (window.confirm(`⚠️ ¿Solicitar BAJA de ${hijo.nombre}?\n\nℹ️ AVISO: Al ser día ${diaActual}, se cobrará el mes en curso completo. La baja será efectiva el último día de este mes.`)) {
       await updateDoc(doc(db, 'students', hijo.id), {
-        estado: 'baja_pendiente', // Nuevo estado intermedio
+        estado: 'baja_pendiente',
         fechaSolicitudBaja: new Date().toISOString()
       });
       refresh(user.uid);
@@ -869,7 +968,7 @@ const Dashboard = ({ user, misHijos, logout, refresh }) => {
                 <div className="flex flex-col items-end gap-2"><span className="px-2 py-1 rounded text-[10px] font-extrabold uppercase bg-gray-100 text-gray-500">{estadoTexto}</span></div>
               </div>
 
-              {/* SI ESTÁ INSCRITO O BAJA PENDIENTE (Muestra datos porque aún asiste) */}
+              {/* DATOS DE ACTIVIDAD (Solo si está inscrito o en baja pendiente) */}
               {(hijo.estado === 'inscrito' || hijo.estado === 'baja_pendiente') && (
                 <div className={`ml-3 mt-4 p-3 rounded-lg border text-sm ${hijo.estado === 'baja_pendiente' ? 'bg-red-50 border-red-200' : 'bg-green-50 border-green-100'}`}>
                   <p className="font-bold mb-1 text-gray-800">{hijo.actividad}</p>
@@ -878,7 +977,7 @@ const Dashboard = ({ user, misHijos, logout, refresh }) => {
                 </div>
               )}
               
-              {/* SI ESTÁ EN PRUEBA */}
+              {/* DATOS DE PRUEBA (Solo si está reservada) */}
               {hijo.estado === 'prueba_reservada' && (
                 <div className="ml-3 mt-4 bg-orange-50 p-3 rounded-lg border border-orange-200 text-sm">
                   <div className="mb-3 pb-3 border-b border-orange-200">
@@ -893,11 +992,12 @@ const Dashboard = ({ user, misHijos, logout, refresh }) => {
               )}
 
               <div className="mt-6 pt-4 ml-3 border-t border-gray-100 flex gap-2">
-                {/* BOTÓN BAJA (Solo si está inscrito y no ha pedido ya la baja) */}
+                {/* 1. BOTÓN BAJA (Solo si está inscrito OFICIALMENTE) */}
                 {hijo.estado === 'inscrito' && (
                     <button onClick={() => gestionarBaja(hijo)} className="w-full bg-white text-red-600 px-3 py-2 rounded-lg text-sm font-bold border border-red-200 hover:bg-red-50">Tramitar Baja</button>
                 )}
                 
+                {/* 2. BOTONES PARA NO INSCRITOS */}
                 {hijo.estado === 'sin_inscripcion' && (
                   <div className="flex w-full gap-2">
                     <button onClick={() => { setAlumnoSeleccionado(hijo); setModoModal('inscripcion'); }} className="flex-1 bg-blue-600 text-white py-2 rounded-lg text-sm font-bold shadow-sm hover:bg-blue-700">Inscribir</button>
@@ -905,7 +1005,12 @@ const Dashboard = ({ user, misHijos, logout, refresh }) => {
                   </div>
                 )}
                 
-                {hijo.estado === 'prueba_reservada' && (<button onClick={() => gestionarBaja(hijo)} className="w-full bg-white text-red-500 px-3 py-2 rounded-lg text-sm font-bold border border-red-200 hover:bg-red-50">Cancelar Solicitud</button>)}
+                {/* 3. BOTÓN CANCELAR SOLICITUD (Solo si está pendiente/prueba reservada) */}
+                {hijo.estado === 'prueba_reservada' && (
+                    <button onClick={() => cancelarSolicitud(hijo)} className="w-full bg-white text-red-500 px-3 py-2 rounded-lg text-sm font-bold border border-red-200 hover:bg-red-50">
+                        ✖️ Cancelar Solicitud
+                    </button>
+                )}
               </div>
             </div>
           );
@@ -914,6 +1019,7 @@ const Dashboard = ({ user, misHijos, logout, refresh }) => {
       
       <button onClick={() => setShowForm(true)} className="w-full py-5 border-2 border-dashed border-blue-200 text-blue-400 rounded-xl font-bold hover:bg-blue-50 transition flex items-center justify-center gap-2 mb-10"><span className="text-2xl">+</span> Añadir Otro Alumno</button>
       
+      {/* MODALES Y FORMULARIOS */}
       {showForm && (<FormularioHijo close={() => setShowForm(false)} user={user} refresh={refresh} />)}
       {alumnoEditar && (<FormularioEdicionHijo alumno={alumnoEditar} close={() => setAlumnoEditar(null)} refresh={refresh} />)}
       {modoModal === 'prueba' && alumnoEnVivo && (<PantallaPruebaNivel alumno={alumnoEnVivo} close={() => setModoModal(null)} onSuccess={alTerminarPrueba} user={user} refresh={refresh} />)}
@@ -958,11 +1064,15 @@ const FormularioEdicionHijo = ({ alumno, close, refresh }) => {
             <input type="date" className="w-full border border-gray-300 p-2 rounded focus:ring-2 focus:ring-blue-500 outline-none" value={data.fechaNacimiento} onChange={(e) => setData({ ...data, fechaNacimiento: e.target.value })} />
           </div>
           <div className="grid grid-cols-2 gap-2">
-            <div>
-              <label className="text-xs font-bold text-gray-500 uppercase">Curso</label>
-              <select className="w-full border border-gray-300 p-2 rounded focus:ring-2 focus:ring-blue-500 outline-none" value={data.curso} onChange={(e) => setData({ ...data, curso: e.target.value })}>
-                {LISTA_CURSOS.map((c) => (<option key={c.val} value={c.val}>{c.label}</option>))}
-              </select>
+          <div>
+                <label className="text-xs text-gray-500 font-bold uppercase">Curso</label>
+                <select 
+                    value={data.curso} // 👈 AÑADE ESTO SI NO LO TIENES
+                    className="w-full border p-2 rounded-lg" 
+                    onChange={e => setData({ ...data, curso: e.target.value })}
+                >
+                {LISTA_CURSOS.map(c => <option key={c.val} value={c.val}>{c.label}</option>)}
+                </select>
             </div>
             <div>
               <label className="text-xs font-bold text-gray-500 uppercase">Letra</label>
@@ -987,7 +1097,9 @@ const FormularioEdicionHijo = ({ alumno, close, refresh }) => {
 const FormularioHijo = ({ close, user, refresh }) => {
   const [data, setData] = useState({ 
     nombre: '', 
-    curso: '3PRI', 
+    // 👇 CAMBIO CLAVE: En vez de '3PRI', ponemos el código de 3 años (1INF o el que uses)
+    // O mejor aún: ponemos LISTA_CURSOS[0].val para que coja siempre el primero de la lista.
+    curso: LISTA_CURSOS[0].val, 
     letra: 'A', 
     fechaNacimiento: '', 
     esAntiguoAlumno: false, 
@@ -1188,7 +1300,7 @@ const PantallaPruebaNivel = ({ alumno, close, onSuccess, user, refresh }) => {
 };
 
 // ==========================================
-// 📝 MODAL INSCRIPCIÓN (LÓGICA PRE-RESERVA)
+// 📝 MODAL INSCRIPCIÓN (COMPLETO Y CORREGIDO)
 // ==========================================
 const PantallaInscripcion = ({ alumno, close, onRequirePrueba, user, refresh }) => {
   const [datosAlumno, setDatosAlumno] = useState({ 
@@ -1200,12 +1312,11 @@ const PantallaInscripcion = ({ alumno, close, onRequirePrueba, user, refresh }) 
   const [aceptaNormas, setAceptaNormas] = useState(alumno.aceptaNormas || false);
 
   const inscribir = async (act, op) => {
-    if (!aceptaNormas) return alert("⚠️ Debes aceptar las normas.");
+    if (!aceptaNormas) return alert("⚠️ Debes aceptar las normas para poder inscribirte.");
     
-    // CASO 1: REQUIERE PRUEBA Y NO LA TIENE (NI ES ANTIGUO)
+    // CASO 1: REQUIERE PRUEBA Y NO LA TIENE
     if (act.requierePrueba && !alumno.esAntiguoAlumno && !alumno.citaNivel && alumno.estado !== 'prueba_reservada') {
-        
-        alert(`✅ Hemos anotado tu solicitud para: ${act.nombre}.\n\n🛑 PERO OJO: Esta actividad requiere PRUEBA DE NIVEL.\n\nLa plaza quedará "Pendiente de Validación" hasta que el coordinador realice la prueba.\n\n👉 A continuación, elige fecha para la prueba.`);
+        alert(`✅ Solicitud anotada para: ${act.nombre}.\n\n🛑 IMPORTANTE: Esta actividad requiere PRUEBA DE NIVEL.\n\nLa plaza quedará reservada pendiente de que el coordinador valide el nivel.\n\n👉 Ahora vamos a elegir fecha para la prueba.`);
         
         // 🔥 AQUÍ ESTÁ EL CAMBIO CLAVE:
         // Guardamos el grupo que quiere (Pre-inscripción) AUNQUE no tenga la prueba hecha.
@@ -1222,12 +1333,12 @@ const PantallaInscripcion = ({ alumno, close, onRequirePrueba, user, refresh }) 
         });
         
         refresh(user.uid);
-        onRequirePrueba(); // Le llevamos a pedir la cita
+        onRequirePrueba(); 
         return; 
     }
 
-    // CASO 2: INSCRIPCIÓN DIRECTA (Sin prueba o ya la tiene)
-    if (!confirm(`¿Confirmar inscripción definitiva en:\n📘 ${act.nombre}\n📅 ${op.dias}?`)) return;
+    // CASO 2: INSCRIPCIÓN DIRECTA
+    if (!confirm(`¿Confirmar inscripción en:\n📘 ${act.nombre}\n📅 ${op.dias}\n⏰ ${op.horario}?`)) return;
     
     await updateDoc(doc(db, 'students', alumno.id), { 
         nombre: datosAlumno.nombre, 
@@ -1235,8 +1346,8 @@ const PantallaInscripcion = ({ alumno, close, onRequirePrueba, user, refresh }) 
         fechaNacimiento: datosAlumno.fechaNacimiento, 
         estado: 'inscrito', 
         actividad: act.nombre, 
-        dias: op.dias, 
-        horario: op.horario, 
+        dias: op.dias,       // <--- GUARDAMOS DÍA
+        horario: op.horario, // <--- GUARDAMOS HORA
         precio: op.precio, 
         fechaInscripcion: new Date().toISOString(), 
         aceptaNormas: true 
@@ -1247,38 +1358,54 @@ const PantallaInscripcion = ({ alumno, close, onRequirePrueba, user, refresh }) 
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
-      <div className="bg-white p-6 rounded-2xl max-w-lg w-full h-[90vh] flex flex-col shadow-2xl animate-fade-in-up">
-        <div className="flex justify-between items-center mb-4"><h2 className="text-xl font-bold text-blue-900">Inscripción</h2><button onClick={close}>✕</button></div>
-        
-        <div className="bg-blue-50 p-4 rounded-xl mb-4 space-y-3 border border-blue-100">
-            <input className="w-full border p-2 rounded" value={datosAlumno.nombre} onChange={e => setDatosAlumno({ ...datosAlumno, nombre: e.target.value })} />
-            <div className="grid grid-cols-2 gap-3">
-                <select className="border p-2 rounded" value={datosAlumno.curso} onChange={e => setDatosAlumno({ ...datosAlumno, curso: e.target.value })}>{LISTA_CURSOS.map(c => <option key={c.val} value={c.val}>{c.label}</option>)}</select>
-                <input type="date" className="border p-2 rounded" value={datosAlumno.fechaNacimiento} onChange={e => setDatosAlumno({ ...datosAlumno, fechaNacimiento: e.target.value })} />
-            </div>
+    <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center p-4 z-50 backdrop-blur-sm flex-col">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl flex flex-col max-h-[90vh]">
+        {/* CABECERA */}
+        <div className="bg-blue-600 p-4 rounded-t-xl flex justify-between items-center shrink-0">
+            <h3 className="text-white font-bold text-lg">Inscribir a {alumno.nombre}</h3>
+            <button onClick={close} className="text-white hover:bg-blue-700 p-2 rounded-full">✕</button>
         </div>
 
-        <div className="bg-gray-50 p-3 rounded mb-4 text-xs"><label className="flex gap-2"><input type="checkbox" checked={aceptaNormas} onChange={e => setAceptaNormas(e.target.checked)} disabled={alumno.aceptaNormas} /> {alumno.aceptaNormas ? 'Normas aceptadas' : 'He leído y acepto las normas'}</label></div>
-        
-        <h3 className="font-bold text-gray-700 mb-2 text-sm border-b pb-1">Selecciona Grupo ({actividadesDisponibles.length})</h3>
-        <div className="overflow-y-auto pr-2 space-y-4 flex-1">
-            {actividadesDisponibles.map(act => (
-                <div key={act.id} className="border border-gray-200 rounded-xl p-3 hover:border-blue-400 bg-white">
-                    <div className="flex justify-between items-start mb-2">
-                        <h3 className="font-bold text-blue-900 text-sm">{act.nombre}</h3>
-                        {act.requierePrueba && <span className="bg-red-100 text-red-700 text-[10px] px-1.5 py-0.5 rounded font-bold uppercase">Requiere Prueba</span>}
-                    </div>
-                    <div className="grid gap-2">
-                        {act.opciones.map((op, i) => (
-                            <button key={i} onClick={() => inscribir(act, op)} className="border border-gray-100 bg-gray-50 p-2 rounded hover:bg-blue-600 hover:text-white text-left text-xs flex justify-between items-center transition group">
-                                <span className="font-medium">{op.dias}</span>
-                                <span className="font-bold">{op.horario} - {op.precio}</span>
-                            </button>
-                        ))}
-                    </div>
+        {/* CUERPO CON SCROLL */}
+        <div className="p-6 overflow-y-auto flex-1">
+            <div className="grid grid-cols-2 gap-4 mb-6 bg-gray-50 p-4 rounded-lg border">
+                <div>
+                    <label className="text-xs font-bold text-gray-500 uppercase">Nombre</label>
+                    <input className="w-full border-b bg-transparent font-bold text-gray-800" value={datosAlumno.nombre} onChange={e=>setDatosAlumno({...datosAlumno, nombre: e.target.value})} />
                 </div>
-            ))}
+                <div>
+                    <label className="text-xs font-bold text-gray-500 uppercase">Curso Actual</label>
+                    <div className="font-bold text-blue-600">{datosAlumno.curso}</div>
+                </div>
+            </div>
+
+            <label className="flex items-start gap-3 p-4 bg-yellow-50 border border-yellow-200 rounded-lg mb-6 cursor-pointer hover:bg-yellow-100 transition">
+                <input type="checkbox" className="mt-1 w-5 h-5 text-blue-600" checked={aceptaNormas} onChange={(e) => setAceptaNormas(e.target.checked)} />
+                <span className="text-sm text-yellow-900 font-medium">He leído y acepto la normativa de la escuela, incluyendo las condiciones de bajas (aviso antes del día 25) y pagos.</span>
+            </label>
+
+            <h4 className="font-bold text-gray-800 text-lg mb-4 border-b pb-2">Elige Actividad y Horario:</h4>
+
+            {actividadesDisponibles.length === 0 ? (
+                <div className="text-center py-10 text-gray-500 bg-gray-100 rounded-xl"><p>No hay actividades disponibles para el curso <strong>{datosAlumno.curso}</strong>.</p></div>
+            ) : (
+                <div className="space-y-6">
+                    {actividadesDisponibles.map(act => (
+                        <div key={act.id} className="border rounded-xl overflow-hidden shadow-sm hover:shadow-md transition bg-white">
+                            <div className="bg-gray-100 p-3 border-b flex justify-between items-center"><h5 className="font-bold text-blue-900">{act.nombre}</h5>{act.requierePrueba && (<span className="bg-red-100 text-red-700 text-[10px] font-bold px-2 py-1 rounded border border-red-200">REQUIERE PRUEBA</span>)}</div>
+                            <div className="p-3 grid gap-2">
+                                <p className="text-xs font-bold text-gray-400 uppercase mb-1">Opciones disponibles:</p>
+                                {act.opciones.map((op, idx) => (
+                                    <button key={idx} onClick={() => inscribir(act, op)} className="flex justify-between items-center w-full p-3 rounded-lg border border-gray-200 hover:border-blue-500 hover:bg-blue-50 transition group text-left">
+                                        <div><span className="block font-bold text-gray-800 group-hover:text-blue-700">{op.dias}</span><span className="text-xs text-gray-500">Horario: {op.horario}</span></div>
+                                        <span className="font-bold text-blue-600 bg-blue-100 px-3 py-1 rounded-full text-sm">{op.precio}</span>
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            )}
         </div>
       </div>
     </div>
@@ -1301,7 +1428,12 @@ const Login = ({ setView }) => {
     nombrePagador: '', dniPagador: '', telefono1: '', telefono2: '', 
     direccion: '', cp: '', poblacion: '', iban: '', emailPagador: '',
     // Datos Alumno (Todos)
-    nombreAlumno: '', curso: '3PRI', letra: 'A', fechaNacimiento: '', esAntiguoAlumno: false,
+    nombreAlumno: '', 
+    
+    // 👇👇👇 AQUÍ ESTÁ EL CAMBIO 👇👇👇
+    curso: 'INF3',  // Antes ponía '3PRI'. Ahora coincide con el primero de la lista.
+    
+    letra: 'A', fechaNacimiento: '', esAntiguoAlumno: false,
     alergias: '', observaciones: '',
     // Datos Contacto (Solo Internos)
     emailContacto: '', 
