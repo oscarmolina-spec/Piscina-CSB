@@ -1593,105 +1593,163 @@ const PantallaPruebaNivel = ({ alumno, close, onSuccess, user, refresh }) => {
 };
 
 // ==========================================
-// 📝 MODAL INSCRIPCIÓN (COMPLETO Y CORREGIDO)
+// 📝 MODAL INSCRIPCIÓN (SOLUCIONADO: BUG NORMAS Y DATOS)
 // ==========================================
 const PantallaInscripcion = ({ alumno, close, onRequirePrueba, user, refresh }) => {
+  // 1. ESTADOS
   const [datosAlumno, setDatosAlumno] = useState({ 
     nombre: alumno.nombre, 
     curso: alumno.curso, 
     fechaNacimiento: alumno.fechaNacimiento || '' 
   });
-  const actividadesDisponibles = OFERTA_ACTIVIDADES.filter((act) => act.cursos.includes(datosAlumno.curso));
-  const [aceptaNormas, setAceptaNormas] = useState(alumno.aceptaNormas || false);
+  
+  // Inicializamos el checkbox: Si ya las aceptó antes, sale marcado. Si no, sale desmarcado.
+  const [aceptaNormas, setAceptaNormas] = useState(alumno.aceptaNormas === true);
 
+  // Filtramos las actividades según el curso del alumno
+  // (Asegúrate de que OFERTA_ACTIVIDADES está definida en tu archivo o impórtala)
+  const actividadesDisponibles = OFERTA_ACTIVIDADES.filter((act) => act.cursos.includes(datosAlumno.curso));
+
+  // 2. FUNCIÓN DE INSCRIPCIÓN
   const inscribir = async (act, op) => {
-    if (!aceptaNormas) return alert("⚠️ Debes aceptar las normas para poder inscribirte.");
+    // VALIDACIÓN INSTANTÁNEA: Usamos la variable de estado 'aceptaNormas'
+    if (aceptaNormas !== true) {
+        return alert("⚠️ Es obligatorio aceptar las normas y condiciones para poder inscribirse.");
+    }
     
-    // CASO 1: REQUIERE PRUEBA Y NO LA TIENE
+    // Preparar los datos comunes a guardar
+    const datosComunes = {
+        nombre: datosAlumno.nombre, 
+        curso: datosAlumno.curso, 
+        fechaNacimiento: datosAlumno.fechaNacimiento,
+        actividad: act.nombre, // Guardamos QUÉ actividad quiere
+        dias: op.dias,         // Guardamos DÍA
+        horario: op.horario,   // Guardamos HORA
+        precio: op.precio,
+        aceptaNormas: true,     // Forzamos el true en la BD
+        fechaInscripcion: new Date().toISOString()
+    };
+
+    // CASO A: REQUIERE PRUEBA DE NIVEL
+    // (Si la actividad lo pide Y no es antiguo alumno Y no tiene cita aún)
     if (act.requierePrueba && !alumno.esAntiguoAlumno && !alumno.citaNivel && alumno.estado !== 'prueba_reservada') {
-        alert(`✅ Solicitud anotada para: ${act.nombre}.\n\n🛑 IMPORTANTE: Esta actividad requiere PRUEBA DE NIVEL.\n\nLa plaza quedará reservada pendiente de que el coordinador valide el nivel.\n\n👉 Ahora vamos a elegir fecha para la prueba.`);
         
-        // 🔥 AQUÍ ESTÁ EL CAMBIO CLAVE:
-        // Guardamos el grupo que quiere (Pre-inscripción) AUNQUE no tenga la prueba hecha.
+        if(!confirm(`⚠️ ATENCIÓN: Esta actividad requiere PRUEBA DE NIVEL.\n\nLa plaza en "${act.nombre}" (${op.horario}) quedará reservada, pero pendiente de que el coordinador valide el nivel.\n\n¿Continuar para elegir hora de la prueba?`)) return;
+
         await updateDoc(doc(db, 'students', alumno.id), { 
-            ...datosAlumno, 
-            aceptaNormas: true,
-            // Guardamos la preferencia del grupo
-            actividad: act.nombre,
-            dias: op.dias,
-            horario: op.horario,
-            precio: op.precio,
-            // Estado especial: está reservado pero pendiente de la prueba
-            estado: 'prueba_reservada' 
+            ...datosComunes,
+            estado: 'prueba_reservada' // Estado intermedio (Tarjeta Azul/Naranja)
         });
         
         refresh(user.uid);
-        onRequirePrueba(); 
+        onRequirePrueba(); // Cierra esta ventana y abre la de la cita
         return; 
     }
 
-    // CASO 2: INSCRIPCIÓN DIRECTA
-    if (!confirm(`¿Confirmar inscripción en:\n📘 ${act.nombre}\n📅 ${op.dias}\n⏰ ${op.horario}?`)) return;
+    // CASO B: INSCRIPCIÓN DIRECTA (Infantil o sin prueba)
+    if (!confirm(`¿Confirmar inscripción definitiva en:\n📘 ${act.nombre}\n📅 ${op.dias}\n⏰ ${op.horario}?`)) return;
     
     await updateDoc(doc(db, 'students', alumno.id), { 
-        nombre: datosAlumno.nombre, 
-        curso: datosAlumno.curso, 
-        fechaNacimiento: datosAlumno.fechaNacimiento, 
-        estado: 'inscrito', 
-        actividad: act.nombre, 
-        dias: op.dias,       // <--- GUARDAMOS DÍA
-        horario: op.horario, // <--- GUARDAMOS HORA
-        precio: op.precio, 
-        fechaInscripcion: new Date().toISOString(), 
-        aceptaNormas: true 
+        ...datosComunes,
+        estado: 'inscrito' // Estado final (Tarjeta Verde/Amarilla)
     });
     
+    alert("✅ ¡Inscripción realizada con éxito!");
     refresh(user.uid); 
     close();
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center p-4 z-50 backdrop-blur-sm flex-col">
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl flex flex-col max-h-[90vh]">
+        
         {/* CABECERA */}
-        <div className="bg-blue-600 p-4 rounded-t-xl flex justify-between items-center shrink-0">
+        <div className="bg-blue-600 p-4 flex justify-between items-center shrink-0 rounded-t-xl">
             <h3 className="text-white font-bold text-lg">Inscribir a {alumno.nombre}</h3>
-            <button onClick={close} className="text-white hover:bg-blue-700 p-2 rounded-full">✕</button>
+            <button onClick={close} className="text-white/80 hover:text-white hover:bg-blue-700 p-2 rounded-full transition">✕</button>
         </div>
 
         {/* CUERPO CON SCROLL */}
         <div className="p-6 overflow-y-auto flex-1">
-            <div className="grid grid-cols-2 gap-4 mb-6 bg-gray-50 p-4 rounded-lg border">
+            
+            {/* DATOS BÁSICOS */}
+            <div className="grid grid-cols-2 gap-4 mb-6 bg-gray-50 p-4 rounded-lg border border-gray-100">
                 <div>
-                    <label className="text-xs font-bold text-gray-500 uppercase">Nombre</label>
-                    <input className="w-full border-b bg-transparent font-bold text-gray-800" value={datosAlumno.nombre} onChange={e=>setDatosAlumno({...datosAlumno, nombre: e.target.value})} />
+                    <label className="text-xs font-bold text-gray-500 uppercase block mb-1">Nombre</label>
+                    <input 
+                        className="w-full border-b bg-transparent font-bold text-gray-800 focus:outline-none focus:border-blue-500" 
+                        value={datosAlumno.nombre} 
+                        onChange={e=>setDatosAlumno({...datosAlumno, nombre: e.target.value})} 
+                    />
                 </div>
                 <div>
-                    <label className="text-xs font-bold text-gray-500 uppercase">Curso Actual</label>
-                    <div className="font-bold text-blue-600">{datosAlumno.curso}</div>
+                    <label className="text-xs font-bold text-gray-500 uppercase block mb-1">Curso Escolar</label>
+                    <div className="font-bold text-blue-600 bg-white px-2 py-1 rounded border inline-block">{datosAlumno.curso}</div>
                 </div>
             </div>
 
-            <label className="flex items-start gap-3 p-4 bg-yellow-50 border border-yellow-200 rounded-lg mb-6 cursor-pointer hover:bg-yellow-100 transition">
-                <input type="checkbox" className="mt-1 w-5 h-5 text-blue-600" checked={aceptaNormas} onChange={(e) => setAceptaNormas(e.target.checked)} />
-                <span className="text-sm text-yellow-900 font-medium">He leído y acepto la normativa de la escuela, incluyendo las condiciones de bajas (aviso antes del día 25) y pagos.</span>
-            </label>
+            {/* CHECKBOX NORMAS (SOLUCIÓN DEL BUG) */}
+            <div className={`p-4 rounded-lg mb-6 border transition cursor-pointer ${aceptaNormas ? 'bg-green-50 border-green-200' : 'bg-yellow-50 border-yellow-200 hover:bg-yellow-100'}`}>
+                <label className="flex items-start gap-3 cursor-pointer">
+                    <input 
+                        type="checkbox" 
+                        className="mt-1 w-5 h-5 text-blue-600 rounded focus:ring-blue-500" 
+                        checked={aceptaNormas} 
+                        onChange={(e) => setAceptaNormas(e.target.checked)} 
+                    />
+                    <div className="text-sm">
+                        <span className={`font-bold block mb-1 ${aceptaNormas ? 'text-green-800' : 'text-yellow-900'}`}>
+                            {aceptaNormas ? '✅ Normas aceptadas' : '⚠️ Aceptación requerida'}
+                        </span>
+                        <span className="text-gray-600">
+                            He leído y acepto la normativa de la escuela, incluyendo las condiciones de bajas (aviso antes del día 25) y pagos.
+                        </span>
+                    </div>
+                </label>
+            </div>
 
             <h4 className="font-bold text-gray-800 text-lg mb-4 border-b pb-2">Elige Actividad y Horario:</h4>
 
             {actividadesDisponibles.length === 0 ? (
-                <div className="text-center py-10 text-gray-500 bg-gray-100 rounded-xl"><p>No hay actividades disponibles para el curso <strong>{datosAlumno.curso}</strong>.</p></div>
+                <div className="text-center py-10 text-gray-500 bg-gray-100 rounded-xl border border-dashed border-gray-300">
+                    <p>No hay actividades disponibles para <strong>{datosAlumno.curso}</strong>.</p>
+                </div>
             ) : (
-                <div className="space-y-6">
+                <div className="space-y-4">
                     {actividadesDisponibles.map(act => (
-                        <div key={act.id} className="border rounded-xl overflow-hidden shadow-sm hover:shadow-md transition bg-white">
-                            <div className="bg-gray-100 p-3 border-b flex justify-between items-center"><h5 className="font-bold text-blue-900">{act.nombre}</h5>{act.requierePrueba && (<span className="bg-red-100 text-red-700 text-[10px] font-bold px-2 py-1 rounded border border-red-200">REQUIERE PRUEBA</span>)}</div>
+                        <div key={act.id} className="border rounded-xl overflow-hidden shadow-sm hover:shadow-md transition bg-white group">
+                            
+                            {/* Header de la actividad */}
+                            <div className="bg-gray-50 p-3 border-b flex justify-between items-center group-hover:bg-blue-50 transition">
+                                <h5 className="font-bold text-blue-900 text-lg">{act.nombre}</h5>
+                                {act.requierePrueba && (
+                                    <span className="bg-orange-100 text-orange-800 text-[10px] font-bold px-2 py-1 rounded border border-orange-200 uppercase tracking-wide">
+                                        Requiere Prueba
+                                    </span>
+                                )}
+                            </div>
+
+                            {/* Lista de horarios */}
                             <div className="p-3 grid gap-2">
-                                <p className="text-xs font-bold text-gray-400 uppercase mb-1">Opciones disponibles:</p>
                                 {act.opciones.map((op, idx) => (
-                                    <button key={idx} onClick={() => inscribir(act, op)} className="flex justify-between items-center w-full p-3 rounded-lg border border-gray-200 hover:border-blue-500 hover:bg-blue-50 transition group text-left">
-                                        <div><span className="block font-bold text-gray-800 group-hover:text-blue-700">{op.dias}</span><span className="text-xs text-gray-500">Horario: {op.horario}</span></div>
-                                        <span className="font-bold text-blue-600 bg-blue-100 px-3 py-1 rounded-full text-sm">{op.precio}</span>
+                                    <button 
+                                        key={idx} 
+                                        onClick={() => inscribir(act, op)} 
+                                        className="flex justify-between items-center w-full p-3 rounded-lg border border-gray-200 hover:border-blue-500 hover:bg-blue-50 transition group/btn text-left relative overflow-hidden"
+                                    >
+                                        <div className="z-10">
+                                            <span className="block font-bold text-gray-800 group-hover/btn:text-blue-700">
+                                                {op.dias}
+                                            </span>
+                                            <span className="text-xs text-gray-500 font-mono bg-white px-1 rounded border mt-1 inline-block">
+                                                ⏰ {op.horario}
+                                            </span>
+                                        </div>
+                                        <div className="z-10 text-right">
+                                            <span className="font-bold text-blue-600 bg-blue-100 px-3 py-1 rounded-full text-sm block">
+                                                {op.precio}
+                                            </span>
+                                        </div>
                                     </button>
                                 ))}
                             </div>
