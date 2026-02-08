@@ -1400,118 +1400,162 @@ const FormularioHijo = ({ close, user, refresh }) => {
     autorizaFotos: false 
   });
 
-  const save = async (e) => {
-    e.preventDefault();
+  // Le cambiamos el nombre para obligar al sistema a usar esta nueva
+  const save = async () => {
+    // 1. Limpiamos el número (quitamos espacios si los hubiera)
+    const movil = data.telefono ? String(data.telefono).trim() : "";
+    
+    // 2. CHIVATO: Esto nos dirá la verdad en la cara
+    // Si ves este alert con un número largo pero tú escribiste uno corto, es que el estado no se limpió.
+    console.log("Intentando guardar:", movil); 
 
-    // 1. LIMPIEZA: Quitamos espacios delante y detrás del teléfono y nombre
-    const telefonoLimpio = data.telefono ? data.telefono.toString().trim() : "";
-    const nombreLimpio = data.nombre ? data.nombre.toString().trim() : "";
-
-    // 2. EL CANDADO (Validaciones)
-    if (!data.aceptaNormas) {
-        return alert("⚠️ Debes aceptar las normas para crear el perfil.");
+    if (movil.length < 9) {
+      alert(`⛔ ERROR: El número "${movil}" solo tiene ${movil.length} dígitos. Mínimo 9.`);
+      return; // SE ACABÓ. Aquí muere la función.
     }
 
-    if (!nombreLimpio) {
-        return alert("⚠️ El nombre es obligatorio.");
+    if (!data.nombre) {
+      alert("⛔ Falta el nombre.");
+      return;
     }
 
-    // Aquí está la clave: validamos sobre 'telefonoLimpio'
-    if (telefonoLimpio.length < 9) {
-      alert(`⚠️ El móvil es demasiado corto (${telefonoLimpio.length} dígitos). Revisa que no falten números.`);
-      return; // <--- FRENO DE MANO: Aquí se detiene y NO sigue bajando.
-    }
-
-    // 3. GUARDADO (Solo llega aquí si pasó los frenos de arriba)
     try {
       await addDoc(collection(db, 'students'), {
         parentId: user.uid,
         ...data,
-        nombre: nombreLimpio,     // Guardamos el nombre sin espacios extra
-        telefono: telefonoLimpio, // Guardamos el teléfono bueno
+        telefono: movil,
         estado: 'sin_inscripcion'
       });
       refresh(user.uid);
       close();
     } catch (error) {
       console.error(error);
-      alert("Error al guardar en la base de datos.");
+      alert("Error al guardar en base de datos.");
     }
   };
 
-return (
-<div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
-  <div className="bg-white p-6 rounded-xl max-w-sm w-full shadow-2xl animate-fade-in-up">
-    <h3 className="text-xl font-bold mb-4 text-gray-800">Añadir Nuevo Alumno</h3>
-    <form onSubmit={save} className="space-y-4">
-      <input 
-        className="w-full border p-3 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" 
-        placeholder="Nombre y Apellidos" 
-        onChange={e => setData({ ...data, nombre: e.target.value })} 
-      />
-      <div className="mt-4">
-        <label className="text-[10px] font-bold text-gray-400 uppercase">Móvil de Contacto (Obligatorio)</label>
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
+      <div className="bg-white p-6 rounded-xl max-w-sm w-full shadow-2xl animate-fade-in-up">
+        <h3 className="text-xl font-bold mb-4 text-gray-800">Añadir Nuevo Alumno</h3>
+        
+        {/* 1. CAMBIO IMPORTANTE: Quitamos <form> y ponemos <div> para control total */}
+        <div className="space-y-4">
+          
+          <input 
+            className="w-full border p-3 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" 
+            placeholder="Nombre y Apellidos" 
+            value={data.nombre || ''} // Asegura que se limpie al cambiar de hermano
+            onChange={e => setData({ ...data, nombre: e.target.value })} 
+          />
+          
+          <div className="mt-4">
+        <label className="text-[10px] font-bold text-gray-400 uppercase">
+          Móvil de Contacto (Obligatorio)
+        </label>
+        
         <input 
           type="tel"
+          // 👇 AÑADE ESTA LÍNEA AQUÍ 👇
+          value={data.telefono || ''} 
+          
           className="w-full border p-3 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none font-bold text-blue-600" 
           placeholder="Ej: 600000000" 
           onChange={e => setData({ ...data, telefono: e.target.value })} 
         />
       </div>
-      
-      <div className="bg-blue-50 p-3 rounded-lg border border-blue-100">
-        <label className="text-sm font-bold text-blue-900 block mb-2">¿Fue alumno el año pasado?</label>
-        <div className="flex gap-4">
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input type="radio" name="antiguo" onChange={() => setData({ ...data, esAntiguoAlumno: true })} /> 
-            Sí (No necesita prueba)
-          </label>
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input type="radio" name="antiguo" defaultChecked onChange={() => setData({ ...data, esAntiguoAlumno: false })} /> 
-            No
-          </label>
-        </div>
-      </div>
+          
+          {/* LOGICA DE HERMANOS ARREGLADA: Usamos 'checked' en vez de 'defaultChecked' */}
+          <div className="bg-blue-50 p-3 rounded-lg border border-blue-100">
+            <label className="text-sm font-bold text-blue-900 block mb-2">¿Fue alumno el año pasado?</label>
+            <div className="flex gap-4">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input 
+                  type="radio" 
+                  name="antiguo" 
+                  checked={data.esAntiguoAlumno === true} 
+                  onChange={() => setData({ ...data, esAntiguoAlumno: true })} 
+                /> 
+                Sí (No necesita prueba)
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input 
+                  type="radio" 
+                  name="antiguo" 
+                  checked={data.esAntiguoAlumno === false} 
+                  onChange={() => setData({ ...data, esAntiguoAlumno: false })} 
+                /> 
+                No
+              </label>
+            </div>
+          </div>
 
-      <div className="grid grid-cols-2 gap-2">
-        <div>
-            <label className="text-xs text-gray-500 font-bold uppercase">Curso</label>
-            <select className="w-full border p-2 rounded-lg" onChange={e => setData({ ...data, curso: e.target.value })}>
-            {LISTA_CURSOS.map(c => <option key={c.val} value={c.val}>{c.label}</option>)}
-            </select>
-        </div>
-        <div>
-            <label className="text-xs text-gray-500 font-bold uppercase">Letra</label>
-            <select className="w-full border p-2 rounded-lg" onChange={e => setData({ ...data, letra: e.target.value })}>
-            <option>A</option><option>B</option><option>C</option>
-            </select>
-        </div>
-      </div>
-      
-      <div>
-        <label className="text-xs text-gray-500 font-bold uppercase">Fecha Nacimiento</label>
-        <input type="date" className="w-full border p-2 rounded-lg" onChange={e => setData({ ...data, fechaNacimiento: e.target.value })} />
-      </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+                <label className="text-xs text-gray-500 font-bold uppercase">Curso</label>
+                <select 
+                  className="w-full border p-2 rounded-lg" 
+                  value={data.curso || ''}
+                  onChange={e => setData({ ...data, curso: e.target.value })}
+                >
+                {LISTA_CURSOS.map(c => <option key={c.val} value={c.val}>{c.label}</option>)}
+                </select>
+            </div>
+            <div>
+                <label className="text-xs text-gray-500 font-bold uppercase">Letra</label>
+                <select 
+                  className="w-full border p-2 rounded-lg" 
+                  value={data.letra || ''}
+                  onChange={e => setData({ ...data, letra: e.target.value })}
+                >
+                <option>A</option><option>B</option><option>C</option>
+                </select>
+            </div>
+          </div>
+          
+          <div>
+            <label className="text-xs text-gray-500 font-bold uppercase">Fecha Nacimiento</label>
+            <input 
+              type="date" 
+              className="w-full border p-2 rounded-lg" 
+              value={data.fechaNacimiento || ''}
+              onChange={e => setData({ ...data, fechaNacimiento: e.target.value })} 
+            />
+          </div>
 
-      <div className="text-xs space-y-2 pt-2 border-t">
-        <label className="flex gap-2 cursor-pointer items-start">
-            <input type="checkbox" className="mt-0.5" checked={data.aceptaNormas} onChange={e => setData({ ...data, aceptaNormas: e.target.checked })} /> 
-            Acepto normas de funcionamiento (OBLIGATORIO)
-        </label>
-        <label className="flex gap-2 cursor-pointer items-start">
-            <input type="checkbox" className="mt-0.5" checked={data.autorizaFotos} onChange={e => setData({ ...data, autorizaFotos: e.target.checked })} /> 
-            Autorizo fotos/vídeos
-        </label>
-      </div>
+          <div className="text-xs space-y-2 pt-2 border-t">
+            <label className="flex gap-2 cursor-pointer items-start">
+                <input type="checkbox" className="mt-0.5" checked={data.aceptaNormas} onChange={e => setData({ ...data, aceptaNormas: e.target.checked })} /> 
+                Acepto normas de funcionamiento (OBLIGATORIO)
+            </label>
+            <label className="flex gap-2 cursor-pointer items-start">
+                <input type="checkbox" className="mt-0.5" checked={data.autorizaFotos} onChange={e => setData({ ...data, autorizaFotos: e.target.checked })} /> 
+                Autorizo fotos/vídeos
+            </label>
+          </div>
 
-      <div className="flex gap-2 pt-2">
-        <button type="button" onClick={close} className="flex-1 text-gray-500 font-bold py-2 hover:bg-gray-100 rounded-lg">Cancelar</button>
-        <button className="flex-1 bg-blue-600 text-white py-2 rounded-lg font-bold hover:bg-blue-700 shadow-md">Crear Perfil</button>
+          <div className="flex gap-2 pt-2">
+            <button 
+              type="button" 
+              onClick={close} 
+              className="flex-1 text-gray-500 font-bold py-2 hover:bg-gray-100 rounded-lg"
+            >
+              Cancelar
+            </button>
+            
+            {/* 2. CAMBIO CLAVE: Botón manual que dispara 'save' directamente */}
+            <button 
+              type="button" 
+              onClick={guardarDatos}
+              className="flex-1 bg-blue-600 text-white py-2 rounded-lg font-bold hover:bg-blue-700 shadow-md"
+            >
+              Crear Perfil
+            </button>
+          </div>
+        </div> {/* Cerramos div en vez de form */}
       </div>
-    </form>
-  </div>
-</div>
-);
+    </div>
+  );
 };
 
 // ==========================================
