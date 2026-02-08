@@ -1,5 +1,4 @@
-import React, { useState, useEffect } from 'react';
-import { db, auth } from './firebase.js'; 
+import React, { useState, useEffect, useRef } from 'react';import { db, auth } from './firebase.js'; 
 import {
   collection,
   addDoc,
@@ -1481,119 +1480,7 @@ const FormularioHijo = ({ close, user, refresh }) => {
 };
 
 // ==========================================
-// 📅 MODAL DE PRUEBA DE NIVEL
-// ==========================================
-const PantallaPruebaNivel = ({ alumno, close, onSuccess, user, refresh }) => {
-  const [citasOcupadas, setCitasOcupadas] = useState({});
-  const diasPrueba = getNextMondays();
-  const [diaIdSeleccionado, setDiaIdSeleccionado] = useState(getDateId(diasPrueba[0]));
-  const [aceptaNormas, setAceptaNormas] = useState(alumno.aceptaNormas || false);
-  const [autorizaFotos, setAutorizaFotos] = useState(alumno.autorizaFotos || false);
-
-  const horas = [];
-  for (let h = 16; h < 18; h++) {
-    for (let m = 0; m < 60; m += 5) {
-      horas.push(`${h}:${m.toString().padStart(2, '0')}`);
-    }
-  }
-
-  useEffect(() => {
-    const unsub = onSnapshot(query(collection(db, 'students')), s => {
-      const c = {};
-      s.forEach(d => {
-        const dt = d.data();
-        if (dt.citaId) c[dt.citaId] = (c[dt.citaId] || 0) + 1;
-      });
-      setCitasOcupadas(c);
-    });
-    return () => unsub();
-  }, []);
-
-  const confirmarCita = async (hora) => {
-    if (!aceptaNormas) return alert("⚠️ Debes aceptar las normas de funcionamiento.");
-    
-    const citaId = `${diaIdSeleccionado}_${hora}`;
-    const textoCita = `${getHumanDate(diasPrueba.find(d => getDateId(d) === diaIdSeleccionado))} a las ${hora}`;
-
-    if ((citasOcupadas[citaId] || 0) >= CAPACIDAD_POR_HUECO) return alert('⚠️ Esa hora ya está completa. Por favor elige otra.');
-
-    if (!window.confirm(`¿Confirmar reserva de prueba?\n\n📅 ${textoCita}\n📍 Portón Azul`)) return;
-
-    try {
-      await updateDoc(doc(db, 'students', alumno.id), {
-        estado: 'prueba_reservada',
-        citaId,
-        citaNivel: textoCita,
-        aceptaNormas: true,
-        autorizaFotos
-      });
-      await enviarEmailConfirmacion(auth.currentUser.email, alumno.nombre, textoCita);
-      alert('✅ Cita Confirmada correctamente.');
-      refresh(user.uid);
-      onSuccess();
-    } catch (e) {
-      alert('Error al reservar: ' + e.message);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
-      <div className="bg-white p-6 rounded-2xl max-w-lg w-full h-[85vh] flex flex-col shadow-2xl animate-fade-in-up">
-        <div className="flex justify-between items-center mb-4 border-b pb-2">
-           <h2 className="text-2xl font-bold text-blue-900">Reserva de Prueba</h2>
-           <button onClick={close} className="text-gray-400 hover:text-gray-800 font-bold text-xl">✕</button>
-        </div>
-        {!alumno.aceptaNormas && (
-          <div className="bg-yellow-50 p-4 rounded-lg mb-4 text-xs border border-yellow-200">
-            <h4 className="font-bold text-yellow-800 mb-2">Requisitos Previos</h4>
-            <label className="flex gap-2 mb-2 cursor-pointer items-start">
-              <input type="checkbox" className="mt-1" checked={aceptaNormas} onChange={e => setAceptaNormas(e.target.checked)} />
-              <span>He leído y acepto las <strong>normas de funcionamiento</strong> de la escuela (OBLIGATORIO).</span>
-            </label>
-            <label className="flex gap-2 cursor-pointer items-start">
-              <input type="checkbox" className="mt-1" checked={autorizaFotos} onChange={e => setAutorizaFotos(e.target.checked)} />
-              <span>Autorizo la toma de imágenes para uso interno/promocional del club.</span>
-            </label>
-          </div>
-        )}
-        <label className="text-sm font-bold text-gray-600 mb-1">Selecciona el día:</label>
-        <select 
-          className="w-full border-2 border-blue-100 p-3 rounded-lg mb-4 font-bold text-blue-900 bg-blue-50 focus:border-blue-500 outline-none"
-          value={diaIdSeleccionado}
-          onChange={e => setDiaIdSeleccionado(e.target.value)}
-        >
-          {diasPrueba.map(d => (
-            <option key={getDateId(d)} value={getDateId(d)}>{getHumanDate(d)}</option>
-          ))}
-        </select>
-        <p className="text-xs text-center text-gray-500 mb-2">Huecos disponibles cada 5 minutos (Máx 2 alumnos)</p>
-        <div className="flex-1 overflow-y-auto grid grid-cols-4 gap-2 pr-1">
-          {horas.map(h => {
-            const ocupacion = citasOcupadas[`${diaIdSeleccionado}_${h}`] || 0;
-            const lleno = ocupacion >= CAPACIDAD_POR_HUECO;
-            return (
-              <button
-                key={h}
-                disabled={lleno}
-                onClick={() => confirmarCita(h)}
-                className={`p-2 rounded-lg text-xs font-bold transition ${
-                  lleno 
-                    ? 'bg-gray-100 text-gray-300 cursor-not-allowed border border-gray-200' 
-                    : 'bg-white text-green-700 border border-green-200 hover:bg-green-500 hover:text-white shadow-sm'
-                }`}
-              >
-                {h}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-    </div>
-  );
-};
-
-// ==========================================
-// 📝 MODAL INSCRIPCIÓN (SOLUCIONADO: BUG NORMAS Y DATOS)
+// 📝 MODAL INSCRIPCIÓN (SOLUCIÓN DEFINITIVA CHECKBOX)
 // ==========================================
 const PantallaInscripcion = ({ alumno, close, onRequirePrueba, user, refresh }) => {
   // 1. ESTADOS
@@ -1603,55 +1490,63 @@ const PantallaInscripcion = ({ alumno, close, onRequirePrueba, user, refresh }) 
     fechaNacimiento: alumno.fechaNacimiento || '' 
   });
   
-  // Inicializamos el checkbox: Si ya las aceptó antes, sale marcado. Si no, sale desmarcado.
-  const [aceptaNormas, setAceptaNormas] = useState(alumno.aceptaNormas === true);
+  // USAREMOS UNA REFERENCIA PARA EVITAR EL BUG DE SINCRONIZACIÓN
+  // Esto guarda el valor "real" sin depender de los renderizados de React
+  const normasRef = useRef(alumno.aceptaNormas === true);
+  
+  // Estado visual para que se pinte verde/gris
+  const [aceptaNormasVisual, setAceptaNormasVisual] = useState(alumno.aceptaNormas === true);
 
-  // Filtramos las actividades según el curso del alumno
-  // (Asegúrate de que OFERTA_ACTIVIDADES está definida en tu archivo o impórtala)
+  // Filtramos las actividades (Asegúrate de tener OFERTA_ACTIVIDADES importado o definido)
   const actividadesDisponibles = OFERTA_ACTIVIDADES.filter((act) => act.cursos.includes(datosAlumno.curso));
+
+  // Función para cambiar el checkbox de forma segura
+  const toggleNormas = () => {
+      const nuevoValor = !normasRef.current; // Invertimos el valor actual
+      normasRef.current = nuevoValor;        // Guardamos en la referencia (Lógica)
+      setAceptaNormasVisual(nuevoValor);     // Guardamos en el estado (Visual)
+  };
 
   // 2. FUNCIÓN DE INSCRIPCIÓN
   const inscribir = async (act, op) => {
-    // VALIDACIÓN INSTANTÁNEA: Usamos la variable de estado 'aceptaNormas'
-    if (aceptaNormas !== true) {
+    // LEEMOS LA REFERENCIA DIRECTAMENTE (.current)
+    // Esto evita el bug de que la variable no se haya actualizado aún
+    if (normasRef.current !== true) {
         return alert("⚠️ Es obligatorio aceptar las normas y condiciones para poder inscribirse.");
     }
     
-    // Preparar los datos comunes a guardar
     const datosComunes = {
         nombre: datosAlumno.nombre, 
         curso: datosAlumno.curso, 
         fechaNacimiento: datosAlumno.fechaNacimiento,
-        actividad: act.nombre, // Guardamos QUÉ actividad quiere
-        dias: op.dias,         // Guardamos DÍA
-        horario: op.horario,   // Guardamos HORA
+        actividad: act.nombre,
+        dias: op.dias,
+        horario: op.horario,
         precio: op.precio,
-        aceptaNormas: true,     // Forzamos el true en la BD
+        aceptaNormas: true,
         fechaInscripcion: new Date().toISOString()
     };
 
     // CASO A: REQUIERE PRUEBA DE NIVEL
-    // (Si la actividad lo pide Y no es antiguo alumno Y no tiene cita aún)
     if (act.requierePrueba && !alumno.esAntiguoAlumno && !alumno.citaNivel && alumno.estado !== 'prueba_reservada') {
-        
-        if(!confirm(`⚠️ ATENCIÓN: Esta actividad requiere PRUEBA DE NIVEL.\n\nLa plaza en "${act.nombre}" (${op.horario}) quedará reservada, pero pendiente de que el coordinador valide el nivel.\n\n¿Continuar para elegir hora de la prueba?`)) return;
+        if(!confirm(`⚠️ ATENCIÓN: Esta actividad requiere PRUEBA DE NIVEL.\n\nLa plaza quedará reservada pendiente de validación.\n\n¿Continuar para elegir hora de la prueba?`)) return;
 
         await updateDoc(doc(db, 'students', alumno.id), { 
             ...datosComunes,
-            estado: 'prueba_reservada' // Estado intermedio (Tarjeta Azul/Naranja)
+            estado: 'prueba_reservada'
         });
         
         refresh(user.uid);
-        onRequirePrueba(); // Cierra esta ventana y abre la de la cita
+        onRequirePrueba();
         return; 
     }
 
-    // CASO B: INSCRIPCIÓN DIRECTA (Infantil o sin prueba)
+    // CASO B: INSCRIPCIÓN DIRECTA
     if (!confirm(`¿Confirmar inscripción definitiva en:\n📘 ${act.nombre}\n📅 ${op.dias}\n⏰ ${op.horario}?`)) return;
     
     await updateDoc(doc(db, 'students', alumno.id), { 
         ...datosComunes,
-        estado: 'inscrito' // Estado final (Tarjeta Verde/Amarilla)
+        estado: 'inscrito'
     });
     
     alert("✅ ¡Inscripción realizada con éxito!");
@@ -1677,7 +1572,7 @@ const PantallaInscripcion = ({ alumno, close, onRequirePrueba, user, refresh }) 
                 <div>
                     <label className="text-xs font-bold text-gray-500 uppercase block mb-1">Nombre</label>
                     <input 
-                        className="w-full border-b bg-transparent font-bold text-gray-800 focus:outline-none focus:border-blue-500" 
+                        className="w-full border-b bg-transparent font-bold text-gray-800 focus:outline-none" 
                         value={datosAlumno.nombre} 
                         onChange={e=>setDatosAlumno({...datosAlumno, nombre: e.target.value})} 
                     />
@@ -1688,24 +1583,25 @@ const PantallaInscripcion = ({ alumno, close, onRequirePrueba, user, refresh }) 
                 </div>
             </div>
 
-            {/* CHECKBOX NORMAS (SOLUCIÓN DEL BUG) */}
-            <div className={`p-4 rounded-lg mb-6 border transition cursor-pointer ${aceptaNormas ? 'bg-green-50 border-green-200' : 'bg-yellow-50 border-yellow-200 hover:bg-yellow-100'}`}>
-                <label className="flex items-start gap-3 cursor-pointer">
-                    <input 
-                        type="checkbox" 
-                        className="mt-1 w-5 h-5 text-blue-600 rounded focus:ring-blue-500" 
-                        checked={aceptaNormas} 
-                        onChange={(e) => setAceptaNormas(e.target.checked)} 
-                    />
-                    <div className="text-sm">
-                        <span className={`font-bold block mb-1 ${aceptaNormas ? 'text-green-800' : 'text-yellow-900'}`}>
-                            {aceptaNormas ? '✅ Normas aceptadas' : '⚠️ Aceptación requerida'}
-                        </span>
-                        <span className="text-gray-600">
-                            He leído y acepto la normativa de la escuela, incluyendo las condiciones de bajas (aviso antes del día 25) y pagos.
-                        </span>
-                    </div>
-                </label>
+            {/* CHECKBOX MANUAL (SIN INPUT NATIVO PARA EVITAR ERRORES) */}
+            <div 
+                onClick={toggleNormas}
+                className={`p-4 rounded-lg mb-6 border transition cursor-pointer select-none flex items-start gap-3 
+                ${aceptaNormasVisual ? 'bg-green-50 border-green-200 shadow-sm' : 'bg-yellow-50 border-yellow-200 hover:bg-yellow-100'}`}
+            >
+                {/* Caja simulada del Checkbox */}
+                <div className={`mt-1 w-6 h-6 rounded border flex items-center justify-center transition-colors ${aceptaNormasVisual ? 'bg-green-600 border-green-600' : 'bg-white border-gray-400'}`}>
+                    {aceptaNormasVisual && <span className="text-white font-bold text-sm">✓</span>}
+                </div>
+                
+                <div className="text-sm flex-1">
+                    <span className={`font-bold block mb-1 ${aceptaNormasVisual ? 'text-green-800' : 'text-yellow-900'}`}>
+                        {aceptaNormasVisual ? '✅ Normas aceptadas' : '⚠️ Aceptación requerida'}
+                    </span>
+                    <span className="text-gray-600">
+                        He leído y acepto la normativa de la escuela, condiciones de pago y política de bajas (aviso día 25).
+                    </span>
+                </div>
             </div>
 
             <h4 className="font-bold text-gray-800 text-lg mb-4 border-b pb-2">Elige Actividad y Horario:</h4>
@@ -1735,17 +1631,17 @@ const PantallaInscripcion = ({ alumno, close, onRequirePrueba, user, refresh }) 
                                     <button 
                                         key={idx} 
                                         onClick={() => inscribir(act, op)} 
-                                        className="flex justify-between items-center w-full p-3 rounded-lg border border-gray-200 hover:border-blue-500 hover:bg-blue-50 transition group/btn text-left relative overflow-hidden"
+                                        className="flex justify-between items-center w-full p-3 rounded-lg border border-gray-200 hover:border-blue-500 hover:bg-blue-50 transition text-left relative"
                                     >
-                                        <div className="z-10">
-                                            <span className="block font-bold text-gray-800 group-hover/btn:text-blue-700">
+                                        <div>
+                                            <span className="block font-bold text-gray-800 group-hover:text-blue-700">
                                                 {op.dias}
                                             </span>
                                             <span className="text-xs text-gray-500 font-mono bg-white px-1 rounded border mt-1 inline-block">
                                                 ⏰ {op.horario}
                                             </span>
                                         </div>
-                                        <div className="z-10 text-right">
+                                        <div>
                                             <span className="font-bold text-blue-600 bg-blue-100 px-3 py-1 rounded-full text-sm block">
                                                 {op.precio}
                                             </span>
