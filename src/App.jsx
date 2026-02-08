@@ -1155,11 +1155,11 @@ const Dashboard = ({ user, misHijos, logout, refresh }) => {
 
       <div className="grid gap-6 md:grid-cols-2 mb-8">
       {misHijos.map((hijo) => {
-          // 1. LÓGICA DE ESTADO
+          // 1. LÓGICA DE ESTADO (Infantil y Bajas)
           const esInfantil = (hijo.curso || '').toUpperCase().includes('INFANTIL');
           const estaAdmitido = hijo.validadoAdmin === true || esInfantil;
           
-          // 👇 CAMBIO CLAVE: Consideramos "Libre" si no tiene inscripción O si ya terminó la baja
+          // Consideramos "Libre" si no tiene inscripción O si ya terminó la baja (para volver a inscribir)
           const estaLibre = hijo.estado === 'sin_inscripcion' || hijo.estado === 'baja_finalizada';
           
           let bordeColor = 'bg-gray-400';
@@ -1181,7 +1181,6 @@ const Dashboard = ({ user, misHijos, logout, refresh }) => {
               bordeColor = 'bg-red-500';
               estadoTexto = '📉 Baja Solicitada';
           } else if (hijo.estado === 'baja_finalizada') {
-              // 👇 CAMBIO VISUAL: Para que se vea gris oscuro si es una baja antigua
               bordeColor = 'bg-gray-600';
               estadoTexto = '⚫ Baja Finalizada';
           }
@@ -1201,7 +1200,7 @@ const Dashboard = ({ user, misHijos, logout, refresh }) => {
                 <div className="flex flex-col items-end gap-2"><span className="px-2 py-1 rounded text-[10px] font-extrabold uppercase bg-gray-100 text-gray-500">{estadoTexto}</span></div>
               </div>
 
-              {/* DATOS DE ACTIVIDAD (Inscrito o Baja Pendiente) */}
+              {/* A) DATOS DE ACTIVIDAD (Inscrito o Baja Pendiente) */}
               {(hijo.estado === 'inscrito' || hijo.estado === 'baja_pendiente') && (
                 <div className={`ml-3 mt-4 p-3 rounded-lg border text-sm 
                     ${hijo.estado === 'baja_pendiente' ? 'bg-red-50 border-red-200' : 
@@ -1224,21 +1223,36 @@ const Dashboard = ({ user, misHijos, logout, refresh }) => {
                 </div>
               )}
               
-              {/* DATOS DE PRUEBA */}
+              {/* B) DATOS DE PRUEBA (RESTAURADO: Aquí vuelve tu lógica original) */}
               {hijo.estado === 'prueba_reservada' && (
                 <div className="ml-3 mt-4 bg-orange-50 p-3 rounded-lg border border-orange-200 text-sm">
                   <div className="mb-3 pb-3 border-b border-orange-200">
                       <p className="text-[10px] font-bold text-orange-800 uppercase tracking-wider mb-1">🎯 Solicitud:</p>
-                      {hijo.actividad ? (<div><p className="text-lg font-black text-orange-900 leading-tight">{hijo.actividad}</p></div>) : (<button onClick={() => { setAlumnoSeleccionado(hijo); setModoModal('inscripcion'); }} className="w-full bg-white border border-orange-300 text-orange-700 py-1.5 rounded text-xs font-bold">👉 Elegir Grupo</button>)}
+                      {hijo.actividad ? (
+                          <div><p className="text-lg font-black text-orange-900 leading-tight">{hijo.actividad}</p></div>
+                      ) : (
+                          <button onClick={() => { setAlumnoSeleccionado(hijo); setModoModal('inscripcion'); }} className="w-full bg-white border border-orange-300 text-orange-700 py-1.5 rounded text-xs font-bold hover:bg-orange-100">
+                              👉 Elegir Grupo
+                          </button>
+                      )}
                   </div>
                   <div className="flex items-center gap-2">
                       <span className="text-2xl">🗓️</span>
-                      <div><p className="font-bold text-orange-900 text-xs uppercase">Prueba de Nivel</p>{hijo.citaNivel ? (<p className="text-orange-800 font-bold">{hijo.citaNivel}</p>) : (<button onClick={() => { setAlumnoSeleccionado(hijo); setModoModal('prueba'); }} className="text-red-600 font-bold underline cursor-pointer animate-pulse">¡Reservar Hora!</button>)}</div>
+                      <div>
+                          <p className="font-bold text-orange-900 text-xs uppercase">Prueba de Nivel</p>
+                          {hijo.citaNivel ? (
+                              <p className="text-orange-800 font-bold">{hijo.citaNivel}</p>
+                          ) : (
+                              <button onClick={() => { setAlumnoSeleccionado(hijo); setModoModal('prueba'); }} className="text-red-600 font-bold underline cursor-pointer animate-pulse hover:text-red-800">
+                                  ¡Reservar Hora!
+                              </button>
+                          )}
+                      </div>
                   </div>
                 </div>
               )}
 
-              {/* MENSAJE SI ESTÁ DADO DE BAJA FINALIZADA */}
+              {/* C) MENSAJE SI ES UNA BAJA ANTIGUA */}
               {hijo.estado === 'baja_finalizada' && (
                  <div className="text-center py-2 text-gray-400 text-xs italic mt-2 border-t border-gray-100 pt-3">
                      Este alumno ha finalizado su actividad.
@@ -1246,19 +1260,18 @@ const Dashboard = ({ user, misHijos, logout, refresh }) => {
               )}
 
               <div className="mt-6 pt-4 ml-3 border-t border-gray-100 flex gap-2">
-                {/* 1. BOTÓN BAJA (Solo si está inscrito) */}
+                {/* 1. BOTÓN BAJA */}
                 {hijo.estado === 'inscrito' && (
                     <button onClick={() => gestionarBaja(hijo)} className="w-full bg-white text-red-600 px-3 py-2 rounded-lg text-sm font-bold border border-red-200 hover:bg-red-50">Tramitar Baja</button>
                 )}
                 
-                {/* 2. BOTONES PARA NO INSCRITOS O BAJAS FINALIZADAS (AQUÍ ESTÁ EL ARREGLO) */}
+                {/* 2. BOTONES PARA INSCRIBIR (Nuevos o Bajas Finalizadas) */}
                 {estaLibre && (
                   <div className="flex w-full gap-2">
                     <button onClick={() => { setAlumnoSeleccionado(hijo); setModoModal('inscripcion'); }} className="flex-1 bg-blue-600 text-white py-2 rounded-lg text-sm font-bold shadow-sm hover:bg-blue-700">
                         Inscribir
                     </button>
-                    
-                    {/* Solo mostramos la papelera si nunca ha estado inscrito (sin_inscripcion) para proteger historial */}
+                    {/* Solo mostramos borrar si es sin_inscripcion puro */}
                     {hijo.estado === 'sin_inscripcion' && (
                         <button onClick={() => gestionarBaja(hijo)} className="bg-white text-red-500 px-3 py-2 rounded-lg text-sm font-bold border border-red-200 hover:bg-red-50">🗑️</button>
                     )}
