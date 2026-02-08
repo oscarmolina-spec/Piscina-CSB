@@ -1157,7 +1157,11 @@ const Dashboard = ({ user, misHijos, logout, refresh }) => {
       {misHijos.map((hijo) => {
           // 1. LÓGICA DE ESTADO
           const esInfantil = (hijo.curso || '').toUpperCase().includes('INFANTIL');
+          
+          // ¿Tiene plaza real? (Si el admin validó O si es infantil)
           const estaAdmitido = hijo.validadoAdmin === true || esInfantil;
+          
+          // ¿Está libre para inscribirse? (Si no tiene nada O si ya terminó su baja)
           const estaLibre = hijo.estado === 'sin_inscripcion' || hijo.estado === 'baja_finalizada';
           
           let bordeColor = 'bg-gray-400';
@@ -1206,23 +1210,20 @@ const Dashboard = ({ user, misHijos, logout, refresh }) => {
                       'bg-green-50 border-green-100'
                     }`}>
                   
-                  {/* CASO: PENDIENTE DE VALIDAR (AMARILLO) - CORREGIDO */}
+                  {/* CASO: PENDIENTE DE VALIDAR (AMARILLO) */}
                   {!estaAdmitido && hijo.estado === 'inscrito' ? (
                       <div className="text-center">
-                          {/* 👇 AQUÍ ESTÁ EL CAMBIO: Ahora mostramos qué ha pedido */}
                           <p className="font-bold text-yellow-900 text-sm uppercase mb-1">{hijo.actividad}</p>
                           <div className="flex justify-center gap-2 text-yellow-800 text-xs mb-2 opacity-80">
                               <span>📅 {hijo.dias}</span><span>⏰ {hijo.horario}</span>
                           </div>
-                          
-                          {/* Aviso inferior */}
                           <div className="bg-white/50 rounded p-1 border border-yellow-200">
                               <p className="font-bold text-yellow-800 text-xs">⏳ Solicitud Recibida</p>
                               <p className="text-[10px] text-yellow-700">El coordinador está validando el nivel.</p>
                           </div>
                       </div>
                   ) : (
-                      /* CASO: ADMITIDO O BAJA PENDIENTE (VERDE O ROJO) */
+                      /* CASO: ADMITIDO O BAJA PENDIENTE */
                       <>
                         <p className="font-bold mb-1 text-gray-800">{hijo.actividad}</p>
                         <div className="flex items-center gap-2 text-gray-600"><span>📅 {hijo.dias}</span><span>⏰ {hijo.horario}</span></div>
@@ -1232,7 +1233,7 @@ const Dashboard = ({ user, misHijos, logout, refresh }) => {
                 </div>
               )}
               
-              {/* DATOS DE PRUEBA (Naranja - CON BOTONES RESTAURADOS) */}
+              {/* DATOS DE PRUEBA */}
               {hijo.estado === 'prueba_reservada' && (
                 <div className="ml-3 mt-4 bg-orange-50 p-3 rounded-lg border border-orange-200 text-sm">
                   <div className="mb-3 pb-3 border-b border-orange-200">
@@ -1268,21 +1269,40 @@ const Dashboard = ({ user, misHijos, logout, refresh }) => {
                  </div>
               )}
 
-              {/* BOTONES */}
+              {/* === BOTONES DE ACCIÓN (AQUÍ ESTÁ LA CORRECCIÓN) === */}
               <div className="mt-6 pt-4 ml-3 border-t border-gray-100 flex gap-2">
-                {hijo.estado === 'inscrito' && (
-                    <button onClick={() => gestionarBaja(hijo)} className="w-full bg-white text-red-600 px-3 py-2 rounded-lg text-sm font-bold border border-red-200 hover:bg-red-50">Tramitar Baja</button>
+                
+                {/* 1. SOLO SI TIENE PLAZA CONFIRMADA -> TRAMITAR BAJA (Oficial) */}
+                {hijo.estado === 'inscrito' && estaAdmitido && (
+                    <button onClick={() => gestionarBaja(hijo)} className="w-full bg-white text-red-600 px-3 py-2 rounded-lg text-sm font-bold border border-red-200 hover:bg-red-50">
+                        Tramitar Baja
+                    </button>
                 )}
+
+                {/* 2. SI ESTÁ INSCRITO PERO PENDIENTE -> CANCELAR (Borrado simple) */}
+                {hijo.estado === 'inscrito' && !estaAdmitido && (
+                    <button onClick={() => cancelarSolicitud(hijo)} className="w-full bg-white text-red-500 px-3 py-2 rounded-lg text-sm font-bold border border-red-200 hover:bg-red-50">
+                        ✖️ Cancelar Solicitud
+                    </button>
+                )}
+
+                {/* 3. INSCRIBIR (Nuevos o Bajas Finalizadas) */}
                 {estaLibre && (
                   <div className="flex w-full gap-2">
-                    <button onClick={() => { setAlumnoSeleccionado(hijo); setModoModal('inscripcion'); }} className="flex-1 bg-blue-600 text-white py-2 rounded-lg text-sm font-bold shadow-sm hover:bg-blue-700">Inscribir</button>
+                    <button onClick={() => { setAlumnoSeleccionado(hijo); setModoModal('inscripcion'); }} className="flex-1 bg-blue-600 text-white py-2 rounded-lg text-sm font-bold shadow-sm hover:bg-blue-700">
+                        Inscribir
+                    </button>
                     {hijo.estado === 'sin_inscripcion' && (
                         <button onClick={() => gestionarBaja(hijo)} className="bg-white text-red-500 px-3 py-2 rounded-lg text-sm font-bold border border-red-200 hover:bg-red-50">🗑️</button>
                     )}
                   </div>
                 )}
+
+                {/* 4. CANCELAR PRUEBA */}
                 {hijo.estado === 'prueba_reservada' && (
-                    <button onClick={() => cancelarSolicitud(hijo)} className="w-full bg-white text-red-500 px-3 py-2 rounded-lg text-sm font-bold border border-red-200 hover:bg-red-50">✖️ Cancelar Solicitud</button>
+                    <button onClick={() => cancelarSolicitud(hijo)} className="w-full bg-white text-red-500 px-3 py-2 rounded-lg text-sm font-bold border border-red-200 hover:bg-red-50">
+                        ✖️ Cancelar Solicitud
+                    </button>
                 )}
               </div>
             </div>
