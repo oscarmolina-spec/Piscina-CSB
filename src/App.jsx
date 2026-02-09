@@ -1390,42 +1390,30 @@ const FormularioEdicionHijo = ({ alumno, close, refresh }) => {
 const FormularioHijo = ({ close, user, refresh }) => {
   const [data, setData] = useState({ 
     nombre: '', 
-    // 👇 CAMBIO CLAVE: En vez de '3PRI', ponemos el código de 3 años (1INF o el que uses)
-    // O mejor aún: ponemos LISTA_CURSOS[0].val para que coja siempre el primero de la lista.
     telefono: '',
     curso: LISTA_CURSOS[0].val, 
     letra: 'A', 
     fechaNacimiento: '', 
-    esAntiguoAlumno: false, 
+    natacionPasado: 'no', // Usamos el nombre que pusimos en la PantallaPruebaNivel
     aceptaNormas: false, 
     autorizaFotos: false 
   });
 
-  // Le cambiamos el nombre para obligar al sistema a usar esta nueva
   const validarYGuardarAlumno = async () => {
-    // 1. Extraemos el teléfono y limpiamos espacios
     const telefonoLimpio = data?.telefono ? String(data.telefono).trim() : "";
     
-    // 2. PRUEBA DE CONEXIÓN
-    console.log("Validando teléfono:", telefonoLimpio);
-
-    // 3. EL MURO DE SEGURIDAD
-    if (telefonoLimpio.length < 9) {
-      alert(`⚠️ El teléfono debe tener 9 cifras (has puesto ${telefonoLimpio.length}). Corrígelo para continuar.`);
-      return; // Aquí se detiene todo. No llega al addDoc.
-    }
-
-    if (!data.nombre || data.nombre.trim() === "") {
-      alert("⚠️ El nombre es obligatorio.");
-      return;
-    }
+    // Validaciones
+    if (!data.nombre || data.nombre.trim() === "") return alert("⚠️ El nombre es obligatorio.");
+    if (!data.fechaNacimiento) return alert("⚠️ La fecha de nacimiento es obligatoria.");
+    if (!data.aceptaNormas) return alert("⚠️ Debes aceptar las normas.");
 
     try {
       await addDoc(collection(db, 'students'), {
-        parentId: user.uid,
         ...data,
-        telefono: telefonoLimpio, // Guardamos el número limpio
-        estado: 'sin_inscripcion'
+        parentId: user.uid,
+        telefono: telefonoLimpio,
+        estado: 'sin_inscripcion',
+        fechaCreacion: new Date().toISOString()
       });
       refresh(user.uid);
       close();
@@ -1433,147 +1421,73 @@ const FormularioHijo = ({ close, user, refresh }) => {
       console.error("Error al guardar:", error);
       alert("No se pudo guardar en la base de datos.");
     }
-};
+  };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
-      <div className="bg-white p-6 rounded-xl max-w-sm w-full shadow-2xl animate-fade-in-up">
-        <h3 className="text-xl font-bold mb-4 text-gray-800">Añadir Nuevo Alumno</h3>
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-[1000] backdrop-blur-sm">
+      <div className="bg-white p-6 rounded-2xl max-w-sm w-full shadow-2xl animate-in zoom-in">
+        <h3 className="text-xl font-bold mb-4 text-blue-900">Añadir Nuevo Alumno</h3>
         
-        {/* 1. CAMBIO IMPORTANTE: Quitamos <form> y ponemos <div> para control total */}
         <div className="space-y-4">
+          {/* CAMPO NOMBRE (Faltaba en tu código) */}
+          <div>
+            <label className="text-[10px] font-bold text-gray-400 uppercase">Nombre Completo *</label>
+            <input 
+              className="w-full border p-3 rounded-lg bg-gray-50" 
+              placeholder="Nombre y Apellidos"
+              value={data.nombre}
+              onChange={e => setData({...data, nombre: e.target.value})}
+            />
+          </div>
+
           
-        <input 
-  type="tel"
-  className="w-full border p-3 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none font-bold text-blue-600" 
-  placeholder="Ej: 600000000" 
-  // No usamos 'value' para evitar los errores de ayer
-  // Pero nos aseguramos de que el onChange actualice bien
-  onChange={e => {
-    const valorEntrada = e.target.value;
-    setData(prev => ({ 
-      ...(prev || {}), 
-      telefono: valorEntrada 
-    }));
-  }} 
-/>
-          
-          <div className="mt-4">
-        <label className="text-[10px] font-bold text-gray-400 uppercase">
-          Móvil de Contacto (Obligatorio)
-        </label>
-        
-        <input 
-          type="tel"
-          // 👇 AÑADE ESTA LÍNEA AQUÍ 👇
-          value={data.telefono || ''} 
-          
-          className="w-full border p-3 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none font-bold text-blue-600" 
-          placeholder="Ej: 600000000" 
-          onChange={e => setData({ ...data, telefono: e.target.value })} 
-        />
-      </div>
-          
-          {/* LOGICA DE HERMANOS ARREGLADA: Usamos 'checked' en vez de 'defaultChecked' */}
+          {/* LÓGICA DE NATACIÓN (Sincronizada con el Pase VIP) */}
           <div className="bg-blue-50 p-3 rounded-lg border border-blue-100">
-            <label className="text-sm font-bold text-blue-900 block mb-2">¿Fue alumno el año pasado?</label>
+            <label className="text-sm font-bold text-blue-900 block mb-2">¿Estuvo en natación el curso pasado?</label>
             <div className="flex gap-4">
-              <label className="flex items-center gap-2 cursor-pointer">
+              <label className="flex items-center gap-2 cursor-pointer text-sm">
                 <input 
                   type="radio" 
                   name="antiguo" 
-                  checked={data.esAntiguoAlumno === true} 
-                  onChange={() => setData({ ...data, esAntiguoAlumno: true })} 
-                /> 
-                Sí (No necesita prueba)
+                  checked={data.natacionPasado === 'si'} 
+                  onChange={() => setData({ ...data, natacionPasado: 'si' })} 
+                /> Sí
               </label>
-              <label className="flex items-center gap-2 cursor-pointer">
+              <label className="flex items-center gap-2 cursor-pointer text-sm">
                 <input 
                   type="radio" 
                   name="antiguo" 
-                  checked={data.esAntiguoAlumno === false} 
-                  onChange={() => setData({ ...data, esAntiguoAlumno: false })} 
-                /> 
-                No
+                  checked={data.natacionPasado === 'no'} 
+                  onChange={() => setData({ ...data, natacionPasado: 'no' })} 
+                /> No
               </label>
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-2">
-            <div>
-                <label className="text-xs text-gray-500 font-bold uppercase">Curso</label>
-                <select 
-                  className="w-full border p-2 rounded-lg" 
-                  value={data.curso || ''}
-                  onChange={e => setData({ ...data, curso: e.target.value })}
-                >
-                {LISTA_CURSOS.map(c => <option key={c.val} value={c.val}>{c.label}</option>)}
-                </select>
-            </div>
-            <div>
-                <label className="text-xs text-gray-500 font-bold uppercase">Letra</label>
-                <select 
-                  className="w-full border p-2 rounded-lg" 
-                  value={data.letra || ''}
-                  onChange={e => setData({ ...data, letra: e.target.value })}
-                >
-                <option>A</option><option>B</option><option>C</option>
-                </select>
-            </div>
+            <select className="border p-2 rounded-lg text-sm" value={data.curso} onChange={e => setData({ ...data, curso: e.target.value })}>
+              {LISTA_CURSOS.map(c => <option key={c.val} value={c.val}>{c.label}</option>)}
+            </select>
+            <select className="border p-2 rounded-lg text-sm" value={data.letra} onChange={e => setData({ ...data, letra: e.target.value })}>
+              <option>A</option><option>B</option><option>C</option>
+            </select>
           </div>
           
           <div>
-            <label className="text-xs text-gray-500 font-bold uppercase">Fecha Nacimiento</label>
-            <input 
-              type="date" 
-              className="w-full border p-2 rounded-lg" 
-              value={data.fechaNacimiento || ''}
-              onChange={e => setData({ ...data, fechaNacimiento: e.target.value })} 
-            />
+            <label className="text-[10px] font-bold text-gray-400 uppercase">Fecha Nacimiento *</label>
+            <input type="date" className="w-full border p-2 rounded-lg text-sm" value={data.fechaNacimiento} onChange={e => setData({ ...data, fechaNacimiento: e.target.value })} />
           </div>
 
-          <div className="text-xs space-y-2 pt-2 border-t">
-            <label className="flex gap-2 cursor-pointer items-start">
-                <input type="checkbox" className="mt-0.5" checked={data.aceptaNormas} onChange={e => setData({ ...data, aceptaNormas: e.target.checked })} /> 
-                Acepto normas de funcionamiento (OBLIGATORIO)
-            </label>
-            <label className="flex gap-2 cursor-pointer items-start">
-                <input type="checkbox" className="mt-0.5" checked={data.autorizaFotos} onChange={e => setData({ ...data, autorizaFotos: e.target.checked })} /> 
-                Autorizo fotos/vídeos
-            </label>
+          <div className="text-[10px] space-y-1 pt-2 border-t">
+            <label className="flex gap-2 items-center"><input type="checkbox" checked={data.aceptaNormas} onChange={e => setData({ ...data, aceptaNormas: e.target.checked })} /> Acepto normas (Obligatorio)</label>
+            <label className="flex gap-2 items-center"><input type="checkbox" checked={data.autorizaFotos} onChange={e => setData({ ...data, autorizaFotos: e.target.checked })} /> Autorizo fotos</label>
           </div>
 
           <div className="flex gap-2 pt-2">
-          <button 
-  type="button" 
-  onClick={() => {
-    // 1. Extraemos el teléfono que hay en ese momento
-    const num = data?.telefono ? String(data.telefono).trim() : "";
-    
-    // 2. BLOQUEO DIRECTO
-    if (num.length < 9) {
-      alert("⚠️ Error: El teléfono debe tener al menos 9 cifras. Has puesto: " + num.length);
-      return; // Aquí se frena y no hace el save()
-    }
-
-    // 3. Si es correcto, entonces llamamos a la función de guardar
-    validarYGuardarAlumno(); 
-  }} 
-  className="flex-1 bg-blue-600 text-white py-2 rounded-lg font-bold hover:bg-blue-700 shadow-md"
->
-  Crear Perfil
-</button>
-            
-            {/* 2. CAMBIO CLAVE: Botón manual que dispara 'save' directamente */}
-            <button 
-              type="button" 
-              onClick={guardarDatos}
-              className="flex-1 bg-blue-600 text-white py-2 rounded-lg font-bold hover:bg-blue-700 shadow-md"
-            >
-              Crear Perfil
-            </button>
+            <button type="button" onClick={close} className="flex-1 bg-gray-100 text-gray-500 py-3 rounded-xl font-bold text-sm">Cancelar</button>
+            <button type="button" onClick={validarYGuardarAlumno} className="flex-1 bg-blue-600 text-white py-3 rounded-xl font-bold text-sm shadow-md">Crear Perfil</button>
           </div>
-        </div> {/* Cerramos div en vez de form */}
+        </div>
       </div>
     </div>
   );
