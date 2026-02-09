@@ -1083,8 +1083,9 @@ const Dashboard = ({ user, misHijos, logout, refresh }) => {
   }, []);
 
   const alTerminarPrueba = () => {
-      setModoModal('inscripcion'); 
-      refresh(user.uid);
+    // 1. Cerramos el modal de la prueba
+    // 2. Abrimos inmediatamente el modal de inscripción (selección de grupo)
+    setModoModal('inscripcion'); 
   };
 
   // 👇 1. FUNCIÓN NUEVA: CANCELAR SOLICITUD (Borrado rápido)
@@ -1767,6 +1768,31 @@ const PantallaPruebaNivel = ({ alumno, close, onSuccess, user }) => {
   const [ocupacion, setOcupacion] = useState({});
 
   if (!alumno) return null;
+  // BLOQUEO PARA ANTIGUOS ALUMNOS (PASE VIP)
+  if (alumno.natacionPasado === 'si') {
+    return (
+      <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-[999] backdrop-blur-sm">
+        <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-8 text-center animate-in zoom-in">
+          <div className="w-20 h-20 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-4 text-4xl">
+            ✅
+          </div>
+          <h3 className="text-2xl font-black text-blue-900 mb-2">¡Alumno Exento!</h3>
+          <p className="text-gray-600 mb-6">
+            Como <strong>{alumno.nombre}</strong> ya estuvo en natación el curso pasado, no necesita realizar la prueba de nivel.
+          </p>
+          <button 
+            onClick={() => {
+              if (onSuccess) onSuccess(); // Esto activará el paso a los grupos
+              close();
+            }}
+            className="w-full bg-blue-600 text-white p-4 rounded-2xl font-bold shadow-lg hover:bg-blue-700 transition"
+          >
+            Continuar a Selección de Grupo
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   // 1. FUNCIÓN PARA VALIDAR SI ES LUNES
   const validarSiEsLunes = (e) => {
@@ -2106,6 +2132,33 @@ const Login = ({ setView }) => {
     placeholder="Nombre y Apellidos del Alumno *" 
     onChange={e => setRegData({ ...regData, nombreAlumno: e.target.value })} 
   />
+  {/* NUEVA PREGUNTA DE NATACIÓN */}
+  <div className="md:col-span-2 bg-blue-50 p-4 rounded-xl border border-blue-200 my-2">
+      <p className="text-sm font-bold text-blue-900 mb-3">
+        ¿Estuvo inscrito en natación extraescolar en este colegio durante el curso pasado?
+      </p>
+      <div className="flex flex-wrap gap-6">
+        <label className="flex items-center gap-2 cursor-pointer group">
+          <input 
+            type="radio" 
+            name="natacionPasado" 
+            checked={regData.natacionPasado === 'si'}
+            onChange={() => setRegData({...regData, natacionPasado: 'si'})} 
+          /> 
+          <span className="text-sm font-medium text-gray-700">Sí (Sin prueba de nivel)</span>
+        </label>
+        
+        <label className="flex items-center gap-2 cursor-pointer group">
+          <input 
+            type="radio" 
+            name="natacionPasado" 
+            checked={regData.natacionPasado === 'no'}
+            onChange={() => setRegData({...regData, natacionPasado: 'no'})} 
+          /> 
+          <span className="text-sm font-medium text-gray-700">No</span>
+        </label>
+      </div>
+    </div>
 
   {/* Curso y Letra: Comparten fila */}
   <select className="border p-2 rounded bg-white" onChange={e => setRegData({ ...regData, curso: e.target.value })}>
