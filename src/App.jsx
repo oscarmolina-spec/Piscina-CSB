@@ -294,8 +294,10 @@ const LandingPage = ({ setView }) => {
         </div>
         <div className="relative z-20 text-center px-4 max-w-4xl mx-auto flex flex-col items-center">
         <img src={IMG_ESCUDO_BLANCO} className="h-28 mx-auto mb-6 drop-shadow-2xl" alt="Escudo" />
-          <h1 className="text-4xl md:text-6xl font-extrabold mb-4 drop-shadow-md text-white [-webkit-text-stroke:2px_#2563eb]">
-  Escuela de Natación <br /> San Buenaventura
+        <h1 className="text-4xl md:text-6xl font-black mb-4 text-white leading-tight
+  [text-shadow:_2px_2px_0_#2563eb,_-2px_-2px_0_#2563eb,_2px_-2px_0_#2563eb,_-2px_2px_0_#2563eb,_0_4px_6px_rgba(0,0,0,0.3)]">
+  Escuela de Natación <br /> 
+  <span className="tracking-tight">San Buenaventura</span>
 </h1>
           
           {/* 👇 AQUÍ ESTÁN LAS FRASES QUE FALTABAN 👇 */}

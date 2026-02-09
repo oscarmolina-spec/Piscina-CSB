@@ -16,10 +16,29 @@
       * {
         font-family: 'Outfit', sans-serif !important;
       }
-      /* Ajuste para que el título de la escuela no se rompa en móviles pequeños */
-      h1 {
-        word-break: break-word;
-        hyphens: auto;
+    
+      .titulo-escuela {
+        /* 1. Relleno blanco puro */
+        color: white !important;
+        
+        /* 2. Grosor del borde (ajústalo a tu gusto, 2px suele ser ideal) */
+        -webkit-text-stroke: 6px #2563eb; 
+        
+        /* 3. LA LLAVE MAESTRA: Envía el borde al fondo */
+        paint-order: stroke fill;
+        
+        /* 4. Sombra para dar profundidad y que resalte sobre el fondo */
+        text-shadow: 0 4px 6px rgba(0,0,0,0.2);
+        
+        /* 5. Un pelín de separación entre letras para que no se toquen los bordes */
+        letter-spacing: 0.01em;
+      }
+    
+      /* Ajuste para que en móvil no se vea gigantesco y se rompa */
+      @media (max-width: 768px) {
+        .titulo-escuela {
+          -webkit-text-stroke: 4px #2563eb; /* Borde un pelín más fino en móvil */
+        }
       }
     </style>
   </head>
