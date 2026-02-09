@@ -1324,69 +1324,6 @@ const Dashboard = ({ user, misHijos, logout, refresh }) => {
 // ==========================================
 // ✏️ FORMULARIO EDICIÓN DE DATOS
 // ==========================================
-const FormularioEdicionHijo = ({ alumno, close, refresh }) => {
-  const [data, setData] = useState({ 
-    nombre: alumno.nombre, 
-    curso: alumno.curso, 
-    letra: alumno.letra, 
-    fechaNacimiento: alumno.fechaNacimiento || '' 
-  });
-
-  const handleUpdate = async (e) => {
-    e.preventDefault();
-    try {
-        await updateDoc(doc(db, 'students', alumno.id), data);
-        refresh(auth.currentUser.uid);
-        close();
-    } catch (error) {
-        alert("Error al actualizar: " + error.message);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
-      <div className="bg-white p-6 rounded-xl max-w-sm w-full shadow-2xl animate-fade-in-up">
-        <h3 className="text-xl font-bold mb-4 text-blue-900 border-b pb-2">Editar Datos Personales</h3>
-        <form onSubmit={handleUpdate} className="space-y-4">
-          <div>
-            <label className="text-xs font-bold text-gray-500 uppercase">Nombre Completo</label>
-            <input className="w-full border border-gray-300 p-2 rounded focus:ring-2 focus:ring-blue-500 outline-none" value={data.nombre} onChange={(e) => setData({ ...data, nombre: e.target.value })} />
-          </div>
-          <div>
-            <label className="text-xs font-bold text-gray-500 uppercase">Fecha Nacimiento</label>
-            <input type="date" className="w-full border border-gray-300 p-2 rounded focus:ring-2 focus:ring-blue-500 outline-none" value={data.fechaNacimiento} onChange={(e) => setData({ ...data, fechaNacimiento: e.target.value })} />
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-          <div>
-                <label className="text-xs text-gray-500 font-bold uppercase">Curso</label>
-                <select 
-                    value={data.curso} // 👈 AÑADE ESTO SI NO LO TIENES
-                    className="w-full border p-2 rounded-lg" 
-                    onChange={e => setData({ ...data, curso: e.target.value })}
-                >
-                {LISTA_CURSOS.map(c => <option key={c.val} value={c.val}>{c.label}</option>)}
-                </select>
-            </div>
-            <div>
-              <label className="text-xs font-bold text-gray-500 uppercase">Letra</label>
-              <select className="w-full border border-gray-300 p-2 rounded focus:ring-2 focus:ring-blue-500 outline-none" value={data.letra} onChange={(e) => setData({ ...data, letra: e.target.value })}>
-                <option>A</option><option>B</option><option>C</option>
-              </select>
-            </div>
-          </div>
-          <div className="flex gap-2 pt-4">
-            <button type="button" onClick={close} className="flex-1 border border-gray-300 py-2 rounded text-gray-600 font-bold hover:bg-gray-50">Cancelar</button>
-            <button className="flex-1 bg-blue-600 text-white py-2 rounded font-bold hover:bg-blue-700 shadow-lg">Guardar Cambios</button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-};
-
-// ==========================================
-// ➕ FORMULARIO ALTA HIJO
-// ==========================================
 const FormularioHijo = ({ close, user, refresh }) => {
   const [data, setData] = useState({ 
     nombre: '', 
@@ -1394,7 +1331,7 @@ const FormularioHijo = ({ close, user, refresh }) => {
     curso: LISTA_CURSOS[0].val, 
     letra: 'A', 
     fechaNacimiento: '', 
-    natacionPasado: 'no', // Usamos el nombre que pusimos en la PantallaPruebaNivel
+    natacionPasado: 'no', 
     aceptaNormas: false, 
     autorizaFotos: false 
   });
@@ -1408,13 +1345,21 @@ const FormularioHijo = ({ close, user, refresh }) => {
     if (!data.aceptaNormas) return alert("⚠️ Debes aceptar las normas.");
 
     try {
+      // Determinamos si es infantil para dejarlo anotado
+      const esInfantil = (data.curso || '').toUpperCase().includes('INF');
+
       await addDoc(collection(db, 'students'), {
         ...data,
         parentId: user.uid,
         telefono: telefonoLimpio,
+        // FORZAMOS el guardado de estos campos para la lógica de la PantallaPruebaNivel
+        natacionPasado: data.natacionPasado, 
+        esAntiguoAlumno: data.natacionPasado === 'si',
+        esInfantil: esInfantil,
         estado: 'sin_inscripcion',
         fechaCreacion: new Date().toISOString()
       });
+      
       refresh(user.uid);
       close();
     } catch (error) {
@@ -1424,68 +1369,70 @@ const FormularioHijo = ({ close, user, refresh }) => {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-[1000] backdrop-blur-sm">
-      <div className="bg-white p-6 rounded-2xl max-w-sm w-full shadow-2xl animate-in zoom-in">
-        <h3 className="text-xl font-bold mb-4 text-blue-900">Añadir Nuevo Alumno</h3>
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-[1000]">
+      <div className="bg-white p-6 rounded-2xl shadow-xl w-full max-w-md">
+        <h2 className="text-xl font-bold text-blue-900 mb-4">👶 Añadir Estudiante</h2>
         
         <div className="space-y-4">
-          {/* CAMPO NOMBRE (Faltaba en tu código) */}
-          <div>
-            <label className="text-[10px] font-bold text-gray-400 uppercase">Nombre Completo *</label>
-            <input 
-              className="w-full border p-3 rounded-lg bg-gray-50" 
-              placeholder="Nombre y Apellidos"
-              value={data.nombre}
-              onChange={e => setData({...data, nombre: e.target.value})}
-            />
-          </div>
+          <input 
+            className="w-full border p-3 rounded-lg" 
+            placeholder="Nombre y Apellidos *" 
+            onChange={e => setData({...data, nombre: e.target.value})} 
+          />
 
-          
-          {/* LÓGICA DE NATACIÓN (Sincronizada con el Pase VIP) */}
-          <div className="bg-blue-50 p-3 rounded-lg border border-blue-100">
-            <label className="text-sm font-bold text-blue-900 block mb-2">¿Estuvo en natación el curso pasado?</label>
-            <div className="flex gap-4">
-              <label className="flex items-center gap-2 cursor-pointer text-sm">
+          {/* PREGUNTA DE NATACIÓN */}
+          <div className="bg-blue-50 p-4 rounded-xl border border-blue-100">
+            <p className="text-sm font-bold text-blue-800 mb-2">¿Estuvo en natación el curso pasado?</p>
+            <div className="flex gap-6">
+              <label className="flex items-center gap-2 cursor-pointer">
                 <input 
                   type="radio" 
-                  name="antiguo" 
+                  name="nat" 
                   checked={data.natacionPasado === 'si'} 
-                  onChange={() => setData({ ...data, natacionPasado: 'si' })} 
-                /> Sí
+                  onChange={() => setData({...data, natacionPasado: 'si'})} 
+                /> 
+                <span className="text-sm font-medium">Sí</span>
               </label>
-              <label className="flex items-center gap-2 cursor-pointer text-sm">
+              <label className="flex items-center gap-2 cursor-pointer">
                 <input 
                   type="radio" 
-                  name="antiguo" 
+                  name="nat" 
                   checked={data.natacionPasado === 'no'} 
-                  onChange={() => setData({ ...data, natacionPasado: 'no' })} 
-                /> No
+                  onChange={() => setData({...data, natacionPasado: 'no'})} 
+                /> 
+                <span className="text-sm font-medium">No</span>
               </label>
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-2">
-            <select className="border p-2 rounded-lg text-sm" value={data.curso} onChange={e => setData({ ...data, curso: e.target.value })}>
+            <select className="border p-3 rounded-lg" value={data.curso} onChange={e => setData({...data, curso: e.target.value})}>
               {LISTA_CURSOS.map(c => <option key={c.val} value={c.val}>{c.label}</option>)}
             </select>
-            <select className="border p-2 rounded-lg text-sm" value={data.letra} onChange={e => setData({ ...data, letra: e.target.value })}>
+            <select className="border p-3 rounded-lg" value={data.letra} onChange={e => setData({...data, letra: e.target.value})}>
               <option>A</option><option>B</option><option>C</option>
             </select>
           </div>
-          
-          <div>
-            <label className="text-[10px] font-bold text-gray-400 uppercase">Fecha Nacimiento *</label>
-            <input type="date" className="w-full border p-2 rounded-lg text-sm" value={data.fechaNacimiento} onChange={e => setData({ ...data, fechaNacimiento: e.target.value })} />
-          </div>
 
-          <div className="text-[10px] space-y-1 pt-2 border-t">
-            <label className="flex gap-2 items-center"><input type="checkbox" checked={data.aceptaNormas} onChange={e => setData({ ...data, aceptaNormas: e.target.checked })} /> Acepto normas (Obligatorio)</label>
-            <label className="flex gap-2 items-center"><input type="checkbox" checked={data.autorizaFotos} onChange={e => setData({ ...data, autorizaFotos: e.target.checked })} /> Autorizo fotos</label>
-          </div>
+          <input 
+            type="date" 
+            className="w-full border p-3 rounded-lg" 
+            onChange={e => setData({...data, fechaNacimiento: e.target.value})} 
+          />
 
-          <div className="flex gap-2 pt-2">
-            <button type="button" onClick={close} className="flex-1 bg-gray-100 text-gray-500 py-3 rounded-xl font-bold text-sm">Cancelar</button>
-            <button type="button" onClick={validarYGuardarAlumno} className="flex-1 bg-blue-600 text-white py-3 rounded-xl font-bold text-sm shadow-md">Crear Perfil</button>
+          <label className="flex items-center gap-2 text-xs text-gray-600">
+            <input type="checkbox" onChange={e => setData({...data, aceptaNormas: e.target.checked})} />
+            Acepto las normas de funcionamiento *
+          </label>
+
+          <div className="flex gap-3 mt-4">
+            <button onClick={close} className="flex-1 py-3 text-gray-500 font-bold">Cancelar</button>
+            <button 
+              onClick={validarYGuardarAlumno} 
+              className="flex-1 bg-blue-600 text-white py-3 rounded-xl font-bold shadow-lg hover:bg-blue-700"
+            >
+              Guardar
+            </button>
           </div>
         </div>
       </div>
@@ -1523,29 +1470,50 @@ const PantallaInscripcion = ({ alumno, close, onRequirePrueba, user, refresh }) 
 
   // 2. FUNCIÓN DE INSCRIPCIÓN
   const inscribir = async (act, op) => {
-    // LEEMOS LA REFERENCIA DIRECTAMENTE (.current)
-    // Esto evita el bug de que la variable no se haya actualizado aún
     if (normasRef.current !== true) {
-        return alert("⚠️ Es obligatorio aceptar las normas y condiciones para poder inscribirse.");
+        return alert("⚠️ Es obligatorio aceptar las normas.");
     }
     
+    // 🔄 LECTURA DE SEGURIDAD
+    const alumnoRef = doc(db, 'students', alumno.id);
+    const snap = await getDoc(alumnoRef);
+    const d = snap.exists() ? snap.data() : alumno;
+
+    // 🕵️‍♂️ MODO DETECTIVE: Esto te dirá en la consola (F12) qué está pasando
+    console.log("DEBUG INSCRIPCIÓN:", {
+        nombre: d.nombre,
+        curso: d.curso,
+        natacionPasado: d.natacionPasado,
+        esAntiguo: d.esAntiguoAlumno
+    });
+
     const datosComunes = {
-        nombre: datosAlumno.nombre, 
-        curso: datosAlumno.curso, 
-        fechaNacimiento: datosAlumno.fechaNacimiento,
+        nombre: d.nombre, 
+        curso: d.curso, 
         actividad: act.nombre,
         dias: op.dias,
         horario: op.horario,
         precio: op.precio,
-        aceptaNormas: true,
+        estado: 'inscrito', // Por defecto los VIP entran como inscritos
         fechaInscripcion: new Date().toISOString()
     };
 
-    // CASO A: REQUIERE PRUEBA DE NIVEL
-    if (act.requierePrueba && !alumno.esAntiguoAlumno && !alumno.citaNivel && alumno.estado !== 'prueba_reservada') {
-        if(!confirm(`⚠️ ATENCIÓN: Esta actividad requiere PRUEBA DE NIVEL.\n\nLa plaza quedará reservada pendiente de validación.\n\n¿Continuar para elegir hora de la prueba?`)) return;
+    // 🛡️ EL FILTRO DEFINITIVO (Pase VIP)
+    const cursoNombre = (d.curso || '').toUpperCase();
+    const esInfantil = cursoNombre.includes('INF');
+    
+    // Comprobamos todas las formas en las que hayamos podido guardar el "SÍ"
+    const tienePaseVIP = 
+        d.natacionPasado === 'si' || 
+        d.esAntiguoAlumno === true || 
+        d.esAntiguoAlumno === 'true' ||
+        d.antiguo === 'si';
 
-        await updateDoc(doc(db, 'students', alumno.id), { 
+    // CASO A: SOLO ENTRA SI NO ES INFANTIL Y NO ES VIP
+    if (act.requierePrueba && !esInfantil && !tienePaseVIP && !d.citaNivel && d.estado !== 'prueba_reservada') {
+        if(!confirm(`⚠️ Esta actividad requiere PRUEBA DE NIVEL.\n\n¿Continuar para elegir hora?`)) return;
+
+        await updateDoc(alumnoRef, { 
             ...datosComunes,
             estado: 'prueba_reservada'
         });
@@ -1555,10 +1523,10 @@ const PantallaInscripcion = ({ alumno, close, onRequirePrueba, user, refresh }) 
         return; 
     }
 
-    // CASO B: INSCRIPCIÓN DIRECTA
-    if (!confirm(`¿Confirmar inscripción definitiva en:\n📘 ${act.nombre}\n📅 ${op.dias}\n⏰ ${op.horario}?`)) return;
+    // CASO B: INSCRIPCIÓN DIRECTA (VIP e INFANTIL caen aquí)
+    if (!confirm(`¿Confirmar inscripción definitiva en ${act.nombre}?`)) return;
     
-    await updateDoc(doc(db, 'students', alumno.id), { 
+    await updateDoc(alumnoRef, { 
         ...datosComunes,
         estado: 'inscrito'
     });
@@ -1566,7 +1534,7 @@ const PantallaInscripcion = ({ alumno, close, onRequirePrueba, user, refresh }) 
     alert("✅ ¡Inscripción realizada con éxito!");
     refresh(user.uid); 
     close();
-  };
+};
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
@@ -1779,6 +1747,36 @@ const PantallaPruebaNivel = ({ alumno, close, onSuccess, user }) => {
       setLoading(false);
     }
   };
+  // 🚀 ATAJO PARA ANTIGUOS ALUMNOS (PASE VIP)
+  // Comprobamos si marcó 'si' en natacionPasado (o esAntiguoAlumno, según tu variable)
+  if (alumno.natacionPasado === 'si' || alumno.esAntiguoAlumno === true) {
+    return (
+      <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-[999] backdrop-blur-sm">
+        <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-8 text-center animate-in zoom-in">
+          <div className="w-20 h-20 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-4 text-4xl">
+            ✅
+          </div>
+          <h3 className="text-2xl font-black text-blue-900 mb-2">¡Pase Directo!</h3>
+          <p className="text-gray-600 mb-6 font-medium">
+            Como <strong>{alumno.nombre}</strong> ya estuvo en natación el curso pasado, no necesita realizar la prueba de nivel.
+          </p>
+          <button 
+            onClick={async () => {
+              // Marcamos como exento en la base de datos por si acaso
+              await updateDoc(doc(db, 'students', alumno.id), {
+                citaNivel: 'EXENTO - ANTIGUO ALUMNO'
+              });
+              if (onSuccess) onSuccess(); // Esto abre el modal de inscripción automáticamente
+              close();
+            }}
+            className="w-full bg-green-600 text-white p-4 rounded-2xl font-black shadow-lg hover:bg-green-700 transition transform active:scale-95"
+          >
+            ELEGIR GRUPO Y HORARIO
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-[999] backdrop-blur-sm">
@@ -1947,19 +1945,26 @@ const Login = ({ setView }) => {
       });
       
       // Guardar Alumno
+      // Guardar Alumno (Corregido)
       await addDoc(collection(db, 'students'), { 
-          parentId: cred.user.uid, 
-          nombre: regData.nombreAlumno, 
-          curso: regData.curso, 
-          letra: regData.letra, 
-          fechaNacimiento: regData.fechaNacAlumno, 
-          esAntiguoAlumno: regData.esAntiguoAlumno,
-          alergias: regData.alergias, 
-          observaciones: regData.observaciones,
-          estado: 'sin_inscripcion', 
-          aceptaNormas: false, 
-          autorizaFotos: false 
-      });
+        parentId: cred.user.uid, 
+        nombre: regData.nombreAlumno, 
+        curso: regData.curso, 
+        letra: regData.letra, 
+        fechaNacimiento: regData.fechaNacAlumno, 
+        
+        // 🔑 AQUÍ ESTÁ EL ARREGLO:
+        // Guardamos natacionPasado (que es lo que el filtro lee) 
+        // basándonos en lo que viene del formulario
+        natacionPasado: regData.natacionPasado || 'no',
+        esAntiguoAlumno: regData.natacionPasado === 'si' ? true : false,
+        
+        alergias: regData.alergias || '', 
+        observaciones: regData.observaciones || '',
+        estado: 'sin_inscripcion', 
+        aceptaNormas: false, 
+        autorizaFotos: false 
+    });
       
       alert("✅ ¡Registro completado! Ya puedes entrar.");
       // Limpiamos o redirigimos si quieres
