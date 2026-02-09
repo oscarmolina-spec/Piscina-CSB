@@ -2133,7 +2133,19 @@ const Login = ({ setView }) => {
     <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4 relative">
       <button onClick={() => setView('landing')} className="absolute top-4 left-4 font-bold text-gray-500 hover:text-black flex items-center gap-2">⬅ Volver al Inicio</button>
       <div className="bg-white p-8 rounded-xl shadow-xl w-full max-w-md animate-fade-in">
-        <div className="text-center mb-6"><img src={IMG_ESCUDO} className="h-16 mx-auto mb-4" alt="Logo" /><h2 className="text-2xl font-bold mb-2 text-blue-900">Acceso Familias</h2><p className="text-gray-500 text-sm">Gestiona tus inscripciones y pruebas</p></div>
+      <div className="text-center mb-8">
+  <img 
+    src={IMG_ESCUDO} 
+    className="h-24 md:h-32 mx-auto mb-6 drop-shadow-md transition-transform hover:scale-105" 
+    alt="Logo San Buenaventura" 
+  />
+  <h2 className="text-3xl font-black mb-2 text-blue-900 tracking-tight">
+    Acceso Familias
+  </h2>
+  <p className="text-gray-500 text-sm font-medium">
+    Gestiona tus inscripciones y pruebas de nivel
+  </p>
+</div>
         <form onSubmit={handleAuth} className="space-y-4">
           <input className="w-full border p-3 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" type="email" placeholder="Tu Email" onChange={e => setLoginData({ ...loginData, email: e.target.value })} />
           <input className="w-full border p-3 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" type="password" placeholder="Contraseña" onChange={e => setLoginData({ ...loginData, password: e.target.value })} />
