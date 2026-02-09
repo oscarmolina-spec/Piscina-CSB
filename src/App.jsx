@@ -1401,21 +1401,21 @@ const FormularioHijo = ({ close, user, refresh }) => {
   });
 
   // Le cambiamos el nombre para obligar al sistema a usar esta nueva
-  const save = async () => {
-    // 1. Limpiamos el número (quitamos espacios si los hubiera)
-    const movil = data.telefono ? String(data.telefono).trim() : "";
+  const validarYGuardarAlumno = async () => {
+    // 1. Extraemos el teléfono y limpiamos espacios
+    const telefonoLimpio = data?.telefono ? String(data.telefono).trim() : "";
     
-    // 2. CHIVATO: Esto nos dirá la verdad en la cara
-    // Si ves este alert con un número largo pero tú escribiste uno corto, es que el estado no se limpió.
-    console.log("Intentando guardar:", movil); 
+    // 2. PRUEBA DE CONEXIÓN
+    console.log("Validando teléfono:", telefonoLimpio);
 
-    if (movil.length < 9) {
-      alert(`⛔ ERROR: El número "${movil}" solo tiene ${movil.length} dígitos. Mínimo 9.`);
-      return; // SE ACABÓ. Aquí muere la función.
+    // 3. EL MURO DE SEGURIDAD
+    if (telefonoLimpio.length < 9) {
+      alert(`⚠️ El teléfono debe tener 9 cifras (has puesto ${telefonoLimpio.length}). Corrígelo para continuar.`);
+      return; // Aquí se detiene todo. No llega al addDoc.
     }
 
-    if (!data.nombre) {
-      alert("⛔ Falta el nombre.");
+    if (!data.nombre || data.nombre.trim() === "") {
+      alert("⚠️ El nombre es obligatorio.");
       return;
     }
 
@@ -1423,16 +1423,16 @@ const FormularioHijo = ({ close, user, refresh }) => {
       await addDoc(collection(db, 'students'), {
         parentId: user.uid,
         ...data,
-        telefono: movil,
+        telefono: telefonoLimpio, // Guardamos el número limpio
         estado: 'sin_inscripcion'
       });
       refresh(user.uid);
       close();
     } catch (error) {
-      console.error(error);
-      alert("Error al guardar en base de datos.");
+      console.error("Error al guardar:", error);
+      alert("No se pudo guardar en la base de datos.");
     }
-  };
+};
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
@@ -1442,12 +1442,20 @@ const FormularioHijo = ({ close, user, refresh }) => {
         {/* 1. CAMBIO IMPORTANTE: Quitamos <form> y ponemos <div> para control total */}
         <div className="space-y-4">
           
-          <input 
-            className="w-full border p-3 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" 
-            placeholder="Nombre y Apellidos" 
-            value={data.nombre || ''} // Asegura que se limpie al cambiar de hermano
-            onChange={e => setData({ ...data, nombre: e.target.value })} 
-          />
+        <input 
+  type="tel"
+  className="w-full border p-3 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none font-bold text-blue-600" 
+  placeholder="Ej: 600000000" 
+  // No usamos 'value' para evitar los errores de ayer
+  // Pero nos aseguramos de que el onChange actualice bien
+  onChange={e => {
+    const valorEntrada = e.target.value;
+    setData(prev => ({ 
+      ...(prev || {}), 
+      telefono: valorEntrada 
+    }));
+  }} 
+/>
           
           <div className="mt-4">
         <label className="text-[10px] font-bold text-gray-400 uppercase">
@@ -1535,13 +1543,25 @@ const FormularioHijo = ({ close, user, refresh }) => {
           </div>
 
           <div className="flex gap-2 pt-2">
-            <button 
-              type="button" 
-              onClick={close} 
-              className="flex-1 text-gray-500 font-bold py-2 hover:bg-gray-100 rounded-lg"
-            >
-              Cancelar
-            </button>
+          <button 
+  type="button" 
+  onClick={() => {
+    // 1. Extraemos el teléfono que hay en ese momento
+    const num = data?.telefono ? String(data.telefono).trim() : "";
+    
+    // 2. BLOQUEO DIRECTO
+    if (num.length < 9) {
+      alert("⚠️ Error: El teléfono debe tener al menos 9 cifras. Has puesto: " + num.length);
+      return; // Aquí se frena y no hace el save()
+    }
+
+    // 3. Si es correcto, entonces llamamos a la función de guardar
+    validarYGuardarAlumno(); 
+  }} 
+  className="flex-1 bg-blue-600 text-white py-2 rounded-lg font-bold hover:bg-blue-700 shadow-md"
+>
+  Crear Perfil
+</button>
             
             {/* 2. CAMBIO CLAVE: Botón manual que dispara 'save' directamente */}
             <button 
@@ -1936,16 +1956,29 @@ const Login = ({ setView }) => {
 
     // 3. Validaciones Específicas
     if (regData.tipo === 'externo') {
-        if (!regData.nombrePagador) return alert('⚠️ Falta: Nombre del Pagador');
-        if (!regData.dniPagador) return alert('⚠️ Falta: DNI del Pagador');
-        if (!regData.telefono1) return alert('⚠️ Falta: Teléfono de contacto');
-        if (!regData.direccion) return alert('⚠️ Falta: Dirección');
-        if (!regData.cp) return alert('⚠️ Falta: Código Postal');
-        if (!regData.iban) return alert('⚠️ Falta: IBAN Bancario');
-        if (!regData.emailPagador) return alert('⚠️ Falta: EMAIL del Pagador (será tu usuario)');
-    } else {
-        if (!regData.emailContacto) return alert('⚠️ Falta: Tu Email de contacto (será tu usuario)');
-    }
+      if (!regData.nombrePagador) return alert('⚠️ Falta: Nombre del Pagador');
+      if (!regData.dniPagador) return alert('⚠️ Falta: DNI del Pagador');
+      
+      // --- BLOQUEO TELÉFONO EXTERNO ---
+      const tel1 = regData.telefono1 ? String(regData.telefono1).trim() : "";
+      if (tel1.length < 9) return alert(`⛔ El teléfono debe tener 9 cifras (has puesto ${tel1.length})`);
+      // --------------------------------
+      
+      if (!regData.direccion) return alert('⚠️ Falta: Dirección');
+      if (!regData.cp) return alert('⚠️ Falta: Código Postal');
+      if (!regData.iban) return alert('⚠️ Falta: IBAN Bancario');
+      if (!regData.emailPagador) return alert('⚠️ Falta: EMAIL del Pagador (será tu usuario)');
+  } else {
+      // --- BLOQUEO TELÉFONO INTERNO ---
+      // Si para internos usas otro campo de teléfono, asegúrate de que el nombre sea correcto (ej: regData.telefonoContacto)
+      const telInterno = regData.telefono1 ? String(regData.telefono1).trim() : ""; 
+      if (telInterno && telInterno.length < 9) {
+          return alert(`⛔ El teléfono debe tener 9 cifras (has puesto ${telInterno.length})`);
+      }
+      // --------------------------------
+
+      if (!regData.emailContacto) return alert('⚠️ Falta: Tu Email de contacto (será tu usuario)');
+  }
 
     try {
       // El email de usuario será el del pagador (externo) o el de contacto (interno)
@@ -2017,16 +2050,18 @@ const Login = ({ setView }) => {
             <button type="button" onClick={() => setRegData({ ...regData, tipo: 'interno' })} className={`flex-1 py-3 rounded-md font-bold text-sm transition ${regData.tipo === 'interno' ? 'bg-white shadow text-blue-900' : 'text-gray-500'}`}>🎓 Alumno del Colegio</button>
             <button type="button" onClick={() => setRegData({ ...regData, tipo: 'externo' })} className={`flex-1 py-3 rounded-md font-bold text-sm transition ${regData.tipo === 'externo' ? 'bg-white shadow text-blue-900' : 'text-gray-500'}`}>🌍 Alumno Externo</button>
           </div>
+         
 
           {/* 2. DATOS CONTACTO / PAGO (SEGÚN TIPO) */}
-          {regData.tipo === 'externo' ? (
+{/* 2. DATOS CONTACTO / PAGO (SEGÚN TIPO) */}
+{regData.tipo === 'externo' ? (
             <div className="bg-orange-50 p-5 rounded-xl border border-orange-200 animate-fade-in">
                 <h3 className="font-bold text-orange-900 mb-3 border-b border-orange-200 pb-1">👤 Datos Completos del Pagador</h3>
                 <div className="grid md:grid-cols-2 gap-4">
                     <input className="border p-2 rounded bg-white" placeholder="Nombre Completo Titular *" onChange={e => setRegData({ ...regData, nombrePagador: e.target.value })} />
                     <input className="border p-2 rounded bg-white" placeholder="DNI / NIE *" onChange={e => setRegData({ ...regData, dniPagador: e.target.value })} />
                     
-                    <input className="border p-2 rounded bg-white" placeholder="Teléfono 1 *" onChange={e => setRegData({ ...regData, telefono1: e.target.value })} />
+                    <input className="border p-2 rounded bg-white font-bold text-blue-600" placeholder="Teléfono 1 (9 cifras) *" onChange={e => setRegData({ ...regData, telefono1: e.target.value })} />
                     <input className="border p-2 rounded bg-white" placeholder="Teléfono 2" onChange={e => setRegData({ ...regData, telefono2: e.target.value })} />
                     
                     <input className="border p-2 rounded bg-white md:col-span-2" placeholder="Dirección Postal Completa *" onChange={e => setRegData({ ...regData, direccion: e.target.value })} />
@@ -2037,7 +2072,6 @@ const Login = ({ setView }) => {
                     
                     <input className="border p-2 rounded bg-white md:col-span-2 font-mono border-orange-300" placeholder="IBAN (ES...) *" onChange={e => setRegData({ ...regData, iban: e.target.value })} />
                     
-                    {/* EMAIL DENTRO DEL BLOQUE EXTERNO */}
                     <div className="md:col-span-2 mt-2">
                         <label className="text-xs font-bold text-orange-800 uppercase">Email del Pagador (Será tu Usuario) *</label>
                         <input type="email" className="w-full border p-2 rounded bg-white font-bold text-blue-900" placeholder="ejemplo@correo.com" onChange={e => setRegData({ ...regData, emailPagador: e.target.value })} />
@@ -2048,9 +2082,16 @@ const Login = ({ setView }) => {
               <div className="bg-blue-50 p-5 rounded-xl border border-blue-100 animate-fade-in">
                   <h3 className="font-bold text-blue-900 mb-3 border-b border-blue-200 pb-1">👤 Datos de Contacto</h3>
                   <p className="text-sm text-blue-800 mb-3">Al ser alumno del centro, usaremos la cuenta bancaria que consta en secretaría.</p>
-                  <div>
-                      <label className="text-xs font-bold text-blue-800 uppercase">Tu Email de Contacto (Será tu Usuario) *</label>
-                      <input type="email" className="w-full border p-2 rounded bg-white font-bold text-blue-900" placeholder="ejemplo@correo.com" onChange={e => setRegData({ ...regData, emailContacto: e.target.value })} />
+                  <div className="space-y-4">
+                      <div>
+                          <label className="text-xs font-bold text-blue-800 uppercase">Tu Email de Contacto (Será tu Usuario) *</label>
+                          <input type="email" className="w-full border p-2 rounded bg-white font-bold text-blue-900" placeholder="ejemplo@correo.com" onChange={e => setRegData({ ...regData, emailContacto: e.target.value })} />
+                      </div>
+                      {/* Aquí añadimos el móvil único para internos */}
+                      <div>
+                          <label className="text-xs font-bold text-blue-800 uppercase">Teléfono Móvil (9 cifras) *</label>
+                          <input type="tel" className="w-full border p-2 rounded bg-white font-bold text-blue-600" placeholder="600000000" onChange={e => setRegData({ ...regData, telefono1: e.target.value })} />
+                      </div>
                   </div>
               </div>
           )}
@@ -2074,13 +2115,7 @@ const Login = ({ setView }) => {
     <option>A</option><option>B</option><option>C</option>
   </select>
 
-  {/* Móvil: Ocupa todo el ancho (md:col-span-2) para que no empuje a la fecha */}
-  <input 
-    type="tel"
-    className="border p-2 rounded md:col-span-2 bg-white font-bold text-blue-600 outline-none" 
-    placeholder="Móvil de Contacto (Obligatorio) *" 
-    onChange={e => setRegData({ ...regData, telefono: e.target.value })} 
-  />
+
 
   {/* Fecha de Nacimiento: También en su propia fila */}
   <div className="md:col-span-2">
