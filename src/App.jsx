@@ -775,32 +775,35 @@ const archivarBaja = async (alumno) => {
   // --- 4. LISTAS FILTRADAS ---
   const gruposUnicos = [...new Set(alumnos.map(a => a.actividad).filter(g => g))].sort();
   
-// --- 1. LISTADO GLOBAL (SOLUCIÓN DEFINITIVA) ---
+// --- 1. LISTADO GLOBAL (LIMPIO Y SIN FANTASMAS) ---
 const listadoGlobal = alumnos.filter(a => {
   const coincideNombre = (a.nombre || '').toLowerCase().includes(busqueda.toLowerCase());
   const coincideGrupo = filtroGrupo ? a.actividad === filtroGrupo : true;
   
-  // REGLA PARA EL ADMIN: 
-  // En el listado global queremos ver a TODOS los alumnos activos.
-  // Solo ocultamos a los que son bajas confirmadas.
-  const noEsBaja = a.estado !== 'baja_pendiente' && a.estado !== 'baja_finalizada';
+  // SOLO dejamos pasar alumnos que tengan estos estados activos
+  const estadosActivos = ['inscrito', 'requiere_prueba', 'prueba_reservada', 'baja_pendiente'];
+  const esAlumnoReal = estadosActivos.includes(a.estado);
 
-  return coincideNombre && coincideGrupo && noEsBaja;
+  return coincideNombre && coincideGrupo && esAlumnoReal;
 });
 
-// --- 2. LISTADO PRUEBAS ---
+// --- 2. LISTADO PRUEBAS (CORREGIDO PARA WATERPOLO) ---
 const listadoPruebas = alumnos.filter(a => {
   if (a.estado === 'baja_pendiente' || a.estado === 'baja_finalizada' || a.esAntiguoAlumno) return false;
   
-  // DETECTAMOS SI NO NECESITAN VALIDACIÓN (Infantil y Adulto)
+  // DETECTAMOS QUIÉNES NO DEBEN ESTAR AQUÍ
   const esInfantil = (a.curso || '').toUpperCase().includes('INFANTIL') || (a.actividad || '').toUpperCase().includes('INFANTIL');
   const esAdulto = (a.curso || '').toUpperCase().includes('ADULTO') || (a.actividad || '').toUpperCase().includes('ADULTO');
   
-  // SI ES INFANTIL O ADULTO, LO ECHAMOS DE AQUÍ
-  if (esInfantil || esAdulto) return false;
+  // NUEVO: Detectar si es Waterpolo (por el nombre de la actividad)
+  const esWaterpolo = (a.actividad || '').toUpperCase().includes('WATERPOLO');
+  
+  // REGLA: Si es Infantil, Adulto o Waterpolo, FUERA de esta lista (ya salen en el Global)
+  if (esInfantil || esAdulto || esWaterpolo) return false;
 
   if (a.estado === 'prueba_reservada') return true;
 
+  // El resto de alumnos inscritos que no han sido validados manualmente
   return (a.estado === 'inscrito' && !a.validadoAdmin);
 });
 
@@ -1292,11 +1295,12 @@ const handleUpdatePassword = async () => {
           // 1. LÓGICA DE ESTADO
           const esInfantil = (hijo.curso || '').toUpperCase().includes('INFANTIL');
           
-          // ¿Tiene plaza real? (Si el admin validó O si es infantil)
-          const estaAdmitido = hijo.validadoAdmin === true || esInfantil;
-          
-          // ¿Está libre para inscribirse? (Si no tiene nada O si ya terminó su baja)
-          const estaLibre = hijo.estado === 'sin_inscripcion' || hijo.estado === 'baja_finalizada';
+          // --- 1. LÓGICA DE ADMISIÓN ACTUALIZADA ---
+// ¿Tiene plaza real? (Si el admin validó, si es infantil, O si tú pulsaste el nuevo botón de CONFIRMAR)
+const estaAdmitido = hijo.validadoAdmin === true || esInfantil || hijo.revisadoAdmin === true;
+
+// ¿Está libre para inscribirse?
+const estaLibre = hijo.estado === 'sin_inscripcion' || hijo.estado === 'baja_finalizada';
           
           let bordeColor = 'bg-gray-400';
           let estadoTexto = 'Sin Actividad';
@@ -1337,35 +1341,68 @@ const handleUpdatePassword = async () => {
               </div>
 
               {/* DATOS DE ACTIVIDAD (Inscrito o Baja Pendiente) */}
-              {(hijo.estado === 'inscrito' || hijo.estado === 'baja_pendiente') && (
-                <div className={`ml-3 mt-4 p-3 rounded-lg border text-sm 
-                    ${hijo.estado === 'baja_pendiente' ? 'bg-red-50 border-red-200' : 
-                      !estaAdmitido ? 'bg-yellow-50 border-yellow-200' : 
-                      'bg-green-50 border-green-100'
-                    }`}>
-                  
-                  {/* CASO: PENDIENTE DE VALIDAR (AMARILLO) */}
-                  {!estaAdmitido && hijo.estado === 'inscrito' ? (
-                      <div className="text-center">
-                          <p className="font-bold text-yellow-900 text-sm uppercase mb-1">{hijo.actividad}</p>
-                          <div className="flex justify-center gap-2 text-yellow-800 text-xs mb-2 opacity-80">
-                              <span>📅 {hijo.dias}</span><span>⏰ {hijo.horario}</span>
-                          </div>
-                          <div className="bg-white/50 rounded p-1 border border-yellow-200">
-                              <p className="font-bold text-yellow-800 text-xs">⏳ Solicitud Recibida</p>
-                              <p className="text-[10px] text-yellow-700">El coordinador está validando el nivel.</p>
-                          </div>
-                      </div>
-                  ) : (
-                      /* CASO: ADMITIDO O BAJA PENDIENTE */
-                      <>
-                        <p className="font-bold mb-1 text-gray-800">{hijo.actividad}</p>
-                        <div className="flex items-center gap-2 text-gray-600"><span>📅 {hijo.dias}</span><span>⏰ {hijo.horario}</span></div>
-                        {hijo.estado === 'baja_pendiente' && <p className="text-red-600 font-bold text-xs mt-2">⚠️ Baja efectiva a fin de mes</p>}
-                      </>
-                  )}
-                </div>
-              )}
+{(hijo.estado === 'inscrito' || hijo.estado === 'baja_pendiente') && (
+  <div className={`ml-3 mt-4 p-3 rounded-lg border text-sm relative
+      ${hijo.estado === 'baja_pendiente' ? 'bg-red-50 border-red-200' : 
+        !estaAdmitido ? 'bg-yellow-50 border-yellow-200' : 
+        'bg-green-50 border-green-100'
+      }`}>
+    
+    {/* 🗑️ BOTÓN DE BORRAR (Para familias) */}
+    <button 
+      onClick={async (e) => {
+        e.stopPropagation();
+        if (window.confirm(`¿Seguro que quieres eliminar a ${hijo.nombre}? Se perderá la plaza en ${hijo.actividad}.`)) {
+          try {
+            await deleteDoc(doc(db, 'students', hijo.id));
+            alert("🗑️ Alumno eliminado correctamente.");
+          } catch (error) {
+            console.error(error);
+            alert("Error al eliminar.");
+          }
+        }
+      }}
+      className="absolute top-2 right-2 text-gray-400 hover:text-red-500 transition-colors p-1"
+      title="Eliminar inscripción"
+    >
+      🗑️
+    </button>
+
+    {/* CASO: PENDIENTE DE VALIDAR (AMARILLO) */}
+    {!estaAdmitido && hijo.estado === 'inscrito' ? (
+        <div className="text-center pr-6"> {/* pr-6 para no chocar con la papelera */}
+            <p className="font-bold text-yellow-900 text-sm uppercase mb-1">{hijo.actividad}</p>
+            <div className="flex justify-center gap-2 text-yellow-800 text-xs mb-2 opacity-80">
+                <span>📅 {hijo.dias}</span><span>⏰ {hijo.horario}</span>
+            </div>
+            <div className="bg-white/50 rounded p-1 border border-yellow-200">
+                <p className="font-bold text-yellow-800 text-xs">⏳ Solicitud Recibida</p>
+                <p className="text-[10px] text-yellow-700">
+                  {/* Texto dinámico: si es adulto/waterpolo no hablamos de "nivel" */}
+                  {(hijo.actividad || '').toUpperCase().includes('ADULTO') || (hijo.actividad || '').toUpperCase().includes('WATERPOLO')
+                    ? "El club está revisando tu inscripción."
+                    : "El coordinador está validando el nivel."
+                  }
+                </p>
+            </div>
+        </div>
+    ) : (
+        /* CASO: ADMITIDO O BAJA PENDIENTE (VERDE/ROJO) */
+        <div className="pr-6">
+          <p className="font-bold mb-1 text-gray-800 uppercase">{hijo.actividad}</p>
+          <div className="flex items-center gap-2 text-gray-600">
+            <span>📅 {hijo.dias}</span><span>⏰ {hijo.horario}</span>
+          </div>
+          {hijo.estado === 'baja_pendiente' && (
+            <p className="text-red-600 font-bold text-xs mt-2 uppercase">⚠️ Baja efectiva a fin de mes</p>
+          )}
+          {estaAdmitido && hijo.estado === 'inscrito' && (
+            <p className="text-green-600 font-bold text-[10px] mt-2 uppercase">✅ Plaza Confirmada</p>
+          )}
+        </div>
+    )}
+  </div>
+)}
               
               {/* DATOS DE PRUEBA */}
               {hijo.estado === 'prueba_reservada' && (
