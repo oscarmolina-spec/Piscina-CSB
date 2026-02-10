@@ -783,21 +783,19 @@ const listadoGlobal = alumnos.filter(a => {
   return coincideNombre && coincideGrupo && debeAparecer && noEsBaja;
 });
 
-// --- 2. LISTADO PRUEBAS (MODIFICADO PARA QUE NO SALGA INFANTIL) ---
+// --- 2. LISTADO PRUEBAS ---
 const listadoPruebas = alumnos.filter(a => {
-  // Excluimos a los que se están dando de baja o son antiguos
   if (a.estado === 'baja_pendiente' || a.estado === 'baja_finalizada' || a.esAntiguoAlumno) return false;
   
-  // DETECTAMOS SI ES INFANTIL
+  // DETECTAMOS SI NO NECESITAN VALIDACIÓN (Infantil y Adulto)
   const esInfantil = (a.curso || '').toUpperCase().includes('INFANTIL') || (a.actividad || '').toUpperCase().includes('INFANTIL');
+  const esAdulto = (a.curso || '').toUpperCase().includes('ADULTO') || (a.actividad || '').toUpperCase().includes('ADULTO');
   
-  // SI ES INFANTIL, LO ECHAMOS DE AQUÍ (Ya sale en la Global, no hay que validarlo)
-  if (esInfantil) return false;
+  // SI ES INFANTIL O ADULTO, LO ECHAMOS DE AQUÍ
+  if (esInfantil || esAdulto) return false;
 
-  // Si tiene cita, sale.
   if (a.estado === 'prueba_reservada') return true;
 
-  // Si está inscrito (Adulto/Primaria) y NO tiene el OK, sale para que lo valides.
   return (a.estado === 'inscrito' && !a.validadoAdmin);
 });
 
