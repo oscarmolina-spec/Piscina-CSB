@@ -577,7 +577,16 @@ const AdminDashboard = ({ userRole, logout, userEmail }) => {
   const [alumnoSeleccionado, setAlumnoSeleccionado] = useState(null);
 
   const soySuperAdmin = userRole === 'admin'; 
-
+// --- 1.5 FUNCIONES DE ACCIÓN ---
+const confirmarInscripcion = async (alumnoId) => {
+  try {
+    const alumnoRef = doc(db, 'students', alumnoId);
+    await updateDoc(alumnoRef, { revisadoAdmin: true });
+  } catch (error) {
+    console.error("Error al confirmar:", error);
+    alert("No se pudo confirmar el grupo.");
+  }
+};
   // --- 2. CARGA DE DATOS (EFECTOS) ---
   useEffect(() => {
     // Alumnos
@@ -766,21 +775,17 @@ const archivarBaja = async (alumno) => {
   // --- 4. LISTAS FILTRADAS ---
   const gruposUnicos = [...new Set(alumnos.map(a => a.actividad).filter(g => g))].sort();
   
-// --- 1. LISTADO GLOBAL ---
+// --- 1. LISTADO GLOBAL (SOLUCIÓN DEFINITIVA) ---
 const listadoGlobal = alumnos.filter(a => {
   const coincideNombre = (a.nombre || '').toLowerCase().includes(busqueda.toLowerCase());
   const coincideGrupo = filtroGrupo ? a.actividad === filtroGrupo : true;
   
-  // DETECTAMOS SI ES INFANTIL O ADULTO
-  const esInfantil = (a.curso || '').toUpperCase().includes('INFANTIL') || (a.actividad || '').toUpperCase().includes('INFANTIL');
-  const esAdulto = (a.curso || '').toUpperCase().includes('ADULTO') || (a.actividad || '').toUpperCase().includes('ADULTO');
-
-  // REGLA: Pasa si tiene el OK... O SI ES INFANTIL O ADULTO (Pase VIP)
-  const debeAparecer = (a.validadoAdmin === true) || esInfantil || esAdulto;
-
+  // REGLA PARA EL ADMIN: 
+  // En el listado global queremos ver a TODOS los alumnos activos.
+  // Solo ocultamos a los que son bajas confirmadas.
   const noEsBaja = a.estado !== 'baja_pendiente' && a.estado !== 'baja_finalizada';
 
-  return coincideNombre && coincideGrupo && debeAparecer && noEsBaja;
+  return coincideNombre && coincideGrupo && noEsBaja;
 });
 
 // --- 2. LISTADO PRUEBAS ---
@@ -830,50 +835,79 @@ const listadoBajas = alumnos.filter(a => a.estado === 'baja_pendiente' || a.esta
           })}
       </div>
 
-     {/* TAB: GLOBAL (CORREGIDO: INFANTIL SALE DIRECTO SIN BOTONES) */}
-     {tab === 'global' && (
-          <div className="bg-white rounded shadow overflow-hidden">
-              <div className="p-4 border-b bg-gray-50 flex flex-col md:flex-row gap-4">
-                  <input className="flex-1 border p-2 rounded" placeholder="🔍 Buscar..." value={busqueda} onChange={e => setBusqueda(e.target.value)} />
-                  <select className="border p-2 rounded md:w-1/3" value={filtroGrupo} onChange={e => setFiltroGrupo(e.target.value)}>
-                      <option value="">📂 Todos los Grupos</option>
-                      {gruposUnicos.map(g => (<option key={g} value={g}>{g}</option>))}
-                  </select>
-              </div>
-              <table className="w-full text-sm text-left">
-                  <thead className="bg-gray-100 uppercase text-xs"><tr><th className="p-3">Alumno</th><th className="p-3">Actividad</th><th className="p-3 text-right"></th></tr></thead>
-                  <tbody>
-                      {listadoGlobal.length > 0 ? listadoGlobal.map(a => (
-                          <tr 
-                            key={a.id} 
-                            onClick={() => abrirFicha(a)} 
-                            className={`border-b cursor-pointer transition ${a.estado === 'baja_pendiente' ? 'bg-red-50' : 'hover:bg-blue-50'}`}
-                          >
-                              <td className="p-3">
-                                <span className="font-bold text-gray-900 block">{a.nombre}</span>
-                                {a.estado === 'baja_pendiente' && <span className="text-[10px] bg-red-100 text-red-600 px-1 rounded">BAJA PENDIENTE</span>}
-                                
-                                {/* AQUI YA NO HAY BOTÓN DE INFANTIL */}
+     {/* TAB: GLOBAL (CON FECHA DE ALTA Y BOTÓN DE REVISIÓN) */}
+{tab === 'global' && (
+    <div className="bg-white rounded shadow overflow-hidden">
+        <div className="p-4 border-b bg-gray-50 flex flex-col md:flex-row gap-4">
+            <input className="flex-1 border p-2 rounded" placeholder="🔍 Buscar..." value={busqueda} onChange={e => setBusqueda(e.target.value)} />
+            <select className="border p-2 rounded md:w-1/3" value={filtroGrupo} onChange={e => setFiltroGrupo(e.target.value)}>
+                <option value="">📂 Todos los Grupos</option>
+                {gruposUnicos.map(g => (<option key={g} value={g}>{g}</option>))}
+            </select>
+        </div>
+        <table className="w-full text-sm text-left">
+            <thead className="bg-gray-100 uppercase text-xs">
+                <tr>
+                    <th className="p-3">Alumno</th>
+                    <th className="p-3">Actividad / Alta</th>
+                    <th className="p-3 text-right">Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                {listadoGlobal.length > 0 ? listadoGlobal.map(a => (
+                    <tr 
+                      key={a.id} 
+                      onClick={() => abrirFicha(a)} 
+                      className={`border-b cursor-pointer transition ${a.estado === 'baja_pendiente' ? 'bg-red-50' : 'hover:bg-blue-50'}`}
+                    >
+                        <td className="p-3">
+                          <span className="font-bold text-gray-900 block">{a.nombre}</span>
+                          {a.estado === 'baja_pendiente' && <span className="text-[10px] bg-red-100 text-red-600 px-1 rounded">BAJA PENDIENTE</span>}
+                          
+                          <div className="text-blue-600 font-bold text-xs mt-1 bg-blue-50 w-fit px-2 py-0.5 rounded">
+                              {a.curso} - {a.letra}
+                          </div>
+                        </td>
+                        <td className="p-3">
+                          <div className="font-bold text-gray-800">{a.actividad || '-'}</div>
+                          {a.dias && <div className="text-[10px] text-gray-500 mt-1">📅 {a.dias} | ⏰ {a.horario}</div>}
+                          
+                          {/* FECHA DE ALTA FORMATEADA */}
+                          <div className="text-[10px] mt-1">
+                            {a.fechaAlta 
+                                ? <span className="text-green-600 font-bold italic">Alta: {new Date(a.fechaAlta).toLocaleDateString('es-ES')}</span> 
+                                : <span className="text-gray-400">Sin fecha de alta</span>}
+                          </div>
+                        </td>
+                        <td className="p-3 text-right">
+                          <div className="flex items-center justify-end gap-2" onClick={(e) => e.stopPropagation()}>
+                            
+                            {/* BOTÓN DE CONFIRMACIÓN RÁPIDA */}
+                            <button 
+                                onClick={() => confirmarInscripcion(a.id)}
+                                className={`px-2 py-1 rounded text-[10px] font-bold uppercase transition ${
+                                    a.revisadoAdmin 
+                                    ? 'bg-green-100 text-green-700 border border-green-200' 
+                                    : 'bg-orange-100 text-orange-700 border border-orange-200 hover:bg-orange-200'
+                                }`}
+                            >
+                                {a.revisadoAdmin ? '✅ OK' : '⏳ Confirmar'}
+                            </button>
 
-                                {/* 👉 AQUÍ SIGUE ESTANDO LA LETRA VISIBLE */}
-                                <div className="text-blue-600 font-bold text-xs mt-1 bg-blue-50 w-fit px-2 py-0.5 rounded">
-                                    {a.curso} - {a.letra}
-                                </div>
-                              </td>
-                              <td className="p-3">
-                                <div className="font-bold text-gray-800">{a.actividad || '-'}</div>
-                                {a.dias && <div className="text-[10px] text-gray-500 mt-1">📅 {a.dias} | ⏰ {a.horario}</div>}
-                                
-                                {/* Si tiene fecha de alta la mostramos (informativo), si no, no pasa nada */}
-                                {a.fechaAlta && <div className="text-[10px] text-green-600 font-bold mt-1">Alta: {a.fechaAlta}</div>}
-                              </td>
-                              <td className="p-3 text-right">{userRole === 'admin' && <button onClick={(e) => borrarAlumno(e, a.id)} className="text-red-400 hover:text-red-600 p-2 hover:bg-red-50 rounded-full">🗑️</button>}</td>
-                          </tr>
-                      )) : <tr><td colSpan="3" className="p-8 text-center text-gray-400">No hay resultados.</td></tr>}
-                  </tbody>
-              </table>
-          </div>
-      )}
+                            {/* BOTÓN BORRAR (Solo Admin) */}
+                            {userRole === 'admin' && (
+                                <button onClick={(e) => borrarAlumno(e, a.id)} className="text-red-400 hover:text-red-600 p-2 hover:bg-red-50 rounded-full">
+                                    🗑️
+                                </button>
+                            )}
+                          </div>
+                        </td>
+                    </tr>
+                )) : <tr><td colSpan="3" className="p-8 text-center text-gray-400">No hay resultados.</td></tr>}
+            </tbody>
+        </table>
+    </div>
+)}
 
       {/* TAB: PRUEBAS */}
       {tab === 'pruebas' && (
@@ -1638,17 +1672,20 @@ const PantallaInscripcion = ({ alumno, close, onRequirePrueba, user, refresh }) 
     }
 
     const datosComunes = {
-        nombre: d.nombre, 
-        curso: d.curso, 
-        actividad: act.nombre,
-        dias: op.dias,
-        horario: op.horario,
-        precio: op.precio,
-        estado: estadoFinal, // <-- Usamos la variable que acabamos de calcular
-        fechaInscripcion: new Date().toISOString(),
-        autorizaFotos: autorizaFotos,
-        aceptaNormas: normasRef.current
-    };
+      nombre: d.nombre, 
+      curso: d.curso, 
+      actividad: act.nombre,
+      dias: op.dias,
+      horario: op.horario,
+      precio: op.precio,
+      estado: 'inscrito',
+      // --- CAMPOS AÑADIDOS ---
+      fechaAlta: new Date().toISOString(), // Esto registra la fecha y hora exacta
+      revisadoAdmin: false,               // Por defecto, nadie está revisado aún
+      // -----------------------
+      autorizaFotos: autorizaFotos,
+      aceptaNormas: normasRef.current
+  };
 
     // 🛡️ EL FILTRO DEFINITIVO (Pase VIP)
     const cursoNombre = (d.curso || '').toUpperCase();
