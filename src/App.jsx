@@ -18,6 +18,8 @@ import {
   signInWithEmailAndPassword,
   onAuthStateChanged,
   signOut,
+  updatePassword,        // <--- Añade esta
+  sendPasswordResetEmail
 } from 'firebase/auth';
 
 // ==========================================
@@ -713,9 +715,52 @@ const archivarBaja = async (alumno) => {
   const borrarMiembroEquipo = async (miembro) => { if (miembro.email === userEmail) return alert("No puedes borrarte a ti mismo"); if (confirm("¿Borrar usuario?")) await deleteDoc(doc(db, 'users', miembro.id)); };
   
   const descargarExcel = () => {
-    const cabecera = ['Alumno,Curso,Letra,Actividad,Pagador,Telefono\n'];
-    const filas = listadoGlobal.map(a => `"${a.nombre}","${a.curso}","${a.letra}","${a.actividad||'-'}","${padres[a.parentId]?.nombrePagador||''}","${padres[a.parentId]?.telefono1||''}"`);
-    const link = document.createElement("a"); link.href = "data:text/csv;charset=utf-8," + encodeURI(cabecera + filas.join("\n")); link.download = "listado.csv"; link.click();
+    // 1. Cabeceras
+    let cabecera = [];
+    if (soySuperAdmin) {
+      cabecera = ['Alumno,Curso,Letra,Tipo,Actividad,Días,Horario,Fecha Alta,Precio,Pagador,DNI Pagador,Email Pagador,CP,Población,Dirección,IBAN,Telefono\n'];
+    } else {
+      cabecera = ['Alumno,Curso,Letra,Tipo,Actividad,Días,Horario,Fecha Alta\n'];
+    }
+    
+    // 2. Mapeo de datos
+    const filas = listadoGlobal.map(a => {
+      const p = padres[a.parentId] || {}; 
+      
+      const nombre = (a.nombre || '').replace(/"/g, '""');
+      const actividad = (a.actividad || '-').replace(/"/g, '""');
+      const dias = (a.dias || '-').replace(/"/g, '""');
+      const horario = (a.horario || '-').replace(/"/g, '""');
+      const fAlta = (a.fechaAlta || '-').replace(/"/g, '""');
+
+      // --- LÓGICA BASADA EN TU regData.tipo ---
+      // Usamos toUpperCase para que en el Excel quede profesional: "EXTERNO" o "INTERNO"
+      const tipoAlumno = (p.tipo === 'externo') ? 'EXTERNO' : 'INTERNO';
+
+      if (soySuperAdmin) {
+        const precio = a.precio || '0';
+        const pagador = (p.nombrePagador || '').replace(/"/g, '""');
+        const iban = (p.iban || '').replace(/"/g, '""');
+        const direccion = (p.direccion || '').replace(/"/g, '""');
+        const tel = p.telefono1 || '';
+        const dni = (p.dniPagador || '').replace(/"/g, '""');
+        const mail = (p.email || '').replace(/"/g, '""');
+        const cp = (p.cp || '').replace(/"/g, '""');
+        const pob = (p.poblacion || '').replace(/"/g, '""');
+
+        return `"${nombre}","${a.curso}","${a.letra}","${tipoAlumno}","${actividad}","${dias}","${horario}","${fAlta}","${precio}","${pagador}","${dni}","${mail}","${cp}","${pob}","${direccion}","${iban}","${tel}"`;
+      } else {
+        return `"${nombre}","${a.curso}","${a.letra}","${tipoAlumno}","${actividad}","${dias}","${horario}","${fAlta}"`;
+      }
+    });
+
+    // 3. Generación del archivo
+    const link = document.createElement("a"); 
+    link.href = "data:text/csv;charset=utf-8,\uFEFF" + encodeURI(cabecera + filas.join("\n")); 
+    
+    const nombreArchivo = soySuperAdmin ? "listado_PAGOS_completo.csv" : "listado_asistencia_profes.csv";
+    link.download = nombreArchivo; 
+    link.click();
   };
 
   // --- 4. LISTAS FILTRADAS ---
@@ -1074,9 +1119,24 @@ const Dashboard = ({ user, misHijos, logout, refresh }) => {
   const [alumnoEditar, setAlumnoEditar] = useState(null);
   const [modoModal, setModoModal] = useState(null);
   const [avisos, setAvisos] = useState([]);
-  
+  const [newPass, setNewPass] = useState('');
+  const [isChangingPass, setIsChangingPass] = useState(false);
   const alumnoEnVivo = misHijos.find((h) => h.id === alumnoSeleccionado?.id);
-
+const handleUpdatePassword = async () => {
+    if (newPass.length < 6) return alert("⚠️ La contraseña debe tener al menos 6 caracteres.");
+    try {
+      await updatePassword(auth.currentUser, newPass);
+      alert("✅ Contraseña actualizada correctamente.");
+      setNewPass('');
+      setIsChangingPass(false);
+    } catch (error) {
+      if (error.code === 'auth/requires-recent-login') {
+        alert("🔒 Por seguridad, debes haber iniciado sesión recientemente para cambiar tu contraseña. Por favor, sal y vuelve a entrar.");
+      } else {
+        alert("❌ Error: " + error.message);
+      }
+    }
+  };
   useEffect(() => {
     const unsub = onSnapshot(query(collection(db, 'avisos'), orderBy('fecha', 'desc')), (s) => 
       setAvisos(s.docs.map((doc) => ({ id: doc.id, ...doc.data() })))
@@ -1150,7 +1210,47 @@ const Dashboard = ({ user, misHijos, logout, refresh }) => {
           <div className="bg-blue-100 p-3 rounded-full text-2xl">👨‍👩‍👧‍👦</div>
           <div><h1 className="text-2xl font-bold text-gray-800">Panel Familiar</h1><p className="text-sm text-gray-500">{user.email}</p></div>
         </div>
-        <button onClick={logout} className="text-red-500 font-medium border border-red-100 px-5 py-2 rounded-lg hover:bg-red-50 w-full md:w-auto">Cerrar Sesión</button>
+        <div className="flex flex-col md:flex-row gap-2 w-full md:w-auto">
+          {/* BOTÓN O FORMULARIO DE CAMBIO DE CONTRASEÑA */}
+          {!isChangingPass ? (
+            <button 
+              onClick={() => setIsChangingPass(true)} 
+              className="text-blue-600 font-medium border border-blue-100 px-5 py-2 rounded-lg hover:bg-blue-50 w-full md:w-auto text-sm"
+            >
+              ⚙️ Cambiar Contraseña
+            </button>
+          ) : (
+            <div className="flex items-center gap-2 bg-blue-50 p-1 rounded-lg border border-blue-100 animate-fade-in">
+              <input 
+                type="password" 
+                placeholder="Nueva clave" 
+                className="text-sm border p-2 rounded w-32 outline-none focus:ring-2 focus:ring-blue-400"
+                value={newPass}
+                onChange={(e) => setNewPass(e.target.value)}
+              />
+              <button 
+                onClick={handleUpdatePassword}
+                className="bg-green-600 text-white text-[10px] px-3 py-2.5 rounded font-bold uppercase hover:bg-green-700"
+              >
+                OK
+              </button>
+              <button 
+                onClick={() => { setIsChangingPass(false); setNewPass(''); }}
+                className="bg-gray-400 text-white text-[10px] px-2 py-2.5 rounded font-bold uppercase"
+              >
+                X
+              </button>
+            </div>
+          )}
+
+          {/* TU BOTÓN ORIGINAL DE CERRAR SESIÓN */}
+          <button 
+            onClick={logout} 
+            className="text-red-500 font-medium border border-red-100 px-5 py-2 rounded-lg hover:bg-red-50 w-full md:w-auto"
+          >
+            Cerrar Sesión
+          </button>
+        </div>
       </div>
 
       {avisos.length > 0 && (<div className="mb-6 space-y-2">{avisos.map(aviso => (<div key={aviso.id} className="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded shadow-sm text-yellow-800 font-medium flex items-center gap-3"><span className="text-2xl">📢</span><span>{aviso.texto}</span></div>))}</div>)}
@@ -1239,19 +1339,28 @@ const Dashboard = ({ user, misHijos, logout, refresh }) => {
               {hijo.estado === 'prueba_reservada' && (
                 <div className="ml-3 mt-4 bg-orange-50 p-3 rounded-lg border border-orange-200 text-sm">
                   <div className="mb-3 pb-3 border-b border-orange-200">
-                      <p className="text-[10px] font-bold text-orange-800 uppercase tracking-wider mb-1">🎯 Solicitud:</p>
+                      <p className="text-[10px] font-bold text-orange-800 uppercase tracking-wider mb-1">🎯 Grupo Pre-seleccionado:</p>
                       {hijo.actividad ? (
-                          <div><p className="text-lg font-black text-orange-900 leading-tight">{hijo.actividad}</p></div>
+                          <div>
+                            <p className="text-lg font-black text-orange-900 leading-tight">{hijo.actividad}</p>
+                            {/* --- AQUÍ AÑADIMOS LOS DÍAS Y EL HORARIO --- */}
+                            <div className="flex gap-3 text-orange-800 text-xs mt-1 font-bold">
+                                <span>📅 {hijo.dias || 'Días pendientes'}</span>
+                                <span>⏰ {hijo.horario || 'Horario pendiente'}</span>
+                            </div>
+                          </div>
                       ) : (
                           <button onClick={() => { setAlumnoSeleccionado(hijo); setModoModal('inscripcion'); }} className="w-full bg-white border border-orange-300 text-orange-700 py-1.5 rounded text-xs font-bold hover:bg-orange-100">
                               👉 Elegir Grupo
                           </button>
                       )}
                   </div>
+                  
+                  {/* ... resto del código de la cita de nivel ... */}
                   <div className="flex items-center gap-2">
                       <span className="text-2xl">🗓️</span>
                       <div>
-                          <p className="font-bold text-orange-900 text-xs uppercase">Prueba de Nivel</p>
+                          <p className="font-bold text-orange-900 text-xs uppercase">Cita para Prueba</p>
                           {hijo.citaNivel ? (
                               <p className="text-orange-800 font-bold">{hijo.citaNivel}</p>
                           ) : (
@@ -1316,8 +1425,14 @@ const Dashboard = ({ user, misHijos, logout, refresh }) => {
       
       {/* MODALES Y FORMULARIOS */}
       {showForm && (<FormularioHijo close={() => setShowForm(false)} user={user} refresh={refresh} />)}
-      {alumnoEditar && (<FormularioEdicionHijo alumno={alumnoEditar} close={() => setAlumnoEditar(null)} refresh={refresh} />)}
-      {modoModal === 'prueba' && alumnoEnVivo && (<PantallaPruebaNivel alumno={alumnoEnVivo} close={() => setModoModal(null)} onSuccess={alTerminarPrueba} user={user} refresh={refresh} />)}
+      {alumnoEditar && (
+  <FormularioHijo 
+    alumnoAEditar={alumnoEditar} 
+    close={() => setAlumnoEditar(null)} 
+    user={user} 
+    refresh={refresh} 
+  />
+)}      {modoModal === 'prueba' && alumnoEnVivo && (<PantallaPruebaNivel alumno={alumnoEnVivo} close={() => setModoModal(null)} onSuccess={alTerminarPrueba} user={user} refresh={refresh} />)}
       {modoModal === 'inscripcion' && alumnoEnVivo && (<PantallaInscripcion alumno={alumnoEnVivo} close={() => setModoModal(null)} onRequirePrueba={() => setModoModal('prueba')} user={user} refresh={refresh} />)}
     </div>
   );
@@ -1326,8 +1441,9 @@ const Dashboard = ({ user, misHijos, logout, refresh }) => {
 // ==========================================
 // ✏️ FORMULARIO EDICIÓN DE DATOS
 // ==========================================
-const FormularioHijo = ({ close, user, refresh }) => {
-  const [data, setData] = useState({ 
+const FormularioHijo = ({ close, user, refresh, alumnoAEditar = null }) => {
+  // Cambiamos el useState para que elija: o datos del alumno o vacío
+  const [data, setData] = useState(alumnoAEditar ? { ...alumnoAEditar } : { 
     nombre: '', 
     telefono: '',
     curso: LISTA_CURSOS[0].val, 
@@ -1337,6 +1453,7 @@ const FormularioHijo = ({ close, user, refresh }) => {
     aceptaNormas: false, 
     autorizaFotos: false 
   });
+  
 
   const validarYGuardarAlumno = async () => {
     const telefonoLimpio = data?.telefono ? String(data.telefono).trim() : "";
@@ -1347,20 +1464,38 @@ const FormularioHijo = ({ close, user, refresh }) => {
     if (!data.aceptaNormas) return alert("⚠️ Debes aceptar las normas.");
 
     try {
-      // Determinamos si es infantil para dejarlo anotado
       const esInfantil = (data.curso || '').toUpperCase().includes('INF');
 
-      await addDoc(collection(db, 'students'), {
+      // PREPARAMOS LOS DATOS COMUNES
+      const datosFinales = {
         ...data,
         parentId: user.uid,
         telefono: telefonoLimpio,
-        // FORZAMOS el guardado de estos campos para la lógica de la PantallaPruebaNivel
         natacionPasado: data.natacionPasado, 
         esAntiguoAlumno: data.natacionPasado === 'si',
         esInfantil: esInfantil,
-        estado: 'sin_inscripcion',
-        fechaCreacion: new Date().toISOString()
-      });
+      };
+
+      // ---------------------------------------------------------
+      // 🚀 EL INTERRUPTOR: ¿EDICIÓN O CREACIÓN?
+      // ---------------------------------------------------------
+      if (alumnoAEditar && alumnoAEditar.id) {
+        // MODO EDICIÓN: Actualizamos el que ya existe
+        const alumnoRef = doc(db, 'students', alumnoAEditar.id);
+        await updateDoc(alumnoRef, {
+          ...datosFinales,
+          ultimaEdicion: new Date().toISOString()
+        });
+        alert("✅ Datos actualizados correctamente");
+      } else {
+        // MODO CREACIÓN: Creamos uno nuevo
+        await addDoc(collection(db, 'students'), {
+          ...datosFinales,
+          estado: 'sin_inscripcion',
+          fechaCreacion: new Date().toISOString()
+        });
+        alert("✅ Alumno registrado correctamente");
+      }
       
       refresh(user.uid);
       close();
@@ -2128,16 +2263,65 @@ const Login = ({ setView }) => {
       </div>
     </div>
   );
+  const handleResetPassword = async () => {
+    if (!loginData?.email) {
+      return alert("⚠️ Por favor, escribe tu email en el cuadro de arriba.");
+    }
+    try {
+      await sendPasswordResetEmail(auth, loginData.email);
+      alert("📧 ¡Enviado! Revisa tu bandeja de entrada o spam.");
+    } catch (error) {
+      alert("❌ Error: No se pudo enviar el correo de recuperación.");
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4 relative">
       <button onClick={() => setView('landing')} className="absolute top-4 left-4 font-bold text-gray-500 hover:text-black flex items-center gap-2">⬅ Volver al Inicio</button>
       <div className="bg-white p-8 rounded-xl shadow-xl w-full max-w-md animate-fade-in">
-        <div className="text-center mb-6"><img src={IMG_ESCUDO} className="h-16 mx-auto mb-4" alt="Logo" /><h2 className="text-2xl font-bold mb-2 text-blue-900">Acceso Familias</h2><p className="text-gray-500 text-sm">Gestiona tus inscripciones y pruebas</p></div>
-        <form onSubmit={handleAuth} className="space-y-4">
-          <input className="w-full border p-3 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" type="email" placeholder="Tu Email" onChange={e => setLoginData({ ...loginData, email: e.target.value })} />
-          <input className="w-full border p-3 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" type="password" placeholder="Contraseña" onChange={e => setLoginData({ ...loginData, password: e.target.value })} />
-          <button className="w-full bg-blue-600 text-white p-3 rounded-lg font-bold hover:bg-blue-700 shadow-md transition">Entrar</button>
+      <div className="text-center mb-10">
+  <img 
+    src={IMG_ESCUDO} 
+    className="h-32 md:h-40 mx-auto mb-6 drop-shadow-xl transition-transform hover:scale-105" 
+    alt="Logo San Buenaventura" 
+  />
+  <h2 className="text-3xl font-black mb-2 text-blue-900 tracking-tight">
+    Acceso Familias
+  </h2>
+  <p className="text-gray-500 text-sm font-medium">
+    Gestiona tus inscripciones y pruebas de nivel
+  </p>
+</div>        
+<form onSubmit={handleAuth} className="space-y-4">
+          <input 
+            className="w-full border p-3 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" 
+            type="email" 
+            placeholder="Tu Email" 
+            onChange={e => setLoginData({ ...loginData, email: e.target.value })} 
+          />
+          
+          <div className="w-full">
+            <input 
+              className="w-full border p-3 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" 
+              type="password" 
+              placeholder="Contraseña" 
+              onChange={e => setLoginData({ ...loginData, password: e.target.value })} 
+            />
+            {/* BOTÓN DE RECUPERACIÓN */}
+            <div className="flex justify-end mt-1">
+              <button 
+                type="button" 
+                onClick={handleResetPassword}
+                className="text-[10px] font-black text-blue-600 uppercase pr-1 hover:underline"
+              >
+                ¿Has olvidado tu contraseña?
+              </button>
+            </div>
+          </div>
+
+          <button className="w-full bg-blue-600 text-white p-3 rounded-lg font-bold hover:bg-blue-700 shadow-md transition">
+            Entrar
+          </button>
         </form>
         <div className="mt-6 text-center border-t pt-4"><p className="text-gray-500 text-sm mb-2">¿Es tu primera vez?</p><button onClick={() => setIsRegister(true)} className="text-blue-600 font-bold hover:underline">Crear Cuenta Nueva</button></div>
       </div>
