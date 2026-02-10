@@ -1,20 +1,24 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { db, auth } from './firebase.js';
-import { 
-  onSnapshot, 
-  query, 
-  collection, 
-  orderBy, 
-  doc, 
-  updateDoc, 
-  deleteDoc 
+import React, { useState, useEffect, useRef } from 'react';import { db, auth } from './firebase.js'; 
+import {
+  collection,
+  addDoc,
+  query,
+  where,
+  getDocs,
+  doc,
+  setDoc,
+  getDoc, // <--- ¡AQUÍ ESTABA EL CULPABLE! FALTABA ESTO
+  updateDoc,
+  deleteDoc,
+  onSnapshot,
+  orderBy
 } from 'firebase/firestore';
-import { 
-  updatePassword, 
-  sendPasswordResetEmail 
+import {
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  onAuthStateChanged,
+  signOut,
 } from 'firebase/auth';
-
-// Aquí empezaría el resto de tu código...
 
 // ==========================================
 // ⚙️ CONFIGURACIÓN GENERAL DEL SISTEMA
@@ -1070,34 +1074,6 @@ const Dashboard = ({ user, misHijos, logout, refresh }) => {
   const [alumnoEditar, setAlumnoEditar] = useState(null);
   const [modoModal, setModoModal] = useState(null);
   const [avisos, setAvisos] = useState([]);
-
-  // 🔐 ESTADOS PARA CAMBIO DE CONTRASEÑA
-  const [showPassModal, setShowPassModal] = useState(false);
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPass, setConfirmPass] = useState("");
-  const [passLoading, setPassLoading] = useState(false);
-
-  const handleChangePassword = async () => {
-    if (newPassword.length < 6) return alert("⚠️ La contraseña debe tener al menos 6 caracteres.");
-    if (newPassword !== confirmPass) return alert("⛔ Las contraseñas no coinciden.");
-
-    setPassLoading(true);
-    try {
-      await updatePassword(user, newPassword);
-      alert("✅ Contraseña actualizada con éxito.");
-      setShowPassModal(false);
-      setNewPassword("");
-      setConfirmPass("");
-    } catch (error) {
-      if (error.code === 'auth/requires-recent-login') {
-        alert("⚠️ Por seguridad, debes cerrar sesión y volver a entrar para cambiar la contraseña.");
-        logout(); 
-      } else {
-        alert("Error: " + error.message);
-      }
-    }
-    setPassLoading(false);
-  };
   
   const alumnoEnVivo = misHijos.find((h) => h.id === alumnoSeleccionado?.id);
 
@@ -1109,24 +1085,38 @@ const Dashboard = ({ user, misHijos, logout, refresh }) => {
   }, []);
 
   const alTerminarPrueba = () => {
+    // 1. Cerramos el modal de la prueba
+    // 2. Abrimos inmediatamente el modal de inscripción (selección de grupo)
     setModoModal('inscripcion'); 
   };
 
+  // 👇 1. FUNCIÓN NUEVA: CANCELAR SOLICITUD (Borrado rápido)
   const cancelarSolicitud = async (hijo) => {
     if (!window.confirm(`⚠️ ¿Cancelar la solicitud de ${hijo.nombre}?\n\nAl no estar inscrito todavía, se borrará la reserva inmediatamente y podrás empezar de cero.`)) return;
+
     try {
         await updateDoc(doc(db, 'students', hijo.id), {
             estado: 'sin_inscripcion',
-            actividad: null, dias: null, horario: null, precio: null,
-            citaId: null, citaNivel: null, fechaInscripcion: null,
-            aceptaNormas: false, autorizaFotos: false
+            actividad: null,
+            dias: null,
+            horario: null,
+            precio: null,
+            citaId: null,
+            citaNivel: null,
+            fechaInscripcion: null,
+            aceptaNormas: false,
+            autorizaFotos: false
         });
         refresh(user.uid);
         alert('✅ Solicitud cancelada correctamente.');
-    } catch (e) { alert('Error al cancelar: ' + e.message); }
+    } catch (e) {
+        alert('Error al cancelar: ' + e.message);
+    }
   };
 
+  // 👇 2. FUNCIÓN DE SIEMPRE: GESTIONAR BAJA (Trámite administrativo)
   const gestionarBaja = async (hijo) => {
+    // Si por error llama a esto un 'sin_inscripcion', lo borramos directo
     if (hijo.estado === 'sin_inscripcion') {
         if (window.confirm(`🗑️ ¿Eliminar perfil de ${hijo.nombre}?`)) {
             await deleteDoc(doc(db, 'students', hijo.id));
@@ -1134,37 +1124,31 @@ const Dashboard = ({ user, misHijos, logout, refresh }) => {
         }
         return;
     }
+
     const diaActual = new Date().getDate();
+
+    // Bloqueo después del día 25
     if (diaActual > 25) {
-        return alert('⛔ PLAZO CERRADO.\n\nLas bajas deben tramitarse antes del día 25.');
+        return alert('⛔ PLAZO CERRADO.\n\nLas bajas para el mes siguiente deben tramitarse antes del día 25.\n\nContacta con secretaría.');
     }
-    if (window.confirm(`⚠️ ¿Solicitar BAJA de ${hijo.nombre}?`)) {
+
+    // Tramitación de Baja
+    if (window.confirm(`⚠️ ¿Solicitar BAJA de ${hijo.nombre}?\n\nℹ️ AVISO: Al ser día ${diaActual}, se cobrará el mes en curso completo. La baja será efectiva el último día de este mes.`)) {
       await updateDoc(doc(db, 'students', hijo.id), {
         estado: 'baja_pendiente',
         fechaSolicitudBaja: new Date().toISOString()
       });
       refresh(user.uid);
-      alert('✅ Solicitud de baja registrada.');
+      alert('✅ Solicitud de baja registrada.\nTu plaza se mantendrá activa hasta final de mes.');
     }
   };
 
   return (
     <div className="p-4 max-w-4xl mx-auto font-sans bg-gray-50 min-h-screen">
-      {/* CABECERA CON BOTÓN DE SEGURIDAD INTEGRADO */}
       <div className="flex flex-col md:flex-row justify-between items-center mb-6 bg-white p-5 rounded-xl shadow-sm border border-gray-100 gap-4">
         <div className="flex items-center gap-3">
           <div className="bg-blue-100 p-3 rounded-full text-2xl">👨‍👩‍👧‍👦</div>
-          <div>
-            <h1 className="text-2xl font-bold text-gray-800">Panel Familiar</h1>
-            <p className="text-sm text-gray-500">{user.email}</p>
-            {/* BOTÓN DE SEGURIDAD */}
-            <button 
-              onClick={() => setShowPassModal(true)}
-              className="text-[10px] font-black uppercase text-blue-600 bg-blue-50 px-2 py-1 rounded mt-1 hover:bg-blue-100 transition"
-            >
-              🔐 Seguridad
-            </button>
-          </div>
+          <div><h1 className="text-2xl font-bold text-gray-800">Panel Familiar</h1><p className="text-sm text-gray-500">{user.email}</p></div>
         </div>
         <button onClick={logout} className="text-red-500 font-medium border border-red-100 px-5 py-2 rounded-lg hover:bg-red-50 w-full md:w-auto">Cerrar Sesión</button>
       </div>
@@ -1172,29 +1156,44 @@ const Dashboard = ({ user, misHijos, logout, refresh }) => {
       {avisos.length > 0 && (<div className="mb-6 space-y-2">{avisos.map(aviso => (<div key={aviso.id} className="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded shadow-sm text-yellow-800 font-medium flex items-center gap-3"><span className="text-2xl">📢</span><span>{aviso.texto}</span></div>))}</div>)}
 
       <div className="grid gap-6 md:grid-cols-2 mb-8">
-        {misHijos.map((hijo) => {
+      {misHijos.map((hijo) => {
+          // 1. LÓGICA DE ESTADO
           const esInfantil = (hijo.curso || '').toUpperCase().includes('INFANTIL');
+          
+          // ¿Tiene plaza real? (Si el admin validó O si es infantil)
           const estaAdmitido = hijo.validadoAdmin === true || esInfantil;
+          
+          // ¿Está libre para inscribirse? (Si no tiene nada O si ya terminó su baja)
           const estaLibre = hijo.estado === 'sin_inscripcion' || hijo.estado === 'baja_finalizada';
           
           let bordeColor = 'bg-gray-400';
           let estadoTexto = 'Sin Actividad';
           
+          // 2. CONFIGURAMOS COLORES
           if (hijo.estado === 'inscrito') {
-              if (estaAdmitido) { bordeColor = 'bg-green-500'; estadoTexto = '✅ Inscrito'; }
-              else { bordeColor = 'bg-yellow-400'; estadoTexto = '⏳ Pendiente Validación'; }
+              if (estaAdmitido) {
+                  bordeColor = 'bg-green-500';
+                  estadoTexto = '✅ Inscrito';
+              } else {
+                  bordeColor = 'bg-yellow-400';
+                  estadoTexto = '⏳ Pendiente Validación';
+              }
           } else if (hijo.estado === 'prueba_reservada') {
-              bordeColor = 'bg-orange-500'; estadoTexto = '⏳ Prueba Pendiente';
+              bordeColor = 'bg-orange-500';
+              estadoTexto = '⏳ Prueba Pendiente';
           } else if (hijo.estado === 'baja_pendiente') {
-              bordeColor = 'bg-red-500'; estadoTexto = '📉 Baja Solicitada';
+              bordeColor = 'bg-red-500';
+              estadoTexto = '📉 Baja Solicitada';
           } else if (hijo.estado === 'baja_finalizada') {
-              bordeColor = 'bg-gray-600'; estadoTexto = '⚫ Baja Finalizada';
+              bordeColor = 'bg-gray-600';
+              estadoTexto = '⚫ Baja Finalizada';
           }
 
           return (
             <div key={hijo.id} className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 relative overflow-hidden group mb-4">
               <div className={`absolute top-0 left-0 w-1.5 h-full ${bordeColor}`}></div>
               
+              {/* CABECERA */}
               <div className="flex justify-between items-start mb-2 pl-3">
                 <div className="flex-1">
                   <h3 className="font-bold text-xl text-gray-800 flex items-center gap-2">
@@ -1202,21 +1201,31 @@ const Dashboard = ({ user, misHijos, logout, refresh }) => {
                   </h3>
                   <p className="text-gray-500 text-sm font-medium">{hijo.curso} • {hijo.letra}</p>
                 </div>
-                <div className="flex flex-col items-end gap-2">
-                  <span className="px-2 py-1 rounded text-[10px] font-extrabold uppercase bg-gray-100 text-gray-500">{estadoTexto}</span>
-                </div>
+                <div className="flex flex-col items-end gap-2"><span className="px-2 py-1 rounded text-[10px] font-extrabold uppercase bg-gray-100 text-gray-500">{estadoTexto}</span></div>
               </div>
 
+              {/* DATOS DE ACTIVIDAD (Inscrito o Baja Pendiente) */}
               {(hijo.estado === 'inscrito' || hijo.estado === 'baja_pendiente') && (
-                <div className={`ml-3 mt-4 p-3 rounded-lg border text-sm ${hijo.estado === 'baja_pendiente' ? 'bg-red-50 border-red-200' : !estaAdmitido ? 'bg-yellow-50 border-yellow-200' : 'bg-green-50 border-green-100'}`}>
+                <div className={`ml-3 mt-4 p-3 rounded-lg border text-sm 
+                    ${hijo.estado === 'baja_pendiente' ? 'bg-red-50 border-red-200' : 
+                      !estaAdmitido ? 'bg-yellow-50 border-yellow-200' : 
+                      'bg-green-50 border-green-100'
+                    }`}>
+                  
+                  {/* CASO: PENDIENTE DE VALIDAR (AMARILLO) */}
                   {!estaAdmitido && hijo.estado === 'inscrito' ? (
                       <div className="text-center">
                           <p className="font-bold text-yellow-900 text-sm uppercase mb-1">{hijo.actividad}</p>
                           <div className="flex justify-center gap-2 text-yellow-800 text-xs mb-2 opacity-80">
                               <span>📅 {hijo.dias}</span><span>⏰ {hijo.horario}</span>
                           </div>
+                          <div className="bg-white/50 rounded p-1 border border-yellow-200">
+                              <p className="font-bold text-yellow-800 text-xs">⏳ Solicitud Recibida</p>
+                              <p className="text-[10px] text-yellow-700">El coordinador está validando el nivel.</p>
+                          </div>
                       </div>
                   ) : (
+                      /* CASO: ADMITIDO O BAJA PENDIENTE */
                       <>
                         <p className="font-bold mb-1 text-gray-800">{hijo.actividad}</p>
                         <div className="flex items-center gap-2 text-gray-600"><span>📅 {hijo.dias}</span><span>⏰ {hijo.horario}</span></div>
@@ -1226,6 +1235,7 @@ const Dashboard = ({ user, misHijos, logout, refresh }) => {
                 </div>
               )}
               
+              {/* DATOS DE PRUEBA */}
               {hijo.estado === 'prueba_reservada' && (
                 <div className="ml-3 mt-4 bg-orange-50 p-3 rounded-lg border border-orange-200 text-sm">
                   <div className="mb-3 pb-3 border-b border-orange-200">
@@ -1233,7 +1243,7 @@ const Dashboard = ({ user, misHijos, logout, refresh }) => {
                       {hijo.actividad ? (
                           <div><p className="text-lg font-black text-orange-900 leading-tight">{hijo.actividad}</p></div>
                       ) : (
-                          <button onClick={() => { setAlumnoSeleccionado(hijo); setModoModal('inscripcion'); }} className="w-full bg-white border border-orange-300 text-orange-700 py-1.5 rounded text-xs font-bold">
+                          <button onClick={() => { setAlumnoSeleccionado(hijo); setModoModal('inscripcion'); }} className="w-full bg-white border border-orange-300 text-orange-700 py-1.5 rounded text-xs font-bold hover:bg-orange-100">
                               👉 Elegir Grupo
                           </button>
                       )}
@@ -1242,27 +1252,59 @@ const Dashboard = ({ user, misHijos, logout, refresh }) => {
                       <span className="text-2xl">🗓️</span>
                       <div>
                           <p className="font-bold text-orange-900 text-xs uppercase">Prueba de Nivel</p>
-                          {hijo.citaNivel ? <p className="text-orange-800 font-bold">{hijo.citaNivel}</p> : <button onClick={() => { setAlumnoSeleccionado(hijo); setModoModal('prueba'); }} className="text-red-600 font-bold underline animate-pulse">¡Reservar Hora!</button>}
+                          {hijo.citaNivel ? (
+                              <p className="text-orange-800 font-bold">{hijo.citaNivel}</p>
+                          ) : (
+                              <button onClick={() => { setAlumnoSeleccionado(hijo); setModoModal('prueba'); }} className="text-red-600 font-bold underline cursor-pointer animate-pulse hover:text-red-800">
+                                  ¡Reservar Hora!
+                              </button>
+                          )}
                       </div>
                   </div>
                 </div>
               )}
 
+              {/* AVISO BAJA FINALIZADA */}
+              {hijo.estado === 'baja_finalizada' && (
+                 <div className="text-center py-2 text-gray-400 text-xs italic mt-2 border-t border-gray-100 pt-3">
+                     Este alumno ha finalizado su actividad.
+                 </div>
+              )}
+
+              {/* === BOTONES DE ACCIÓN (AQUÍ ESTÁ LA CORRECCIÓN) === */}
               <div className="mt-6 pt-4 ml-3 border-t border-gray-100 flex gap-2">
+                
+                {/* 1. SOLO SI TIENE PLAZA CONFIRMADA -> TRAMITAR BAJA (Oficial) */}
                 {hijo.estado === 'inscrito' && estaAdmitido && (
-                    <button onClick={() => gestionarBaja(hijo)} className="w-full bg-white text-red-600 px-3 py-2 rounded-lg text-sm font-bold border border-red-200 hover:bg-red-50">Tramitar Baja</button>
+                    <button onClick={() => gestionarBaja(hijo)} className="w-full bg-white text-red-600 px-3 py-2 rounded-lg text-sm font-bold border border-red-200 hover:bg-red-50">
+                        Tramitar Baja
+                    </button>
                 )}
+
+                {/* 2. SI ESTÁ INSCRITO PERO PENDIENTE -> CANCELAR (Borrado simple) */}
                 {hijo.estado === 'inscrito' && !estaAdmitido && (
-                    <button onClick={() => cancelarSolicitud(hijo)} className="w-full bg-white text-red-500 px-3 py-2 rounded-lg text-sm font-bold border border-red-200">✖️ Cancelar</button>
+                    <button onClick={() => cancelarSolicitud(hijo)} className="w-full bg-white text-red-500 px-3 py-2 rounded-lg text-sm font-bold border border-red-200 hover:bg-red-50">
+                        ✖️ Cancelar Solicitud
+                    </button>
                 )}
+
+                {/* 3. INSCRIBIR (Nuevos o Bajas Finalizadas) */}
                 {estaLibre && (
                   <div className="flex w-full gap-2">
-                    <button onClick={() => { setAlumnoSeleccionado(hijo); setModoModal('inscripcion'); }} className="flex-1 bg-blue-600 text-white py-2 rounded-lg text-sm font-bold shadow-sm">Inscribir</button>
-                    {hijo.estado === 'sin_inscripcion' && <button onClick={() => gestionarBaja(hijo)} className="bg-white text-red-500 px-3 py-2 rounded-lg border border-red-200 hover:bg-red-50">🗑️</button>}
+                    <button onClick={() => { setAlumnoSeleccionado(hijo); setModoModal('inscripcion'); }} className="flex-1 bg-blue-600 text-white py-2 rounded-lg text-sm font-bold shadow-sm hover:bg-blue-700">
+                        Inscribir
+                    </button>
+                    {hijo.estado === 'sin_inscripcion' && (
+                        <button onClick={() => gestionarBaja(hijo)} className="bg-white text-red-500 px-3 py-2 rounded-lg text-sm font-bold border border-red-200 hover:bg-red-50">🗑️</button>
+                    )}
                   </div>
                 )}
+
+                {/* 4. CANCELAR PRUEBA */}
                 {hijo.estado === 'prueba_reservada' && (
-                    <button onClick={() => cancelarSolicitud(hijo)} className="w-full bg-white text-red-500 px-3 py-2 rounded-lg text-sm font-bold border border-red-200">✖️ Cancelar</button>
+                    <button onClick={() => cancelarSolicitud(hijo)} className="w-full bg-white text-red-500 px-3 py-2 rounded-lg text-sm font-bold border border-red-200 hover:bg-red-50">
+                        ✖️ Cancelar Solicitud
+                    </button>
                 )}
               </div>
             </div>
@@ -1272,35 +1314,7 @@ const Dashboard = ({ user, misHijos, logout, refresh }) => {
       
       <button onClick={() => setShowForm(true)} className="w-full py-5 border-2 border-dashed border-blue-200 text-blue-400 rounded-xl font-bold hover:bg-blue-50 transition flex items-center justify-center gap-2 mb-10"><span className="text-2xl">+</span> Añadir Otro Alumno</button>
       
-      {/* 🔐 MODAL DE CAMBIO DE CONTRASEÑA (Pégalo aquí al final) */}
-      {showPassModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-[3000]">
-          <div className="bg-white p-8 rounded-3xl shadow-2xl w-full max-w-sm">
-            <h3 className="text-2xl font-black text-blue-900 mb-2">Seguridad</h3>
-            <p className="text-gray-500 text-sm mb-6">Nueva contraseña de acceso</p>
-            <div className="space-y-3">
-              <input 
-                type="password" placeholder="Nueva clave" 
-                className="w-full bg-gray-50 border-2 border-gray-100 p-4 rounded-2xl focus:border-blue-500 outline-none font-bold"
-                value={newPassword} onChange={(e) => setNewPassword(e.target.value)}
-              />
-              <input 
-                type="password" placeholder="Repite clave" 
-                className="w-full bg-gray-50 border-2 border-gray-100 p-4 rounded-2xl focus:border-blue-500 outline-none font-bold"
-                value={confirmPass} onChange={(e) => setConfirmPass(e.target.value)}
-              />
-              <button 
-                onClick={handleChangePassword} disabled={passLoading}
-                className="w-full bg-blue-600 text-white font-black py-4 rounded-2xl shadow-lg mt-4 active:scale-95 transition"
-              >
-                {passLoading ? 'GUARDANDO...' : 'ACTUALIZAR CLAVE'}
-              </button>
-              <button onClick={() => setShowPassModal(false)} className="w-full text-gray-400 font-bold py-2">Cancelar</button>
-            </div>
-          </div>
-        </div>
-      )}
-
+      {/* MODALES Y FORMULARIOS */}
       {showForm && (<FormularioHijo close={() => setShowForm(false)} user={user} refresh={refresh} />)}
       {alumnoEditar && (<FormularioEdicionHijo alumno={alumnoEditar} close={() => setAlumnoEditar(null)} refresh={refresh} />)}
       {modoModal === 'prueba' && alumnoEnVivo && (<PantallaPruebaNivel alumno={alumnoEnVivo} close={() => setModoModal(null)} onSuccess={alTerminarPrueba} user={user} refresh={refresh} />)}
@@ -1963,18 +1977,6 @@ const Login = ({ setView }) => {
     }
   };
 
- // 🔑 FUNCIÓN DE RECUPERACIÓN (Pégala justo encima de handleAuth)
- const handleResetPassword = async () => {
-  if (!loginData.email) {
-    return alert("⚠️ Por favor, escribe tu email en el cuadro de arriba.");
-  }
-  try {
-    await sendPasswordResetEmail(auth, loginData.email);
-    alert("📧 ¡Enviado! Revisa tu correo.");
-  } catch (error) {
-    alert("❌ Error: Email no encontrado.");
-  }
-};
   const handleAuth = async (e) => { 
       e.preventDefault(); 
       try { await signInWithEmailAndPassword(auth, loginData.email, loginData.password); } 
@@ -2131,62 +2133,13 @@ const Login = ({ setView }) => {
     <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4 relative">
       <button onClick={() => setView('landing')} className="absolute top-4 left-4 font-bold text-gray-500 hover:text-black flex items-center gap-2">⬅ Volver al Inicio</button>
       <div className="bg-white p-8 rounded-xl shadow-xl w-full max-w-md animate-fade-in">
-      <div className="text-center mb-8">
-  <img 
-    src={IMG_ESCUDO} 
-    className="h-24 md:h-32 mx-auto mb-6 drop-shadow-md transition-transform hover:scale-105" 
-    alt="Logo San Buenaventura" 
-  />
-  <h2 className="text-3xl font-black mb-2 text-blue-900 tracking-tight">
-    Acceso Familias
-  </h2>
-  <p className="text-gray-500 text-sm font-medium">
-    Gestiona tus inscripciones y pruebas de nivel
-  </p>
-</div>
-<form onSubmit={handleAuth} className="space-y-4">
-          <input 
-            className="w-full border p-3 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" 
-            type="email" 
-            placeholder="Tu Email" 
-            value={loginData.email}
-            onChange={e => setLoginData({ ...loginData, email: e.target.value })} 
-          />
-          
-          <div className="w-full">
-            <input 
-              className="w-full border p-3 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" 
-              type="password" 
-              placeholder="Contraseña" 
-              value={loginData.password}
-              onChange={e => setLoginData({ ...loginData, password: e.target.value })} 
-            />
-            <div className="flex justify-end mt-1">
-              <button 
-                type="button"
-                onClick={handleResetPassword}
-                className="text-[10px] font-black text-blue-600 uppercase pr-1"
-              >
-                ¿Has olvidado tu contraseña?
-              </button>
-            </div>
-          </div>
-
-          <button type="submit" className="w-full bg-blue-600 text-white p-3 rounded-lg font-bold hover:bg-blue-700 shadow-md transition mt-2">
-            Entrar
-          </button>
+        <div className="text-center mb-6"><img src={IMG_ESCUDO} className="h-16 mx-auto mb-4" alt="Logo" /><h2 className="text-2xl font-bold mb-2 text-blue-900">Acceso Familias</h2><p className="text-gray-500 text-sm">Gestiona tus inscripciones y pruebas</p></div>
+        <form onSubmit={handleAuth} className="space-y-4">
+          <input className="w-full border p-3 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" type="email" placeholder="Tu Email" onChange={e => setLoginData({ ...loginData, email: e.target.value })} />
+          <input className="w-full border p-3 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" type="password" placeholder="Contraseña" onChange={e => setLoginData({ ...loginData, password: e.target.value })} />
+          <button className="w-full bg-blue-600 text-white p-3 rounded-lg font-bold hover:bg-blue-700 shadow-md transition">Entrar</button>
         </form>
-
-        <div className="mt-6 text-center border-t pt-4">
-          <p className="text-gray-500 text-sm mb-2">¿Es tu primera vez?</p>
-          <button 
-            type="button"
-            onClick={() => setIsRegister(true)} 
-            className="text-blue-600 font-bold hover:underline"
-          >
-            Crear Cuenta Nueva
-          </button>
-        </div>
+        <div className="mt-6 text-center border-t pt-4"><p className="text-gray-500 text-sm mb-2">¿Es tu primera vez?</p><button onClick={() => setIsRegister(true)} className="text-blue-600 font-bold hover:underline">Crear Cuenta Nueva</button></div>
       </div>
     </div>
   );
