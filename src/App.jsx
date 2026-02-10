@@ -766,18 +766,18 @@ const archivarBaja = async (alumno) => {
   // --- 4. LISTAS FILTRADAS ---
   const gruposUnicos = [...new Set(alumnos.map(a => a.actividad).filter(g => g))].sort();
   
-// --- 1. LISTADO GLOBAL (MODIFICADO PARA INFANTIL) ---
+// --- 1. LISTADO GLOBAL ---
 const listadoGlobal = alumnos.filter(a => {
   const coincideNombre = (a.nombre || '').toLowerCase().includes(busqueda.toLowerCase());
   const coincideGrupo = filtroGrupo ? a.actividad === filtroGrupo : true;
   
-  // DETECTAMOS SI ES INFANTIL (buscando la palabra en curso o actividad)
+  // DETECTAMOS SI ES INFANTIL O ADULTO
   const esInfantil = (a.curso || '').toUpperCase().includes('INFANTIL') || (a.actividad || '').toUpperCase().includes('INFANTIL');
+  const esAdulto = (a.curso || '').toUpperCase().includes('ADULTO') || (a.actividad || '').toUpperCase().includes('ADULTO');
 
-  // REGLA: Pasa si tiene el OK del admin... O SI ES INFANTIL (Pase VIP)
-  const debeAparecer = (a.validadoAdmin === true) || esInfantil;
+  // REGLA: Pasa si tiene el OK... O SI ES INFANTIL O ADULTO (Pase VIP)
+  const debeAparecer = (a.validadoAdmin === true) || esInfantil || esAdulto;
 
-  // Importante: Que no sea una baja
   const noEsBaja = a.estado !== 'baja_pendiente' && a.estado !== 'baja_finalizada';
 
   return coincideNombre && coincideGrupo && debeAparecer && noEsBaja;
@@ -1519,7 +1519,7 @@ const FormularioHijo = ({ close, user, refresh, alumnoAEditar = null }) => {
 
           {/* PREGUNTA DE NATACIÓN */}
           <div className="bg-blue-50 p-4 rounded-xl border border-blue-100">
-            <p className="text-sm font-bold text-blue-800 mb-2">¿Estuvo en natación el curso pasado?</p>
+            <p className="text-sm font-bold text-blue-800 mb-2">¿Estuvo en la extraescolar de natación el curso pasado?</p>
             <div className="flex gap-6">
               <label className="flex items-center gap-2 cursor-pointer">
                 <input 
@@ -1587,6 +1587,8 @@ const PantallaInscripcion = ({ alumno, close, onRequirePrueba, user, refresh }) 
     curso: alumno.curso, 
     fechaNacimiento: alumno.fechaNacimiento || '' 
   });
+  const [verNormas, setVerNormas] = useState(false);
+  const [autorizaFotos, setAutorizaFotos] = useState(alumno.autorizaFotos === true);
   
   // USAREMOS UNA REFERENCIA PARA EVITAR EL BUG DE SINCRONIZACIÓN
   // Esto guarda el valor "real" sin depender de los renderizados de React
@@ -1624,6 +1626,19 @@ const PantallaInscripcion = ({ alumno, close, onRequirePrueba, user, refresh }) 
         esAntiguo: d.esAntiguoAlumno
     });
 
+    // ... (Tu lectura de seguridad y console.log anteriores)
+
+    // 1. Detectamos si es Adulto por el ID o por el nombre del curso
+    const esAdulto = act.id === 'adultos' || (d.curso || '').toUpperCase().includes('ADULTO');
+
+    // 2. Definimos el estado con prioridad absoluta
+    let estadoFinal = 'inscrito'; // Por defecto, todos inscritos...
+
+    // SOLO si NO es adulto Y la actividad requiere prueba, lo mandamos a 'requiere_prueba'
+    if (!esAdulto && act.requierePrueba) {
+        estadoFinal = 'requiere_prueba';
+    }
+
     const datosComunes = {
         nombre: d.nombre, 
         curso: d.curso, 
@@ -1631,8 +1646,10 @@ const PantallaInscripcion = ({ alumno, close, onRequirePrueba, user, refresh }) 
         dias: op.dias,
         horario: op.horario,
         precio: op.precio,
-        estado: 'inscrito', // Por defecto los VIP entran como inscritos
-        fechaInscripcion: new Date().toISOString()
+        estado: estadoFinal, // <-- Usamos la variable que acabamos de calcular
+        fechaInscripcion: new Date().toISOString(),
+        autorizaFotos: autorizaFotos,
+        aceptaNormas: normasRef.current
     };
 
     // 🛡️ EL FILTRO DEFINITIVO (Pase VIP)
@@ -1702,26 +1719,59 @@ const PantallaInscripcion = ({ alumno, close, onRequirePrueba, user, refresh }) 
                 </div>
             </div>
 
-            {/* CHECKBOX MANUAL (SIN INPUT NATIVO PARA EVITAR ERRORES) */}
-            <div 
-                onClick={toggleNormas}
-                className={`p-4 rounded-lg mb-6 border transition cursor-pointer select-none flex items-start gap-3 
-                ${aceptaNormasVisual ? 'bg-green-50 border-green-200 shadow-sm' : 'bg-yellow-50 border-yellow-200 hover:bg-yellow-100'}`}
-            >
-                {/* Caja simulada del Checkbox */}
-                <div className={`mt-1 w-6 h-6 rounded border flex items-center justify-center transition-colors ${aceptaNormasVisual ? 'bg-green-600 border-green-600' : 'bg-white border-gray-400'}`}>
-                    {aceptaNormasVisual && <span className="text-white font-bold text-sm">✓</span>}
-                </div>
-                
-                <div className="text-sm flex-1">
-                    <span className={`font-bold block mb-1 ${aceptaNormasVisual ? 'text-green-800' : 'text-yellow-900'}`}>
-                        {aceptaNormasVisual ? '✅ Normas aceptadas' : '⚠️ Aceptación requerida'}
-                    </span>
-                    <span className="text-gray-600">
-                        He leído y acepto la normativa de la escuela, condiciones de pago y política de bajas (aviso día 25).
-                    </span>
-                </div>
-            </div>
+           {/* SECCIÓN DE NORMATIVA DESPLEGABLE */}
+<div className="mb-4">
+    <div 
+        onClick={() => setVerNormas(!verNormas)} 
+        className="flex justify-between items-center p-3 bg-gray-100 rounded-t-lg border border-gray-200 cursor-pointer hover:bg-gray-200 transition-colors"
+    >
+        <span className="text-[10px] font-extrabold text-gray-700 uppercase tracking-widest">
+            📄 Ver Normativa y Condiciones
+        </span>
+        <span className="text-gray-400 text-xs">{verNormas ? '▲ Ocultar' : '▼ Mostrar'}</span>
+    </div>
+
+    {verNormas && (
+        <div className="w-full h-40 overflow-y-auto p-4 bg-white border-x border-gray-200 text-[11px] text-gray-600 leading-relaxed shadow-inner">
+            <h4 className="font-bold text-gray-800 mb-1">1. CONDICIONES GENERALES</h4>
+            <p className="mb-3">El club se reserva el derecho de organizar los grupos por niveles...</p>
+            <h4 className="font-bold text-red-800 mb-1 italic underline">2. POLÍTICA DE BAJAS</h4>
+            <p className="mb-3 font-medium">Las bajas deben tramitarse antes del día 25 del mes anterior. No se realizarán devoluciones una vez pasado dicho día.</p>
+        </div>
+    )}
+
+    <div 
+        onClick={toggleNormas}
+        className={`p-4 rounded-b-lg border transition-all cursor-pointer flex items-center gap-3 
+        ${aceptaNormasVisual ? 'bg-green-50 border-green-200' : 'bg-yellow-50 border-yellow-200'}`}
+    >
+        <div className={`w-6 h-6 rounded border flex items-center justify-center ${aceptaNormasVisual ? 'bg-green-600 border-green-600' : 'bg-white border-gray-400'}`}>
+            {aceptaNormasVisual && <span className="text-white font-bold text-sm">✓</span>}
+        </div>
+        <span className={`text-sm font-bold ${aceptaNormasVisual ? 'text-green-800' : 'text-yellow-900'}`}>
+            He leído y acepto la normativa (Obligatorio)
+        </span>
+    </div>
+</div>
+
+{/* SECCIÓN DE FOTOS (OPCIONAL) */}
+<div 
+    onClick={() => setAutorizaFotos(!autorizaFotos)}
+    className={`mb-6 p-4 rounded-lg border transition-all cursor-pointer flex items-start gap-3 
+    ${autorizaFotos ? 'bg-blue-50 border-blue-200' : 'bg-gray-50 border-gray-200 opacity-70'}`}
+>
+    <div className={`mt-1 w-6 h-6 rounded border flex items-center justify-center transition-colors ${autorizaFotos ? 'bg-blue-600 border-blue-600' : 'bg-white border-gray-400'}`}>
+        {autorizaFotos && <span className="text-white font-bold text-sm">✓</span>}
+    </div>
+    <div className="text-xs">
+        <p className={`font-bold mb-1 ${autorizaFotos ? 'text-blue-900' : 'text-gray-700'}`}>
+            📸 Autorización de imagen (Opcional)
+        </p>
+        <p className={autorizaFotos ? 'text-blue-800' : 'text-gray-500'}>
+            Autorizo el uso de fotos/vídeos del alumno para fines informativos y redes sociales.
+        </p>
+    </div>
+</div>
 
             <h4 className="font-bold text-gray-800 text-lg mb-4 border-b pb-2">Elige Actividad y Horario:</h4>
 
@@ -1797,7 +1847,7 @@ const PantallaPruebaNivel = ({ alumno, close, onSuccess, user }) => {
           </div>
           <h3 className="text-2xl font-black text-blue-900 mb-2">¡Alumno Exento!</h3>
           <p className="text-gray-600 mb-6">
-            Como <strong>{alumno.nombre}</strong> ya estuvo en natación el curso pasado, no necesita realizar la prueba de nivel.
+            Como <strong>{alumno.nombre}</strong> ya estuvo en la extraescolar de natación el curso pasado, no necesita realizar la prueba de nivel.
           </p>
           <button 
             onClick={() => {
@@ -1895,7 +1945,7 @@ const PantallaPruebaNivel = ({ alumno, close, onSuccess, user }) => {
           </div>
           <h3 className="text-2xl font-black text-blue-900 mb-2">¡Pase Directo!</h3>
           <p className="text-gray-600 mb-6 font-medium">
-            Como <strong>{alumno.nombre}</strong> ya estuvo en natación el curso pasado, no necesita realizar la prueba de nivel.
+            Como <strong>{alumno.nombre}</strong> ya estuvo en la extraescolar de natación el curso pasado, no necesita realizar la prueba de nivel.
           </p>
           <button 
             onClick={async () => {
@@ -2034,6 +2084,15 @@ const Login = ({ setView }) => {
       if (!regData.nombrePagador) return alert('⚠️ Falta: Nombre del Pagador');
       if (!regData.dniPagador) return alert('⚠️ Falta: DNI del Pagador');
       
+      // VALIDACIÓN DEL IBAN
+      const ibanLimpio = (regData.iban || '').replace(/\s/g, ''); // Quitamos espacios por si acaso
+      const ibanRegex = /^ES\d{22}$/; // Empieza por ES y siguen exactamente 22 dígitos
+
+      if (!ibanRegex.test(ibanLimpio)) {
+        return alert('⚠️ IBAN Inválido: Debe empezar por ES y tener 22 números después (Total 24 caracteres).');
+      }
+    
+      
       // --- BLOQUEO TELÉFONO EXTERNO ---
       const tel1 = regData.telefono1 ? String(regData.telefono1).trim() : "";
       if (tel1.length < 9) return alert(`⛔ El teléfono debe tener 9 cifras (has puesto ${tel1.length})`);
@@ -2152,8 +2211,19 @@ const Login = ({ setView }) => {
                         <input className="border p-2 rounded bg-white" placeholder="Población *" onChange={e => setRegData({ ...regData, poblacion: e.target.value })} />
                     </div>
                     
-                    <input className="border p-2 rounded bg-white md:col-span-2 font-mono border-orange-300" placeholder="IBAN (ES...) *" onChange={e => setRegData({ ...regData, iban: e.target.value })} />
-                    
+                    <input 
+  className="border p-2 rounded bg-white md:col-span-2 font-mono border-orange-300 uppercase" 
+  placeholder="IBAN (ES + 22 números) *" 
+  maxLength={24}
+  value={regData.iban || ''}
+  onChange={e => {
+    // 1. Convertimos a mayúsculas
+    // 2. Quitamos cualquier cosa que no sea letra o número
+    // 3. Quitamos espacios
+    const valor = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    setRegData({ ...regData, iban: valor });
+  }} 
+/>                    
                     <div className="md:col-span-2 mt-2">
                         <label className="text-xs font-bold text-orange-800 uppercase">Email del Pagador (Será tu Usuario) *</label>
                         <input type="email" className="w-full border p-2 rounded bg-white font-bold text-blue-900" placeholder="ejemplo@correo.com" onChange={e => setRegData({ ...regData, emailPagador: e.target.value })} />
