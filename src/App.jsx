@@ -219,6 +219,25 @@ const OFERTA_ACTIVIDADES = [
         { dias: '[1 DÍA] Miércoles', horario: '18:30-19:00', precio: '37€' },
         { dias: '[1 DÍA] Viernes', horario: '14:15-15:00', precio: '37€' }
     ]
+  },
+  {
+    id: 'nado_libre', 
+    nombre: '🏊‍♂️ Nado Libre ">16 años" (18:30-19:00)', 
+    cursos: ['ADULTO', '1BACH', '2BACH'], 
+    requierePrueba: false, 
+    diasResumen: 'L-V', 
+    precioResumen: '25€ / 35€', 
+    descripcion: 'Uso de calle para entrenamiento personal sin monitor. Ideal para quienes buscan nadar a su propio ritmo.\n\n⬇️ ELIGE TU OPCIÓN ⬇️\n⭐ PACK 2 DÍAS (35€): L/X o M/J.\n⭐ DÍA SUELTO (25€): Cualquier día de la semana.', 
+    aviso: 'Mínimo 2 alumnos.',
+    opciones: [
+        { dias: '[PACK 2 DÍAS] Lunes y Miércoles', horario: '18:30-19:00', precio: '35€' },
+        { dias: '[PACK 2 DÍAS] Martes y Jueves', horario: '18:30-19:00', precio: '35€' },
+        { dias: '[1 DÍA] Lunes', horario: '18:30-19:00', precio: '25€' },
+        { dias: '[1 DÍA] Martes', horario: '18:30-19:00', precio: '25€' },
+        { dias: '[1 DÍA] Miércoles', horario: '18:30-19:00', precio: '25€' },
+        { dias: '[1 DÍA] Jueves', horario: '18:30-19:00', precio: '25€' },
+        { dias: '[1 DÍA] Viernes', horario: '18:30-19:00', precio: '25€' }
+    ]
   }
 ];
 
@@ -801,6 +820,7 @@ const archivarBaja = async (alumno) => {
             else if (actText.includes('1º-3º')) updates.actividadId = 'primaria_123_tarde';
             else if (actText.includes('4º-6º')) updates.actividadId = 'primaria_456_tarde';
             else if (actText.includes('waterpolo')) updates.actividadId = 'waterpolo';
+            else if (actText.includes('nado libre') || actText.includes('libre')) updates.actividadId = 'nado_libre';
         }
 
         // 2. Detectar DÍAS (Vital para el aforo diario)
@@ -866,27 +886,45 @@ const listadoBajas = alumnos.filter(a => a.estado === 'baja_pendiente' || a.esta
   // --- 5. RENDERIZADO (HTML) ---
   return (
     <div className="min-h-screen bg-gray-100 p-6 font-sans relative">
-      {/* HEADER */}
-      <div className="flex justify-between items-center mb-6 bg-white p-4 rounded shadow">
-        <div>
-            <h1 className="text-xl font-bold text-gray-800">Panel de Gestión</h1>
-            <p className="text-xs text-gray-500">{userEmail} ({userRole})</p>
-        </div>
-        <div className="flex gap-2">
-    {/* 🔄 BOTÓN DE SINCRONIZACIÓN (NUEVO) */}
-    {userRole === 'admin' && (
-      <button 
-        onClick={sincronizarAlumnosAntiguos} 
-        className="bg-amber-100 text-amber-700 px-3 py-1 rounded text-[10px] font-black border border-amber-200 hover:bg-amber-200 transition-colors uppercase"
-      >
-        🔄 Sincronizar IDs
-      </button>
-    )}
+     {/* HEADER RESPONSIVO CORREGIDO */}
+<div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 bg-white p-4 rounded shadow gap-4">
+  <div>
+      <h1 className="text-xl font-black text-gray-800">Panel de Gestión</h1>
+      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">
+        {userEmail} <span className="text-blue-500 mx-1">•</span> {userRole}
+      </p>
+  </div>
 
-    {userRole === 'admin' && <button onClick={descargarExcel} className="bg-green-600 text-white px-3 py-1 rounded text-sm font-bold">Excel</button>}
-    <button onClick={logout} className="text-red-500 border border-red-200 px-3 py-1 rounded text-sm font-bold">Salir</button>
+  <div className="flex flex-wrap gap-2 w-full md:w-auto justify-end">
+      {/* 🔄 BOTÓN DE SINCRONIZACIÓN */}
+      {userRole === 'admin' && (
+        <button 
+          onClick={sincronizarAlumnosAntiguos} 
+          className="flex-1 md:flex-none bg-amber-100 text-amber-700 px-3 py-2 md:py-1 rounded text-[10px] font-black border border-amber-200 hover:bg-amber-200 transition-colors uppercase whitespace-nowrap"
+        >
+          🔄 <span className="hidden xs:inline">Sincronizar</span>
+        </button>
+      )}
+
+      {/* 📊 BOTÓN EXCEL */}
+      {userRole === 'admin' && (
+        <button 
+          onClick={descargarExcel} 
+          className="flex-1 md:flex-none bg-green-600 text-white px-3 py-2 md:py-1 rounded text-xs font-bold shadow-sm hover:bg-green-700 transition-colors uppercase whitespace-nowrap"
+        >
+          Excel
+        </button>
+      )}
+
+      {/* 🚪 BOTÓN SALIR */}
+      <button 
+        onClick={logout} 
+        className="flex-1 md:flex-none text-red-500 border border-red-200 px-3 py-2 md:py-1 rounded text-xs font-bold hover:bg-red-50 transition-colors uppercase whitespace-nowrap"
+      >
+        Salir
+      </button>
+  </div>
 </div>
-      </div>
 
 {/* PESTAÑAS AJUSTADAS (RESPONSIVE) */}
 <div className="flex gap-1 mb-6 border-b pb-1 overflow-x-auto scrollbar-hide bg-white sticky top-0 z-10">
@@ -932,72 +970,93 @@ const listadoBajas = alumnos.filter(a => a.estado === 'baja_pendiente' || a.esta
              );
           })}
       </div>
-      {/* 📊 MATRIZ DE OCUPACIÓN DIARIA (Insertar aquí) */}
-      {tab === 'ocupacion' && (
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 mb-8 overflow-hidden animate-fade-in">
-          <div className="p-4 bg-slate-800 text-white flex justify-between items-center">
-            <h3 className="text-xs font-black uppercase tracking-widest flex items-center gap-2">
-              <span>🏊‍♂️</span> Control de Aforo Diario
-            </h3>
-            <span className="text-[10px] bg-emerald-500 text-white px-2 py-0.5 rounded font-bold uppercase">En tiempo real</span>
-          </div>
-          
-          <div className="overflow-x-auto">
-            <table className="w-full text-left">
-              <thead>
-                <tr className="bg-gray-50 border-b">
-                  <th className="p-4 text-[10px] font-black text-gray-400 uppercase border-r">Actividad</th>
-                  {['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'].map(d => (
-                    <th key={d} className="p-4 text-[10px] font-black text-gray-400 uppercase text-center">{d}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {[
-                  { id: 'chapoteo', m: 16, n: 'Chapoteo (16:00)' },
-                  { id: 'primaria_1615', m: 24, n: 'Primaria (16:15)' },
-                  { id: 'primaria_123_tarde', m: 8, n: '1º-3º Prim (17:30)' },
-                  { id: 'primaria_456_tarde', m: 8, n: '4º-6º Prim (17:30)' },
-                  { id: 'waterpolo', m: 12, n: 'Waterpolo' },
-                  { id: 'adultos', m: 10, n: 'Adultos' },
-                  { id: 'aquagym', m: 12, n: 'Aquagym' },
-                  { id: 'eso_bach', m: 10, n: 'ESO / Bach' }
-                ].map(g => (
-                  <tr key={g.id} className="border-b hover:bg-gray-50">
-                    <td className="p-4 border-r bg-gray-50/30">
-                      <p className="text-xs font-bold text-gray-700 leading-tight">{g.n}</p>
-                      <p className="text-[9px] text-gray-400 font-bold uppercase mt-0.5">Límite: {g.m}</p>
-                    </td>
-                    {['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'].map(dia => {
-                      const ocupados = alumnos.filter(a => 
-                        a.actividadId === g.id && 
-                        a.estado === 'inscrito' && 
-                        a.dias?.includes(dia)
-                      ).length;
-                      
-                      const critico = ocupados >= g.m;
+     {/* 📊 MATRIZ DE OCUPACIÓN DIARIA (CORREGIDA) */}
+{tab === 'ocupacion' && (
+  <div className="bg-white rounded-2xl shadow-sm border border-gray-200 mb-8 overflow-hidden animate-fade-in">
+    <div className="p-4 bg-slate-800 text-white flex justify-between items-center">
+      <h3 className="text-xs font-black uppercase tracking-widest flex items-center gap-2">
+        <span>🏊‍♂️</span> Control de Aforo Diario
+      </h3>
+      <span className="text-[10px] bg-emerald-500 text-white px-2 py-0.5 rounded font-bold uppercase">En tiempo real</span>
+    </div>
+    
+    <div className="overflow-x-auto">
+      <table className="w-full text-left">
+        <thead>
+          <tr className="bg-gray-50 border-b">
+            <th className="p-4 text-[10px] font-black text-gray-400 uppercase border-r">Actividad</th>
+            {['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'].map(d => (
+              <th key={d} className="p-4 text-[10px] font-black text-gray-400 uppercase text-center">{d}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {[
+            { id: 'chapoteo', m: 16, n: 'Chapoteo (16:00)' },
+            // --- DESGLOSE DE PRIMARIA 16:15 ---
+            { 
+              id: 'primaria_1615', 
+              m: 12, 
+              n: 'Primaria 1º-3º (16:15)', 
+              cursosRelacionados: ['1PRI', '2PRI', '3PRI'] 
+            },
+            { 
+              id: 'primaria_1615', 
+              m: 12, 
+              n: 'Primaria 4º-6º (16:15)', 
+              cursosRelacionados: ['4PRI', '5PRI', '6PRI'] 
+            },
+            // ----------------------------------
+            { id: 'primaria_123_tarde', m: 8, n: '1º-3º Prim (17:30)' },
+            { id: 'primaria_456_tarde', m: 8, n: '4º-6º Prim (17:30)' },
+            { id: 'waterpolo', m: 12, n: 'Waterpolo' },
+            { id: 'adultos', m: 10, n: 'Adultos' },
+            { id: 'aquagym', m: 12, n: 'Aquagym' },
+            { id: 'nado_libre', m: 10, n: 'Nado Libre (18:30-19:00)' } 
+].map((g, index) => (
+            <tr key={g.n + index} className="border-b hover:bg-gray-50">
+              <td className="p-4 border-r bg-gray-50/30">
+                <p className="text-xs font-bold text-gray-700 leading-tight">{g.n}</p>
+                <p className="text-[9px] text-gray-400 font-bold uppercase mt-0.5">Límite: {g.m}</p>
+              </td>
+              {['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'].map(dia => {
+                // 🧮 Lógica de conteo con filtro por curso si existe
+                const ocupados = alumnos.filter(a => {
+                  const coincideId = a.actividadId === g.id;
+                  const coincideEstado = a.estado === 'inscrito';
+                  const coincideDia = a.dias?.includes(dia);
+                  
+                  // Si la fila tiene cursos específicos, filtramos; si no, contamos todo el ID
+                  const coincideCurso = g.cursosRelacionados 
+                    ? g.cursosRelacionados.includes(a.curso) 
+                    : true;
 
-                      return (
-                        <td key={dia} className="p-2">
-                          <div className={`h-12 rounded-xl flex flex-col items-center justify-center border-2 transition-all ${
-                            ocupados === 0 ? 'border-dashed border-gray-100 text-gray-200' :
-                            critico ? 'bg-red-500 border-red-600 text-white font-black scale-105 shadow-md' :
-                            ocupados > (g.m * 0.7) ? 'bg-orange-50 border-orange-200 text-orange-600' : 
-                            'bg-emerald-50 border-emerald-100 text-emerald-600 font-bold'
-                          }`}>
-                            <span className="text-sm leading-none">{ocupados > 0 ? ocupados : '-'}</span>
-                            {ocupados > 0 && <span className="text-[8px] mt-1 opacity-60">/{g.m}</span>}
-                          </div>
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
+                  return coincideId && coincideEstado && coincideDia && coincideCurso;
+                }).length;
+                
+                const critico = ocupados >= g.m;
+
+                return (
+                  <td key={dia} className="p-2">
+                    <div className={`h-12 rounded-xl flex flex-col items-center justify-center border-2 transition-all ${
+                      ocupados === 0 ? 'border-dashed border-gray-100 text-gray-200' :
+                      critico ? 'bg-red-500 border-red-600 text-white font-black scale-105 shadow-md' :
+                      ocupados > (g.m * 0.7) ? 'bg-orange-50 border-orange-200 text-orange-600' : 
+                      'bg-emerald-50 border-emerald-100 text-emerald-600 font-bold'
+                    }`}>
+                      <span className="text-sm leading-none">{ocupados > 0 ? ocupados : '-'}</span>
+                      {ocupados > 0 && <span className="text-[8px] mt-1 opacity-60">/{g.m}</span>}
+                    </div>
+                  </td>
+                );
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  </div>
+)}
       
 
      {/* TAB: GLOBAL (CON FECHA DE ALTA Y BOTÓN DE REVISIÓN) */}
