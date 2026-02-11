@@ -612,9 +612,17 @@ const confirmarInscripcion = async (alumnoId) => {
   
   // Abrir Ficha: Combina datos del alumno con los del padre
   const abrirFicha = (alumno) => {
-      const datosPadre = padres[alumno.parentId] || {};
-      setAlumnoSeleccionado({ ...alumno, datosPadre });
-  };
+    // 🔍 Buscamos al padre por su ID o por su Email (user)
+    const padreId = alumno.parentId || alumno.user; 
+    const datosPadre = padres[padreId] || {};
+    
+    // 💡 Combinamos: primero lo que tiene el alumno, luego lo del padre
+    // Si el alumno tiene teléfono propio, ese mandará.
+    setAlumnoSeleccionado({ 
+        ...alumno, 
+        datosPadre: datosPadre 
+    });
+};
 
   const validarPlaza = async (alumno) => {
     if (userRole !== 'admin') return alert("⛔ Solo coordinadores.");
@@ -626,13 +634,19 @@ const confirmarInscripcion = async (alumnoId) => {
         const hoy = new Date().toISOString().split('T')[0];
 
         await updateDoc(doc(db, 'students', alumno.id), { 
-            estado: 'inscrito', 
-            actividad: grupoFinal, 
-            validadoAdmin: true,
-            fechaAlta: hoy,      // ✅ Pone la fecha de hoy
-            fechaBaja: null      // 🧹 LIMPIEZA: Borra la fecha de baja si tenía una vieja
-        });
-    }
+          estado: 'inscrito', 
+          actividad: grupoFinal, 
+          
+          // 🚩 AÑADIMOS SOLO ESTO (Sin tocar las llaves de abajo):
+          actividadId: actividadSeleccionada.id, 
+          horario: horarioSeleccionado, 
+          dias: diasSeleccionados, 
+
+          validadoAdmin: true,
+          fechaAlta: hoy,      
+          fechaBaja: null      
+      });
+  }
 };
 // ⚡ FUNCIÓN NUEVA: Pone fecha de hoy a los de Infantil que no la tengan
 const fijarAltaHoy = async (e, alumno) => {
@@ -771,6 +785,45 @@ const archivarBaja = async (alumno) => {
     link.download = nombreArchivo; 
     link.click();
   };
+  // 🔄 FUNCIÓN PARA SINCRONIZAR IDs ANTIGUOS
+  const sincronizarAlumnosAntiguos = async () => {
+    const confirmacion = window.confirm("¿Sincronizar IDs y DÍAS de alumnos antiguos?");
+    if (!confirmacion) return;
+
+    const promesas = alumnos.map(async (alumno) => {
+        let updates = {};
+        const actText = (alumno.actividad || '').toLowerCase();
+
+        // 1. Detectar ID (Si no lo tiene)
+        if (!alumno.actividadId) {
+            if (actText.includes('chapoteo')) updates.actividadId = 'chapoteo';
+            else if (actText.includes('16:15')) updates.actividadId = 'primaria_1615';
+            else if (actText.includes('1º-3º')) updates.actividadId = 'primaria_123_tarde';
+            else if (actText.includes('4º-6º')) updates.actividadId = 'primaria_456_tarde';
+            else if (actText.includes('waterpolo')) updates.actividadId = 'waterpolo';
+        }
+
+        // 2. Detectar DÍAS (Vital para el aforo diario)
+        // Si el texto de la actividad dice "Lunes", le asignamos "Lunes"
+        if (!alumno.dias) {
+            if (actText.includes('lunes')) updates.dias = 'Lunes';
+            if (actText.includes('martes')) updates.dias = 'Martes';
+            if (actText.includes('miércoles')) updates.dias = 'Miércoles';
+            if (actText.includes('jueves')) updates.dias = 'Jueves';
+            if (actText.includes('viernes')) updates.dias = 'Viernes';
+            // Para los packs
+            if (actText.includes('lunes y miércoles')) updates.dias = 'Lunes y Miércoles';
+            if (actText.includes('martes y jueves')) updates.dias = 'Martes y Jueves';
+        }
+
+        if (Object.keys(updates).length > 0) {
+            await updateDoc(doc(db, 'students', alumno.id), updates);
+        }
+    });
+
+    await Promise.all(promesas);
+    alert("¡Sincronización de IDs y Días completada!");
+};
 
   // --- 4. LISTAS FILTRADAS ---
   const gruposUnicos = [...new Set(alumnos.map(a => a.actividad).filter(g => g))].sort();
@@ -820,23 +873,132 @@ const listadoBajas = alumnos.filter(a => a.estado === 'baja_pendiente' || a.esta
             <p className="text-xs text-gray-500">{userEmail} ({userRole})</p>
         </div>
         <div className="flex gap-2">
-            {userRole === 'admin' && <button onClick={descargarExcel} className="bg-green-600 text-white px-3 py-1 rounded text-sm font-bold">Excel</button>}
-            <button onClick={logout} className="text-red-500 border border-red-200 px-3 py-1 rounded text-sm font-bold">Salir</button>
-        </div>
+    {/* 🔄 BOTÓN DE SINCRONIZACIÓN (NUEVO) */}
+    {userRole === 'admin' && (
+      <button 
+        onClick={sincronizarAlumnosAntiguos} 
+        className="bg-amber-100 text-amber-700 px-3 py-1 rounded text-[10px] font-black border border-amber-200 hover:bg-amber-200 transition-colors uppercase"
+      >
+        🔄 Sincronizar IDs
+      </button>
+    )}
+
+    {userRole === 'admin' && <button onClick={descargarExcel} className="bg-green-600 text-white px-3 py-1 rounded text-sm font-bold">Excel</button>}
+    <button onClick={logout} className="text-red-500 border border-red-200 px-3 py-1 rounded text-sm font-bold">Salir</button>
+</div>
       </div>
 
-      {/* PESTAÑAS */}
-      <div className="flex gap-2 mb-6 border-b pb-2 overflow-x-auto">
-          {['global', 'pruebas', 'bajas', 'equipo', 'avisos'].map(t => {
+{/* PESTAÑAS AJUSTADAS (RESPONSIVE) */}
+<div className="flex gap-1 mb-6 border-b pb-1 overflow-x-auto scrollbar-hide bg-white sticky top-0 z-10">
+          {['global', 'ocupacion', 'pruebas', 'bajas', 'equipo', 'avisos'].map(t => {
              if ((t === 'equipo' || t === 'bajas') && userRole !== 'admin') return null;
-             let count = 0; if (t === 'pruebas') count = listadoPruebas.length; if (t === 'bajas') count = listadoBajas.length;
+             
+             let count = 0; 
+             if (t === 'pruebas') count = listadoPruebas.length; 
+             if (t === 'bajas') count = listadoBajas.length;
+
              return (
-                <button key={t} onClick={() => setTab(t)} className={`px-4 py-2 font-bold uppercase text-sm whitespace-nowrap flex items-center gap-2 ${tab === t ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500'}`}>
-                    {t.toUpperCase()} {count > 0 && <span className="bg-red-500 text-white text-[10px] px-1.5 rounded-full">{count}</span>}
+                <button 
+                  key={t} 
+                  onClick={() => setTab(t)} 
+                  className={`
+                    px-3 py-3 font-bold uppercase text-[10px] md:text-xs whitespace-nowrap 
+                    flex flex-col md:flex-row items-center justify-center gap-1 flex-1 min-w-[90px]
+                    transition-all duration-200
+                    ${tab === t 
+                      ? 'text-blue-600 border-b-4 border-blue-600 bg-blue-50/50' 
+                      : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'
+                    }
+                  `}
+                >
+                    {/* Iconos para que se identifiquen rápido en móvil */}
+                    <span className="text-sm">
+                      {t === 'global' && '👥'}
+                      {t === 'ocupacion' && '📊'}
+                      {t === 'pruebas' && '🎯'}
+                      {t === 'bajas' && '📉'}
+                      {t === 'equipo' && '🛡️'}
+                      {t === 'avisos' && '📢'}
+                    </span>
+                    
+                    <span>{t === 'ocupacion' ? 'PLAZAS' : t.toUpperCase()}</span>
+
+                    {count > 0 && (
+                      <span className="bg-red-500 text-white text-[9px] px-1.5 py-0.5 rounded-full shadow-sm">
+                        {count}
+                      </span>
+                    )}
                 </button>
              );
           })}
       </div>
+      {/* 📊 MATRIZ DE OCUPACIÓN DIARIA (Insertar aquí) */}
+      {tab === 'ocupacion' && (
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 mb-8 overflow-hidden animate-fade-in">
+          <div className="p-4 bg-slate-800 text-white flex justify-between items-center">
+            <h3 className="text-xs font-black uppercase tracking-widest flex items-center gap-2">
+              <span>🏊‍♂️</span> Control de Aforo Diario
+            </h3>
+            <span className="text-[10px] bg-emerald-500 text-white px-2 py-0.5 rounded font-bold uppercase">En tiempo real</span>
+          </div>
+          
+          <div className="overflow-x-auto">
+            <table className="w-full text-left">
+              <thead>
+                <tr className="bg-gray-50 border-b">
+                  <th className="p-4 text-[10px] font-black text-gray-400 uppercase border-r">Actividad</th>
+                  {['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'].map(d => (
+                    <th key={d} className="p-4 text-[10px] font-black text-gray-400 uppercase text-center">{d}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {[
+                  { id: 'chapoteo', m: 16, n: 'Chapoteo (16:00)' },
+                  { id: 'primaria_1615', m: 24, n: 'Primaria (16:15)' },
+                  { id: 'primaria_123_tarde', m: 8, n: '1º-3º Prim (17:30)' },
+                  { id: 'primaria_456_tarde', m: 8, n: '4º-6º Prim (17:30)' },
+                  { id: 'waterpolo', m: 12, n: 'Waterpolo' },
+                  { id: 'adultos', m: 10, n: 'Adultos' },
+                  { id: 'aquagym', m: 12, n: 'Aquagym' },
+                  { id: 'eso_bach', m: 10, n: 'ESO / Bach' }
+                ].map(g => (
+                  <tr key={g.id} className="border-b hover:bg-gray-50">
+                    <td className="p-4 border-r bg-gray-50/30">
+                      <p className="text-xs font-bold text-gray-700 leading-tight">{g.n}</p>
+                      <p className="text-[9px] text-gray-400 font-bold uppercase mt-0.5">Límite: {g.m}</p>
+                    </td>
+                    {['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'].map(dia => {
+                      const ocupados = alumnos.filter(a => 
+                        a.actividadId === g.id && 
+                        a.estado === 'inscrito' && 
+                        a.dias?.includes(dia)
+                      ).length;
+                      
+                      const critico = ocupados >= g.m;
+
+                      return (
+                        <td key={dia} className="p-2">
+                          <div className={`h-12 rounded-xl flex flex-col items-center justify-center border-2 transition-all ${
+                            ocupados === 0 ? 'border-dashed border-gray-100 text-gray-200' :
+                            critico ? 'bg-red-500 border-red-600 text-white font-black scale-105 shadow-md' :
+                            ocupados > (g.m * 0.7) ? 'bg-orange-50 border-orange-200 text-orange-600' : 
+                            'bg-emerald-50 border-emerald-100 text-emerald-600 font-bold'
+                          }`}>
+                            <span className="text-sm leading-none">{ocupados > 0 ? ocupados : '-'}</span>
+                            {ocupados > 0 && <span className="text-[8px] mt-1 opacity-60">/{g.m}</span>}
+                          </div>
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+      
 
      {/* TAB: GLOBAL (CON FECHA DE ALTA Y BOTÓN DE REVISIÓN) */}
 {tab === 'global' && (
@@ -1021,29 +1183,24 @@ const listadoBajas = alumnos.filter(a => a.estado === 'baja_pendiente' || a.esta
 };
 
 // ==========================================
-// 📄 COMPONENTE FICHA (CON FECHAS Y GUARDADO AUTOMÁTICO)
+// 📄 COMPONENTE FICHA (CON SÚPER BÚSQUEDA DE TELÉFONO)
 // ==========================================
 function FichaAlumno({ alumno, cerrar, userRole }) {
   if (!alumno) return null;
   const p = alumno.datosPadre || {}; 
 
-  // Función que guarda la fecha en Firebase al instante
+  // Función para guardar cambios de fecha al instante
   const cambiarFecha = async (campo, e) => {
-      // 1. Si no eres admin, no dejamos guardar
       if (userRole !== 'admin') return;
-      
-      const nuevaFecha = e.target.value;
-
+      const nuevaFecha = e.target.value ? new Date(e.target.value).getTime() : null;
       try {
-          // Usamos las herramientas (db, updateDoc, doc) que importaste al principio del archivo
-          await updateDoc(doc(db, 'students', alumno.id), { 
-              [campo]: nuevaFecha 
-          });
+          await updateDoc(doc(db, 'students', alumno.id), { [campo]: nuevaFecha });
       } catch (error) {
-          console.error("Error al guardar fecha:", error);
-          alert("❌ Error: No se pudo guardar la fecha. Comprueba tu conexión.");
+          console.error("Error:", error);
       }
   };
+  const camposAlumno = Object.keys(alumno).join(', ');
+  const camposPadre = Object.keys(p).join(', ');
 
   return (
     <div className="fixed inset-0 bg-black/70 z-[60] flex justify-center items-center p-4 backdrop-blur-sm">
@@ -1064,70 +1221,68 @@ function FichaAlumno({ alumno, cerrar, userRole }) {
         {/* CONTENIDO */}
         <div className="p-6 space-y-6 text-gray-800">
           
-          {/* --- AQUÍ ESTÁN LAS FECHAS DE ALTA Y BAJA --- */}
+          {/* 1. FECHAS (ALTA/BAJA) */}
           <div className="bg-gray-100 p-4 rounded border border-gray-300 grid grid-cols-2 gap-4 shadow-inner">
-              {/* ALTA */}
               <div>
                   <label className="block text-xs font-bold text-gray-500 uppercase mb-1">📅 Fecha de Alta</label>
                   <input 
                     type="date" 
-                    defaultValue={alumno.fechaAlta || ''}
-                    disabled={userRole !== 'admin'} // Bloqueado si no eres admin
+                    defaultValue={alumno.fechaAlta ? new Date(alumno.fechaAlta).toISOString().split('T')[0] : ''}
+                    disabled={userRole !== 'admin'}
                     onChange={(e) => cambiarFecha('fechaAlta', e)}
-                    className={`w-full p-2 rounded border font-bold ${
-                        userRole === 'admin' 
-                        ? 'bg-white border-blue-400 cursor-pointer hover:bg-blue-50' 
-                        : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                    }`}
+                    className={`w-full p-2 rounded border font-bold ${userRole === 'admin' ? 'bg-white border-blue-400' : 'bg-gray-200'}`}
                   />
               </div>
-
-              {/* BAJA */}
               <div>
                   <label className="block text-xs font-bold text-gray-500 uppercase mb-1">🏁 Fecha de Baja</label>
                   <input 
                     type="date" 
-                    defaultValue={alumno.fechaBaja || ''}
-                    disabled={userRole !== 'admin'} // Bloqueado si no eres admin
+                    defaultValue={alumno.fechaBaja ? new Date(alumno.fechaBaja).toISOString().split('T')[0] : ''}
+                    disabled={userRole !== 'admin'}
                     onChange={(e) => cambiarFecha('fechaBaja', e)}
-                    className={`w-full p-2 rounded border font-bold ${
-                        userRole === 'admin' 
-                        ? 'bg-white border-red-400 cursor-pointer hover:bg-red-50' 
-                        : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                    }`}
+                    className={`w-full p-2 rounded border font-bold ${userRole === 'admin' ? 'bg-white border-red-400' : 'bg-gray-200'}`}
                   />
               </div>
-              
-              {userRole === 'admin' && (
-                  <p className="col-span-2 text-[10px] text-gray-400 text-center italic mt-1">
-                      * Al cambiar la fecha se guarda automáticamente.
+          </div>
+
+          {/* 2. EL TELÉFONO (CUADRO VERDE - BUSCA EN TODAS PARTES) */}
+          <div className="bg-green-600 p-4 rounded-lg shadow-md flex justify-between items-center text-white">
+              <div>
+                  <h3 className="text-xs font-bold uppercase opacity-90 text-white">📞 Teléfono de Emergencia</h3>
+                  <p className="text-2xl font-black">
+                      {/* Aquí está el truco: busca en todos los campos posibles */}
+                      {alumno.telefono || alumno.telefono1 || p.telefono || p.telefono1 || alumno.telefonoContacto || 'Sin teléfono'}
                   </p>
-              )}
-          </div>
-          {/* --------------------------------------------- */}
-
-          <div className="bg-blue-50 p-4 rounded-lg border border-blue-100">
-             <h3 className="text-xs font-bold text-blue-800 uppercase tracking-wider mb-1">Actividad Inscrita</h3>
-             <p className="text-xl font-bold text-blue-900">{alumno.actividad || 'Pendiente de asignar'}</p>
-             {alumno.dias && <p className="text-sm text-blue-700 mt-1 font-medium">📅 {alumno.dias} — ⏰ {alumno.horario}</p>}
-          </div>
-
-          <div className="grid md:grid-cols-2 gap-4">
-            <div className="bg-gray-50 p-3 rounded border"><span className="text-xs text-gray-500 uppercase font-bold">Nacimiento</span><p className="font-medium">{alumno.fechaNacimiento || '-'}</p></div>
-            <div className="bg-gray-50 p-3 rounded border"><span className="text-xs text-gray-500 uppercase font-bold">Estado</span><p className="font-medium">{alumno.esAntiguoAlumno ? '✅ Antiguo Alumno' : '🆕 Nuevo Alumno'}</p></div>
+              </div>
+              <a 
+                href={`tel:${alumno.telefono || alumno.telefono1 || p.telefono || p.telefono1}`}
+                className="bg-white text-green-600 p-3 rounded-full shadow-lg hover:scale-110 transition"
+              >
+                  <span className="text-xl">📞</span>
+              </a>
           </div>
 
-          <div className="border-t pt-4">
-            <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">💳 Datos del Pagador / Tutor</h3>
-            <div className="grid md:grid-cols-2 gap-y-4 gap-x-8 text-sm">
-              <div><span className="block text-gray-500 text-xs font-bold uppercase">Nombre Titular</span><span className="font-medium text-lg">{alumno.nombrePagador || p.nombrePagador || '-'}</span></div>
-              <div><span className="block text-gray-500 text-xs font-bold uppercase">DNI</span><span className="font-medium">{alumno.dniPagador || p.dniPagador || '-'}</span></div>
-              <div><span className="block text-gray-500 text-xs font-bold uppercase">Teléfono</span><span className="font-medium text-lg">{alumno.telefono1 || p.telefono1 || '-'}</span></div>
-              <div><span className="block text-gray-500 text-xs font-bold uppercase">Email</span><span className="font-medium">{alumno.emailContacto || p.email || '-'}</span></div>
-              <div className="md:col-span-2 bg-gray-100 p-3 rounded font-mono text-gray-700 border"><span className="block text-gray-400 text-[10px] font-bold uppercase mb-1">IBAN</span>{alumno.iban || p.iban || 'No indicado'}</div>
+          {/* 3. DATOS SENSIBLES (SOLO ADMIN) */}
+          {userRole === 'admin' ? (
+            <div className="border-t pt-4 space-y-4">
+              <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">💳 Datos de Facturación</h3>
+              <div className="grid md:grid-cols-2 gap-4 text-sm">
+                <div className="bg-gray-50 p-3 rounded border"><span className="block text-gray-500 text-xs font-bold uppercase">Nombre Tutor</span><span className="font-medium text-lg">{alumno.nombrePagador || p.nombrePagador || '-'}</span></div>
+                <div className="bg-gray-50 p-3 rounded border"><span className="block text-gray-500 text-xs font-bold uppercase">DNI</span><span className="font-medium">{alumno.dniPagador || p.dniPagador || alumno.dni || '-'}</span></div>
+                <div className="bg-gray-50 p-3 rounded border"><span className="block text-gray-500 text-xs font-bold uppercase">Email</span><span className="font-medium">{alumno.emailContacto || p.email || '-'}</span></div>
+                <div className="bg-gray-100 p-3 rounded font-mono text-gray-700 border md:col-span-2">
+                  <span className="block text-gray-400 text-[10px] font-bold uppercase mb-1">IBAN de Cobro</span>
+                  {alumno.iban || p.iban || 'No indicado'}
+                </div>
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="bg-amber-50 p-4 rounded border border-amber-200 text-amber-800 text-sm italic">
+               🔒 Los datos bancarios y de facturación están protegidos. Contacta con administración si los necesitas.
+            </div>
+          )}
 
+          {/* 4. SALUD (SIEMPRE VISIBLE) */}
           {(alumno.alergias || alumno.observaciones) && (
             <div className="grid gap-3 pt-2">
                {alumno.alergias && <div className="bg-red-50 border-l-4 border-red-500 p-3"><span className="font-bold text-red-700 block text-xs uppercase">⚠️ Alergias / Médico</span><p className="text-red-900 text-sm font-medium">{alumno.alergias}</p></div>}
@@ -1404,43 +1559,54 @@ const estaLibre = hijo.estado === 'sin_inscripcion' || hijo.estado === 'baja_fin
   </div>
 )}
               
-              {/* DATOS DE PRUEBA */}
-              {hijo.estado === 'prueba_reservada' && (
-                <div className="ml-3 mt-4 bg-orange-50 p-3 rounded-lg border border-orange-200 text-sm">
-                  <div className="mb-3 pb-3 border-b border-orange-200">
-                      <p className="text-[10px] font-bold text-orange-800 uppercase tracking-wider mb-1">🎯 Grupo Pre-seleccionado:</p>
-                      {hijo.actividad ? (
-                          <div>
-                            <p className="text-lg font-black text-orange-900 leading-tight">{hijo.actividad}</p>
-                            {/* --- AQUÍ AÑADIMOS LOS DÍAS Y EL HORARIO --- */}
-                            <div className="flex gap-3 text-orange-800 text-xs mt-1 font-bold">
-                                <span>📅 {hijo.dias || 'Días pendientes'}</span>
-                                <span>⏰ {hijo.horario || 'Horario pendiente'}</span>
-                            </div>
-                          </div>
-                      ) : (
-                          <button onClick={() => { setAlumnoSeleccionado(hijo); setModoModal('inscripcion'); }} className="w-full bg-white border border-orange-300 text-orange-700 py-1.5 rounded text-xs font-bold hover:bg-orange-100">
-                              👉 Elegir Grupo
-                          </button>
-                      )}
-                  </div>
-                  
-                  {/* ... resto del código de la cita de nivel ... */}
-                  <div className="flex items-center gap-2">
-                      <span className="text-2xl">🗓️</span>
-                      <div>
-                          <p className="font-bold text-orange-900 text-xs uppercase">Cita para Prueba</p>
-                          {hijo.citaNivel ? (
-                              <p className="text-orange-800 font-bold">{hijo.citaNivel}</p>
-                          ) : (
-                              <button onClick={() => { setAlumnoSeleccionado(hijo); setModoModal('prueba'); }} className="text-red-600 font-bold underline cursor-pointer animate-pulse hover:text-red-800">
-                                  ¡Reservar Hora!
-                              </button>
-                          )}
-                      </div>
-                  </div>
+{/* DATOS DE PRUEBA */}
+{hijo.estado === 'prueba_reservada' && (
+  <div className="ml-3 mt-4 bg-orange-50 p-3 rounded-lg border border-orange-200 text-sm">
+    <div className="mb-3 pb-3 border-b border-orange-200">
+        <p className="text-[10px] font-bold text-orange-800 uppercase tracking-wider mb-1">🎯 Grupo Pre-seleccionado:</p>
+        
+        {/* MODIFICACIÓN: Si ya tiene actividad Y días, mostramos la info. Si no, el botón. */}
+        {hijo.actividad && hijo.dias ? (
+            <div>
+              <p className="text-lg font-black text-orange-900 leading-tight">{hijo.actividad}</p>
+              <div className="flex gap-3 text-orange-800 text-xs mt-1 font-bold">
+                  <span>📅 {hijo.dias}</span>
+                  <span>⏰ {hijo.horario || 'Horario pendiente'}</span>
+              </div>
+            </div>
+        ) : (
+            <button 
+              onClick={() => { setAlumnoSeleccionado(hijo); setModoModal('inscripcion'); }} 
+              className="w-full bg-white border border-orange-300 text-orange-700 py-1.5 rounded text-xs font-bold hover:bg-orange-100 transition"
+            >
+                👉 Elegir Grupo y Horario
+            </button>
+        )}
+    </div>
+    
+    {/* SECCIÓN DE LA CITA DE NIVEL */}
+    <div className="flex items-center gap-2">
+        <span className="text-2xl">🗓️</span>
+        <div>
+            <p className="font-bold text-orange-900 text-xs uppercase">Cita para Prueba</p>
+            {/* Si ya tiene la citaNivel guardada, mostramos el texto. Si no, el botón de reservar. */}
+            {hijo.citaNivel ? (
+                <div className="flex flex-col">
+                  <p className="text-orange-800 font-bold">{hijo.citaNivel}</p>
+                  <span className="text-[10px] text-green-600 font-bold uppercase mt-0.5">✓ Cita Confirmada</span>
                 </div>
-              )}
+            ) : (
+                <button 
+                  onClick={() => { setAlumnoSeleccionado(hijo); setModoModal('prueba'); }} 
+                  className="text-red-600 font-bold underline cursor-pointer animate-pulse hover:text-red-800"
+                >
+                    ¡Reservar Hora Ahora!
+                </button>
+            )}
+        </div>
+    </div>
+  </div>
+)}
 
               {/* AVISO BAJA FINALIZADA */}
               {hijo.estado === 'baja_finalizada' && (
@@ -2122,20 +2288,31 @@ const Login = ({ setView }) => {
 
   const [regData, setRegData] = useState({ 
     tipo: 'interno', 
-    // Datos Pagador (Solo Externos)
-    nombrePagador: '', dniPagador: '', telefono1: '', telefono2: '', 
-    direccion: '', cp: '', poblacion: '', iban: '', emailPagador: '',
-    // Datos Alumno (Todos)
-    nombreAlumno: '', 
     
-    // 👇👇👇 AQUÍ ESTÁ EL CAMBIO 👇👇👇
-    curso: 'INF3',  // Antes ponía '3PRI'. Ahora coincide con el primero de la lista.
-    
-    letra: 'A', fechaNacimiento: '', esAntiguoAlumno: false,
-    alergias: '', observaciones: '',
-    // Datos Contacto (Solo Internos)
+    // 📞 DATOS DE CONTACTO (Ahora para TODOS: Internos y Externos)
+    telefono1: '', 
+    telefono2: '',
     emailContacto: '', 
-    // Password (Todos)
+
+    // 💳 DATOS PAGADOR (Solo Externos)
+    nombrePagador: '', 
+    dniPagador: '', 
+    direccion: '', 
+    cp: '', 
+    poblacion: '', 
+    iban: '', 
+    emailPagador: '',
+
+    // 🧒 DATOS ALUMNO (Todos)
+    nombreAlumno: '', 
+    curso: 'INF3', 
+    letra: 'A', 
+    fechaNacimiento: '', 
+    esAntiguoAlumno: false,
+    alergias: '', 
+    observaciones: '',
+    
+    // 🔐 PASSWORD
     password: ''
   });
 
@@ -2195,35 +2372,40 @@ const Login = ({ setView }) => {
       
       // Guardar Usuario (Padre/Pagador)
       await setDoc(doc(db, 'users', cred.user.uid), { 
-          email: emailFinal, 
-          role: 'user', 
-          tipo: regData.tipo,
-          ...(regData.tipo === 'externo' ? {
-              nombrePagador: regData.nombrePagador, 
-              dniPagador: regData.dniPagador, 
-              telefono1: regData.telefono1, 
-              telefono2: regData.telefono2,
-              direccion: regData.direccion, 
-              cp: regData.cp, 
-              poblacion: regData.poblacion,
-              iban: regData.iban
-          } : {
-              emailContacto: regData.emailContacto // Para internos guardamos el contacto
-          })
-      });
+        email: emailFinal, 
+        role: 'user', 
+        tipo: regData.tipo,
+        
+        // 📞 ESTO ES LO QUE HACEMOS: Mover los teléfonos aquí arriba
+        // para que se guarden siempre, seas interno o externo.
+        telefono1: regData.telefono1 || '', 
+        telefono2: regData.telefono2 || '',
+
+        ...(regData.tipo === 'externo' ? {
+            nombrePagador: regData.nombrePagador, 
+            dniPagador: regData.dniPagador, 
+            direccion: regData.direccion, 
+            cp: regData.cp, 
+            poblacion: regData.poblacion,
+            iban: regData.iban
+        } : {
+            emailContacto: regData.emailContacto 
+        })
+    });
       
       // Guardar Alumno
       // Guardar Alumno (Corregido)
       await addDoc(collection(db, 'students'), { 
         parentId: cred.user.uid, 
+        user: emailFinal, // Guardamos el email para vincularlo fácil
         nombre: regData.nombreAlumno, 
         curso: regData.curso, 
         letra: regData.letra, 
         fechaNacimiento: regData.fechaNacAlumno, 
         
-        // 🔑 AQUÍ ESTÁ EL ARREGLO:
-        // Guardamos natacionPasado (que es lo que el filtro lee) 
-        // basándonos en lo que viene del formulario
+        // 📞 EL CAMBIO CLAVE: Guardamos el teléfono directamente en el alumno
+        telefono: regData.telefono1 || '', 
+        
         natacionPasado: regData.natacionPasado || 'no',
         esAntiguoAlumno: regData.natacionPasado === 'si' ? true : false,
         
@@ -2311,11 +2493,18 @@ const Login = ({ setView }) => {
                           <label className="text-xs font-bold text-blue-800 uppercase">Tu Email de Contacto (Será tu Usuario) *</label>
                           <input type="email" className="w-full border p-2 rounded bg-white font-bold text-blue-900" placeholder="ejemplo@correo.com" onChange={e => setRegData({ ...regData, emailContacto: e.target.value })} />
                       </div>
-                      {/* Aquí añadimos el móvil único para internos */}
-                      <div>
-                          <label className="text-xs font-bold text-blue-800 uppercase">Teléfono Móvil (9 cifras) *</label>
-                          <input type="tel" className="w-full border p-2 rounded bg-white font-bold text-blue-600" placeholder="600000000" onChange={e => setRegData({ ...regData, telefono1: e.target.value })} />
-                      </div>
+                    {/* Aquí añadimos el móvil único para internos */}
+<div>
+    <label className="text-xs font-bold text-blue-800 uppercase">Teléfono Móvil (9 cifras) *</label>
+    <input 
+  type="tel" 
+  className="w-full border p-2 rounded bg-white font-bold text-blue-600" 
+  placeholder="600000000" 
+  // 🚩 Asegúrate de añadir estas dos líneas:
+  value={regData.telefono1 || ''} 
+  onChange={e => setRegData(prev => ({ ...prev, telefono1: e.target.value }))} 
+/>
+</div>
                   </div>
               </div>
           )}
