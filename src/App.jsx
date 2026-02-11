@@ -643,38 +643,43 @@ const confirmarInscripcion = async (alumnoId) => {
     });
 };
 
-  const validarPlaza = async (alumno) => {
-    if (userRole !== 'admin') return alert("⛔ Solo coordinadores.");
-    
-    const grupoFinal = alumno.actividad || "GRUPO A DETERMINAR";
-    
-    if (confirm(`✅ ¿Validar plaza para ${alumno.nombre}?`)) {
-        // Cogemos la fecha de HOY (AAAA-MM-DD)
-        const hoy = new Date().toISOString().split('T')[0];
-
-        await updateDoc(doc(db, 'students', alumno.id), { 
-          estado: 'inscrito', 
-          actividad: grupoFinal, 
-          
-          // 🚩 AÑADIMOS SOLO ESTO (Sin tocar las llaves de abajo):
-          actividadId: actividadSeleccionada.id, 
-          horario: horarioSeleccionado, 
-          dias: diasSeleccionados, 
-
-          validadoAdmin: true,
-          fechaAlta: hoy,      
-          fechaBaja: null      
-      });
-  }
-};
-// ⚡ FUNCIÓN NUEVA: Pone fecha de hoy a los de Infantil que no la tengan
-const fijarAltaHoy = async (e, alumno) => {
-  e.stopPropagation(); // Para que no se abra la ficha al hacer clic
-  if (userRole !== 'admin') return;
+const validarPlaza = async (alumno) => {
+  if (userRole !== 'admin') return alert("⛔ Solo coordinadores.");
   
-  const hoy = new Date().toISOString().split('T')[0];
-  if (confirm(`📅 ¿Asignar fecha de HOY (${hoy}) como alta para ${alumno.nombre}?`)) {
-      await updateDoc(doc(db, 'students', alumno.id), { fechaAlta: hoy });
+  // 🔍 BUSCADOR DE IDs (Para que el Radar funcione)
+  let actId = alumno.actividadId;
+  const actText = (alumno.actividad || "").toLowerCase();
+
+  // Si el alumno no tiene ID de actividad grabado, lo deducimos por el nombre
+  if (!actId) {
+      if (actText.includes('chapoteo')) actId = 'chapoteo';
+      else if (actText.includes('16:15')) actId = 'primaria_1615';
+      else if (actText.includes('1º-3º')) actId = 'primaria_123_tarde';
+      else if (actText.includes('4º-6º')) actId = 'primaria_456_tarde';
+      else if (actText.includes('waterpolo')) actId = 'waterpolo';
+      else if (actText.includes('nado') || actText.includes('libre')) actId = 'nado_libre';
+      else if (actText.includes('eso') || actText.includes('bach')) actId = 'eso_bach';
+      else if (actText.includes('adulto')) actId = 'adultos';
+      else if (actText.includes('aquagym')) actId = 'aquagym';
+  }
+
+  if (confirm(`✅ ¿Validar plaza definitiva para ${alumno.nombre}?\nGrupo: ${alumno.actividad}\nDías: ${alumno.dias}`)) {
+      try {
+          const hoy = new Date().toISOString().split('T')[0];
+
+          await updateDoc(doc(db, 'students', alumno.id), { 
+              estado: 'inscrito',     // Pasa a ser alumno oficial
+              actividadId: actId,     // 👈 ESENCIAL PARA EL RADAR
+              validadoAdmin: true,    // Confirmación de que el admin lo vio
+              fechaAlta: hoy,
+              revisadoAdmin: true     // Marcamos como gestionado
+          });
+
+          alert("✅ ¡Hecho! El alumno ya ocupa su plaza en el Radar.");
+      } catch (error) {
+          console.error("Error al validar:", error);
+          alert("❌ Error: No se pudo actualizar la ficha.");
+      }
   }
 };
 
@@ -810,18 +815,22 @@ const archivarBaja = async (alumno) => {
     if (!confirmacion) return;
 
     const promesas = alumnos.map(async (alumno) => {
-        let updates = {};
-        const actText = (alumno.actividad || '').toLowerCase();
+      let updates = {};
+      const actText = (alumno.actividad || '').toLowerCase(); // <--- Esta es tu variable
 
-        // 1. Detectar ID (Si no lo tiene)
-        if (!alumno.actividadId) {
-            if (actText.includes('chapoteo')) updates.actividadId = 'chapoteo';
-            else if (actText.includes('16:15')) updates.actividadId = 'primaria_1615';
-            else if (actText.includes('1º-3º')) updates.actividadId = 'primaria_123_tarde';
-            else if (actText.includes('4º-6º')) updates.actividadId = 'primaria_456_tarde';
-            else if (actText.includes('waterpolo')) updates.actividadId = 'waterpolo';
-            else if (actText.includes('nado libre') || actText.includes('libre')) updates.actividadId = 'nado_libre';
-        }
+      // 1. Detectar ID (Si no lo tiene)
+      if (!alumno.actividadId) {
+          if (actText.includes('chapoteo')) updates.actividadId = 'chapoteo';
+          else if (actText.includes('16:15')) updates.actividadId = 'primaria_1615';
+          else if (actText.includes('1º-3º')) updates.actividadId = 'primaria_123_tarde';
+          else if (actText.includes('4º-6º')) updates.actividadId = 'primaria_456_tarde';
+          else if (actText.includes('waterpolo')) updates.actividadId = 'waterpolo';
+          else if (actText.includes('nado libre') || actText.includes('libre')) updates.actividadId = 'nado_libre';
+          // ⬇️ CORREGIDO: Usamos actText y no texto
+          else if (actText.includes('eso') || actText.includes('bach')) updates.actividadId = 'eso_bach';
+          else if (actText.includes('adulto')) updates.actividadId = 'adultos';
+          else if (actText.includes('aquagym')) updates.actividadId = 'aquagym';
+      }
 
         // 2. Detectar DÍAS (Vital para el aforo diario)
         // Si el texto de la actividad dice "Lunes", le asignamos "Lunes"
@@ -992,27 +1001,36 @@ const listadoBajas = alumnos.filter(a => a.estado === 'baja_pendiente' || a.esta
         </thead>
         <tbody>
           {[
-            { id: 'chapoteo', m: 16, n: 'Chapoteo (16:00)' },
-            // --- DESGLOSE DE PRIMARIA 16:15 ---
-            { 
-              id: 'primaria_1615', 
-              m: 12, 
-              n: 'Primaria 1º-3º (16:15)', 
-              cursosRelacionados: ['1PRI', '2PRI', '3PRI'] 
-            },
-            { 
-              id: 'primaria_1615', 
-              m: 12, 
-              n: 'Primaria 4º-6º (16:15)', 
-              cursosRelacionados: ['4PRI', '5PRI', '6PRI'] 
-            },
-            // ----------------------------------
-            { id: 'primaria_123_tarde', m: 8, n: '1º-3º Prim (17:30)' },
-            { id: 'primaria_456_tarde', m: 8, n: '4º-6º Prim (17:30)' },
-            { id: 'waterpolo', m: 12, n: 'Waterpolo' },
-            { id: 'adultos', m: 10, n: 'Adultos' },
-            { id: 'aquagym', m: 12, n: 'Aquagym' },
-            { id: 'nado_libre', m: 10, n: 'Nado Libre (18:30-19:00)' } 
+    { id: 'chapoteo', m: 16, n: 'Chapoteo (16:00)' },
+    // --- DESGLOSE DE PRIMARIA 16:15 ---
+    { 
+      id: 'primaria_1615', 
+      m: 12, 
+      n: 'Primaria 1º-3º (16:15)', 
+      cursosRelacionados: ['1PRI', '2PRI', '3PRI'] 
+    },
+    { 
+      id: 'primaria_1615', 
+      m: 12, 
+      n: 'Primaria 4º-6º (16:15)', 
+      cursosRelacionados: ['4PRI', '5PRI', '6PRI'] 
+    },
+    // ----------------------------------
+    { id: 'primaria_123_tarde', m: 8, n: '1º-3º Prim (17:30)' },
+    { id: 'primaria_456_tarde', m: 8, n: '4º-6º Prim (17:30)' },
+    { id: 'waterpolo', m: 12, n: 'Waterpolo' },
+    
+    // 🚩 FILA AÑADIDA AQUÍ:
+    { 
+      id: 'eso_bach', 
+      m: 10, 
+      n: 'ESO / Bachillerato', 
+      cursosRelacionados: ['1ESO', '2ESO', '3ESO', '4ESO', '1BACH', '2BACH'] 
+    },
+
+    { id: 'adultos', m: 10, n: 'Adultos' },
+    { id: 'aquagym', m: 12, n: 'Aquagym' },
+    { id: 'nado_libre', m: 10, n: 'Nado Libre (18:30-19:00)' } 
 ].map((g, index) => (
             <tr key={g.n + index} className="border-b hover:bg-gray-50">
               <td className="p-4 border-r bg-gray-50/30">
@@ -1022,15 +1040,20 @@ const listadoBajas = alumnos.filter(a => a.estado === 'baja_pendiente' || a.esta
               {['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'].map(dia => {
                 // 🧮 Lógica de conteo con filtro por curso si existe
                 const ocupados = alumnos.filter(a => {
+                  // 1. Que coincida el ID de la actividad (ej: eso_bach)
                   const coincideId = a.actividadId === g.id;
-                  const coincideEstado = a.estado === 'inscrito';
-                  const coincideDia = a.dias?.includes(dia);
                   
-                  // Si la fila tiene cursos específicos, filtramos; si no, contamos todo el ID
-                  const coincideCurso = g.cursosRelacionados 
-                    ? g.cursosRelacionados.includes(a.curso) 
-                    : true;
-
+                  // 2. Que esté inscrito
+                  const coincideEstado = a.estado === 'inscrito';
+                  
+                  // 3. Que el texto de sus días contenga el día de la columna (Lunes, Martes...)
+                  const coincideDia = a.dias?.toLowerCase().includes(dia.toLowerCase());
+                  
+                  // 4. 🛠️ FILTRO DE CURSO CORREGIDO
+                  // Buscamos tanto en 'cursosRelacionados' como en 'cursos' (que es lo que usas en ESO)
+                  const listaCursos = g.cursosRelacionados || g.cursos;
+                  const coincideCurso = listaCursos ? listaCursos.includes(a.curso) : true;
+                
                   return coincideId && coincideEstado && coincideDia && coincideCurso;
                 }).length;
                 
@@ -1900,7 +1923,63 @@ const PantallaInscripcion = ({ alumno, close, onRequirePrueba, user, refresh }) 
       normasRef.current = nuevoValor;        // Guardamos en la referencia (Lógica)
       setAceptaNormasVisual(nuevoValor);     // Guardamos en el estado (Visual)
   };
+  // 1. Estado para guardar la ocupación global
+  const [todosLosAlumnos, setTodosLosAlumnos] = useState([]);
 
+  // 2. Escuchamos a todos los alumnos para poder contar plazas
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, 'students'), (s) => {
+      setTodosLosAlumnos(s.docs.map(doc => ({
+        actividadId: doc.data().actividadId,
+        estado: doc.data().estado,
+        dias: doc.data().dias,
+        curso: doc.data().curso
+      })));
+    });
+    return () => unsub();
+  }, []);
+
+// 3. Función que calcula si hay hueco o lista de espera
+const obtenerEstadoPlaza = (actividadId, diaSeleccionado, cursoAlumno) => {
+  const limites = {
+    chapoteo: 16,
+    primaria_1615: 12,
+    primaria_123_tarde: 8,
+    primaria_456_tarde: 8,
+    waterpolo: 12,
+    adultos: 10,
+    aquagym: 12,
+    eso_bach: 10, // 👈 Ya está incluido, perfecto
+    nado_libre: 10
+  };
+  
+  const max = limites[actividadId] || 10;
+  
+  const ocupados = todosLosAlumnos.filter(a => {
+    const coincideId = a.actividadId === actividadId;
+    const coincideEstado = a.estado === 'inscrito';
+    
+    // 🚩 CAMBIO CLAVE: Comprobamos si el "día seleccionado" está dentro 
+    // del texto de "días" del alumno. Así detectamos los Packs.
+    // Usamos opcional chaining ?. y toLowerCase para evitar errores.
+    const coincideDia = a.dias?.toLowerCase().includes(diaSeleccionado.toLowerCase());
+
+    if (actividadId === 'primaria_1615') {
+      const esPeque = ['1PRI', '2PRI', '3PRI'].includes(cursoAlumno);
+      const cursosFiltro = esPeque ? ['1PRI', '2PRI', '3PRI'] : ['4PRI', '5PRI', '6PRI'];
+      return coincideId && coincideDia && coincideEstado && cursosFiltro.includes(a.curso);
+    }
+    
+    return coincideId && coincideDia && coincideEstado;
+  }).length;
+
+  return { 
+    lleno: ocupados >= max, 
+    esCritico: ocupados >= max * 0.8 && ocupados < max,
+    cupoActual: ocupados, // Útil por si quieres mostrar "Quedan X plazas"
+    maximo: max
+  };
+};
   // 2. FUNCIÓN DE INSCRIPCIÓN
   const inscribir = async (act, op) => {
     if (normasRef.current !== true) {
@@ -1974,15 +2053,30 @@ const PantallaInscripcion = ({ alumno, close, onRequirePrueba, user, refresh }) 
         return; 
     }
 
-    // CASO B: INSCRIPCIÓN DIRECTA (VIP e INFANTIL caen aquí)
-    if (!confirm(`¿Confirmar inscripción definitiva en ${act.nombre}?`)) return;
+    // CASO B: INSCRIPCIÓN DIRECTA (VIP, INFANTIL, ADULTOS O PRUEBA SUPERADA)
     
+    // 1. Miramos si hay sitio en el grupo elegido
+    const infoPlaza = obtenerEstadoPlaza(act.id, op.dias, d.curso);
+    
+    // 2. Definimos el mensaje y el estado según el aforo
+    let mensajeConfirmacion = `¿Confirmar inscripción definitiva en ${act.nombre}?`;
+    let estadoFinalReal = 'inscrito';
+
+    if (infoPlaza.lleno) {
+        mensajeConfirmacion = `⚠️ Este grupo está completo actualmente.\n\n¿Quieres apuntarte a la LISTA DE ESPERA para ${op.dias}? Te avisaremos si queda una vacante.`;
+        estadoFinalReal = 'lista_espera';
+    }
+
+    // 3. Pedimos confirmación
+    if (!confirm(mensajeConfirmacion)) return;
+    
+    // 4. Guardamos en Firebase
     await updateDoc(alumnoRef, { 
         ...datosComunes,
-        estado: 'inscrito'
+        estado: estadoFinalReal // Aquí se guarda 'inscrito' o 'lista_espera'
     });
     
-    alert("✅ ¡Inscripción realizada con éxito!");
+    alert(infoPlaza.lleno ? "✅ Te has apuntado a la lista de espera correctamente." : "✅ ¡Inscripción realizada con éxito!");
     refresh(user.uid); 
     close();
 };
@@ -2078,45 +2172,72 @@ const PantallaInscripcion = ({ alumno, close, onRequirePrueba, user, refresh }) 
                 </div>
             ) : (
                 <div className="space-y-4">
-                    {actividadesDisponibles.map(act => (
-                        <div key={act.id} className="border rounded-xl overflow-hidden shadow-sm hover:shadow-md transition bg-white group">
-                            
-                            {/* Header de la actividad */}
-                            <div className="bg-gray-50 p-3 border-b flex justify-between items-center group-hover:bg-blue-50 transition">
-                                <h5 className="font-bold text-blue-900 text-lg">{act.nombre}</h5>
-                                {act.requierePrueba && (
-                                    <span className="bg-orange-100 text-orange-800 text-[10px] font-bold px-2 py-1 rounded border border-orange-200 uppercase tracking-wide">
-                                        Requiere Prueba
-                                    </span>
-                                )}
-                            </div>
+{actividadesDisponibles.map(act => (
+    <div key={act.id} className="border rounded-xl overflow-hidden shadow-sm hover:shadow-md transition bg-white group">
+        
+        {/* Header de la actividad */}
+        <div className="bg-gray-50 p-3 border-b flex justify-between items-center group-hover:bg-blue-50 transition">
+            <h5 className="font-bold text-blue-900 text-lg">{act.nombre}</h5>
+            {act.requierePrueba && (
+                <span className="bg-orange-100 text-orange-800 text-[10px] font-bold px-2 py-1 rounded border border-orange-200 uppercase tracking-wide">
+                    Requiere Prueba
+                </span>
+            )}
+        </div>
 
-                            {/* Lista de horarios */}
-                            <div className="p-3 grid gap-2">
-                                {act.opciones.map((op, idx) => (
-                                    <button 
-                                        key={idx} 
-                                        onClick={() => inscribir(act, op)} 
-                                        className="flex justify-between items-center w-full p-3 rounded-lg border border-gray-200 hover:border-blue-500 hover:bg-blue-50 transition text-left relative"
-                                    >
-                                        <div>
-                                            <span className="block font-bold text-gray-800 group-hover:text-blue-700">
-                                                {op.dias}
-                                            </span>
-                                            <span className="text-xs text-gray-500 font-mono bg-white px-1 rounded border mt-1 inline-block">
-                                                ⏰ {op.horario}
-                                            </span>
-                                        </div>
-                                        <div>
-                                            <span className="font-bold text-blue-600 bg-blue-100 px-3 py-1 rounded-full text-sm block">
-                                                {op.precio}
-                                            </span>
-                                        </div>
-                                    </button>
-                                ))}
-                            </div>
+        {/* Lista de horarios */}
+        <div className="p-3 grid gap-2">
+            {act.opciones.map((op, idx) => {
+                // 🔍 CALCULAMOS EL ESTADO PARA ESTA OPCIÓN
+                const info = obtenerEstadoPlaza(act.id, op.dias, alumno.curso);
+
+                return (
+                    <button 
+                        key={idx} 
+                        onClick={() => inscribir(act, op)} 
+                        className={`flex justify-between items-center w-full p-3 rounded-lg border transition-all text-left relative ${
+                            info.lleno 
+                            ? 'bg-gray-50 border-gray-200 opacity-80' 
+                            : 'bg-white border-gray-200 hover:border-blue-500 hover:bg-blue-50 shadow-sm'
+                        }`}
+                    >
+                        <div>
+                            <span className={`block font-bold ${info.lleno ? 'text-gray-400' : 'text-gray-800'}`}>
+                                {op.dias}
+                            </span>
+                            <span className="text-xs text-gray-500 font-mono bg-white px-1 rounded border mt-1 inline-block">
+                                ⏰ {op.horario}
+                            </span>
                         </div>
-                    ))}
+                        
+                        <div className="flex flex-col items-end gap-1">
+                            <span className={`font-bold px-3 py-1 rounded-full text-sm block ${
+                                info.lleno ? 'bg-gray-200 text-gray-500' : 'bg-blue-100 text-blue-600'
+                            }`}>
+                                {op.precio}
+                            </span>
+
+                            {/* 🚦 ETIQUETAS DINÁMICAS */}
+                            {info.lleno ? (
+                                <span className="text-[9px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-black uppercase">
+                                    ⏳ Lista Espera
+                                </span>
+                            ) : info.esCritico ? (
+                                <span className="text-[9px] bg-amber-100 text-amber-600 px-2 py-0.5 rounded-full font-black uppercase animate-pulse">
+                                    ⚠️ Últimas plazas
+                                </span>
+                            ) : (
+                                <span className="text-[9px] bg-emerald-100 text-emerald-600 px-2 py-0.5 rounded-full font-black uppercase">
+                                    ✅ Disponible
+                                </span>
+                            )}
+                        </div>
+                    </button>
+                );
+            })}
+        </div>
+    </div>
+))}
                 </div>
             )}
         </div>
