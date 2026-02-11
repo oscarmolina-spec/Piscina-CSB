@@ -587,6 +587,7 @@ const AdminDashboard = ({ userRole, logout, userEmail }) => {
   const [tab, setTab] = useState('global');
   const [busqueda, setBusqueda] = useState('');
   const [filtroGrupo, setFiltroGrupo] = useState('');
+  const [filtroRadar, setFiltroRadar] = useState(null);
   const [nuevoAviso, setNuevoAviso] = useState('');
   
   const [newStaff, setNewStaff] = useState({ email: '', password: '', role: 'profe' });
@@ -643,6 +644,53 @@ const confirmarInscripcion = async (alumnoId) => {
     });
 };
 
+const imprimirListaAsistencia = (datos, infoGrupo) => {
+  const ventana = window.open('', '_blank');
+  
+  // Construimos una tabla HTML sencilla para la impresión
+  const filas = datos.map((a, i) => `
+    <tr style="border-bottom: 1px solid #ddd;">
+      <td style="padding: 8px; text-align: center;">${i + 1}</td>
+      <td style="padding: 8px;"><strong>${a.nombre}</strong></td>
+      <td style="padding: 8px; font-size: 10px;">${a.curso}</td>
+      ${Array(4).fill('<td style="border-left: 1px solid #ddd; width: 40px;"></td>').join('')} 
+    </tr>
+  `).join('');
+
+  ventana.document.write(`
+    <html>
+      <head>
+        <title>Lista de Asistencia - ${infoGrupo.nombre}</title>
+        <style>
+          body { font-family: sans-serif; padding: 20px; }
+          table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+          th { background: #f2f2f2; padding: 10px; text-align: left; border: 1px solid #ddd; }
+          td { border: 1px solid #ddd; }
+          .header { text-align: center; margin-bottom: 20px; }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h2>Lista de Asistencia: ${infoGrupo.nombre}</h2>
+          <p>Día: <strong>${infoGrupo.dia}</strong> | Generado el: ${new Date().toLocaleDateString()}</p>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 30px;">#</th>
+              <th>Alumno</th>
+              <th>Curso</th>
+              <th>S1</th><th>S2</th><th>S3</th><th>S4</th>
+            </tr>
+          </thead>
+          <tbody>${filas}</tbody>
+        </table>
+        <script>window.print();</script>
+      </body>
+    </html>
+  `);
+  ventana.document.close();
+};
 const validarPlaza = async (alumno) => {
   if (userRole !== 'admin') return alert("⛔ Solo coordinadores.");
   
@@ -981,103 +1029,143 @@ const listadoBajas = alumnos.filter(a => a.estado === 'baja_pendiente' || a.esta
       </div>
      {/* 📊 MATRIZ DE OCUPACIÓN DIARIA (CORREGIDA) */}
 {tab === 'ocupacion' && (
-  <div className="bg-white rounded-2xl shadow-sm border border-gray-200 mb-8 overflow-hidden animate-fade-in">
-    <div className="p-4 bg-slate-800 text-white flex justify-between items-center">
-      <h3 className="text-xs font-black uppercase tracking-widest flex items-center gap-2">
-        <span>🏊‍♂️</span> Control de Aforo Diario
-      </h3>
-      <span className="text-[10px] bg-emerald-500 text-white px-2 py-0.5 rounded font-bold uppercase">En tiempo real</span>
-    </div>
-    
-    <div className="overflow-x-auto">
-      <table className="w-full text-left">
-        <thead>
-          <tr className="bg-gray-50 border-b">
-            <th className="p-4 text-[10px] font-black text-gray-400 uppercase border-r">Actividad</th>
-            {['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'].map(d => (
-              <th key={d} className="p-4 text-[10px] font-black text-gray-400 uppercase text-center">{d}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {[
-    { id: 'chapoteo', m: 16, n: 'Chapoteo (16:00)' },
-    // --- DESGLOSE DE PRIMARIA 16:15 ---
-    { 
-      id: 'primaria_1615', 
-      m: 12, 
-      n: 'Primaria 1º-3º (16:15)', 
-      cursosRelacionados: ['1PRI', '2PRI', '3PRI'] 
-    },
-    { 
-      id: 'primaria_1615', 
-      m: 12, 
-      n: 'Primaria 4º-6º (16:15)', 
-      cursosRelacionados: ['4PRI', '5PRI', '6PRI'] 
-    },
-    // ----------------------------------
-    { id: 'primaria_123_tarde', m: 8, n: '1º-3º Prim (17:30)' },
-    { id: 'primaria_456_tarde', m: 8, n: '4º-6º Prim (17:30)' },
-    { id: 'waterpolo', m: 12, n: 'Waterpolo' },
-    
-    // 🚩 FILA AÑADIDA AQUÍ:
-    { 
-      id: 'eso_bach', 
-      m: 10, 
-      n: 'ESO / Bachillerato', 
-      cursosRelacionados: ['1ESO', '2ESO', '3ESO', '4ESO', '1BACH', '2BACH'] 
-    },
-
-    { id: 'adultos', m: 10, n: 'Adultos' },
-    { id: 'aquagym', m: 12, n: 'Aquagym' },
-    { id: 'nado_libre', m: 10, n: 'Nado Libre (18:30-19:00)' } 
-].map((g, index) => (
-            <tr key={g.n + index} className="border-b hover:bg-gray-50">
-              <td className="p-4 border-r bg-gray-50/30">
-                <p className="text-xs font-bold text-gray-700 leading-tight">{g.n}</p>
-                <p className="text-[9px] text-gray-400 font-bold uppercase mt-0.5">Límite: {g.m}</p>
-              </td>
-              {['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'].map(dia => {
-                // 🧮 Lógica de conteo con filtro por curso si existe
-                const ocupados = alumnos.filter(a => {
-                  // 1. Que coincida el ID de la actividad (ej: eso_bach)
-                  const coincideId = a.actividadId === g.id;
-                  
-                  // 2. Que esté inscrito
-                  const coincideEstado = a.estado === 'inscrito';
-                  
-                  // 3. Que el texto de sus días contenga el día de la columna (Lunes, Martes...)
-                  const coincideDia = a.dias?.toLowerCase().includes(dia.toLowerCase());
-                  
-                  // 4. 🛠️ FILTRO DE CURSO CORREGIDO
-                  // Buscamos tanto en 'cursosRelacionados' como en 'cursos' (que es lo que usas en ESO)
-                  const listaCursos = g.cursosRelacionados || g.cursos;
-                  const coincideCurso = listaCursos ? listaCursos.includes(a.curso) : true;
-                
-                  return coincideId && coincideEstado && coincideDia && coincideCurso;
-                }).length;
-                
-                const critico = ocupados >= g.m;
-
-                return (
-                  <td key={dia} className="p-2">
-                    <div className={`h-12 rounded-xl flex flex-col items-center justify-center border-2 transition-all ${
-                      ocupados === 0 ? 'border-dashed border-gray-100 text-gray-200' :
-                      critico ? 'bg-red-500 border-red-600 text-white font-black scale-105 shadow-md' :
-                      ocupados > (g.m * 0.7) ? 'bg-orange-50 border-orange-200 text-orange-600' : 
-                      'bg-emerald-50 border-emerald-100 text-emerald-600 font-bold'
-                    }`}>
-                      <span className="text-sm leading-none">{ocupados > 0 ? ocupados : '-'}</span>
-                      {ocupados > 0 && <span className="text-[8px] mt-1 opacity-60">/{g.m}</span>}
-                    </div>
-                  </td>
-                );
-              })}
+  <div className="space-y-4 animate-fade-in">
+    <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+      <div className="p-4 bg-slate-800 text-white flex justify-between items-center">
+        <h3 className="text-xs font-black uppercase tracking-widest flex items-center gap-2">
+          <span>🏊‍♂️</span> Control de Aforo Diario
+        </h3>
+        <span className="text-[10px] bg-emerald-500 text-white px-2 py-0.5 rounded font-bold uppercase">En tiempo real</span>
+      </div>
+      
+      <div className="overflow-x-auto">
+        <table className="w-full text-left">
+          <thead>
+            <tr className="bg-gray-50 border-b">
+              <th className="p-4 text-[10px] font-black text-gray-400 uppercase border-r">Actividad</th>
+              {['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'].map(d => (
+                <th key={d} className="p-4 text-[10px] font-black text-gray-400 uppercase text-center">{d}</th>
+              ))}
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {[
+              { id: 'chapoteo', m: 16, n: 'Chapoteo (16:00)' },
+              { id: 'primaria_1615', m: 12, n: 'Primaria 1º-3º (16:15)', cursosRelacionados: ['1PRI', '2PRI', '3PRI'] },
+              { id: 'primaria_1615', m: 12, n: 'Primaria 4º-6º (16:15)', cursosRelacionados: ['4PRI', '5PRI', '6PRI'] },
+              { id: 'primaria_123_tarde', m: 8, n: '1º-3º Prim (17:30)' },
+              { id: 'primaria_456_tarde', m: 8, n: '4º-6º Prim (17:30)' },
+              { id: 'waterpolo', m: 12, n: 'Waterpolo' },
+              { id: 'eso_bach', m: 10, n: 'ESO / Bachillerato', cursosRelacionados: ['1ESO', '2ESO', '3ESO', '4ESO', '1BACH', '2BACH'] },
+              { id: 'adultos', m: 10, n: 'Adultos' },
+              { id: 'aquagym', m: 12, n: 'Aquagym' },
+              { id: 'nado_libre', m: 10, n: 'Nado Libre (18:30-19:00)' } 
+            ].map((g, index) => (
+              <tr key={g.n + index} className="border-b hover:bg-gray-50/50 transition-colors">
+                <td className="p-4 border-r bg-gray-50/30">
+                  <p className="text-xs font-bold text-gray-700 leading-tight">{g.n}</p>
+                  <p className="text-[9px] text-gray-400 font-bold uppercase mt-0.5">Límite: {g.m}</p>
+                </td>
+                {['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'].map(dia => {
+                  const ocupados = alumnos.filter(a => {
+                    const coincideId = a.actividadId === g.id;
+                    const coincideEstado = a.estado === 'inscrito';
+                    const coincideDia = a.dias?.toLowerCase().includes(dia.toLowerCase());
+                    const listaCursos = g.cursosRelacionados || g.cursos;
+                    const coincideCurso = listaCursos ? listaCursos.includes(a.curso) : true;
+                    return coincideId && coincideEstado && coincideDia && coincideCurso;
+                  }).length;
+                  
+                  const critico = ocupados >= g.m;
+
+                  return (
+                    <td key={dia} className="p-2">
+                      <div 
+                        // 🚩 ACCIÓN AL CLICAR: Guarda el filtro para mostrar la lista
+                        onClick={() => ocupados > 0 && setFiltroRadar({ id: g.id, nombre: g.n, dia: dia, cursos: g.cursosRelacionados || g.cursos })}
+                        className={`h-12 rounded-xl flex flex-col items-center justify-center border-2 transition-all cursor-pointer hover:shadow-inner active:scale-95 ${
+                          ocupados === 0 ? 'border-dashed border-gray-100 text-gray-200' :
+                          critico ? 'bg-red-500 border-red-600 text-white font-black shadow-md' :
+                          ocupados > (g.m * 0.7) ? 'bg-orange-50 border-orange-200 text-orange-600' : 
+                          'bg-emerald-50 border-emerald-100 text-emerald-600 font-bold'
+                        }`}
+                      >
+                        <span className="text-sm leading-none">{ocupados > 0 ? ocupados : '-'}</span>
+                        {ocupados > 0 && <span className="text-[8px] mt-1 opacity-60">/{g.m}</span>}
+                      </div>
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
+
+    {/* 📋 LISTA DETALLADA DE ALUMNOS (Aparece abajo al pulsar un número) */}
+    {filtroRadar && (
+  <div className="bg-blue-600 rounded-2xl shadow-lg p-4 text-white animate-in slide-in-from-bottom-4 duration-300">
+    <div className="flex justify-between items-center mb-4">
+      <div>
+        <h4 className="font-black text-sm uppercase tracking-tighter">Lista de Asistencia</h4>
+        <p className="text-[10px] opacity-80 font-bold uppercase">{filtroRadar.nombre} — {filtroRadar.dia}</p>
+      </div>
+      
+      {/* 🚩 CONTENEDOR DE BOTONES */}
+      <div className="flex items-center gap-2">
+        <button 
+          onClick={() => {
+            // Filtramos los alumnos exactamente igual que en el Radar
+            const listaParaImprimir = alumnos.filter(a => {
+              const coincideId = a.actividadId === filtroRadar.id;
+              const coincideEstado = a.estado === 'inscrito';
+              const coincideDia = a.dias?.toLowerCase().includes(filtroRadar.dia.toLowerCase());
+              const listaCursos = filtroRadar.cursos; // Ya lo pasamos en el setFiltroRadar
+              const coincideCurso = listaCursos ? listaCursos.includes(a.curso) : true;
+              return coincideId && coincideEstado && coincideDia && coincideCurso;
+            });
+            imprimirListaAsistencia(listaParaImprimir, filtroRadar);
+          }}
+          className="bg-emerald-500 hover:bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-[10px] font-black uppercase flex items-center gap-1.5 shadow-lg transition-all active:scale-95"
+        >
+          <span>🖨️</span> Imprimir
+        </button>
+
+        <button 
+          onClick={() => setFiltroRadar(null)}
+          className="bg-white/20 hover:bg-white/40 p-2 rounded-full transition"
+        >
+          ✕
+        </button>
+      </div>
+    </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+          {alumnos
+            .filter(a => {
+              const coincideId = a.actividadId === filtroRadar.id;
+              const coincideEstado = a.estado === 'inscrito';
+              const coincideDia = a.dias?.toLowerCase().includes(filtroRadar.dia.toLowerCase());
+              const coincideCurso = filtroRadar.cursos ? filtroRadar.cursos.includes(a.curso) : true;
+              return coincideId && coincideEstado && coincideDia && coincideCurso;
+            })
+            .map(a => (
+              <div 
+                key={a.id} 
+                onClick={() => { setFiltroRadar(null); abrirFicha(a); }}
+                className="bg-white/10 hover:bg-white/20 border border-white/10 p-2 rounded-lg cursor-pointer flex justify-between items-center transition"
+              >
+                <div className="overflow-hidden">
+                  <p className="text-xs font-bold truncate">{a.nombre}</p>
+                  <p className="text-[9px] opacity-60 italic">{a.curso}</p>
+                </div>
+                <span className="text-[10px] bg-white/20 px-1.5 py-0.5 rounded font-mono">ficha →</span>
+              </div>
+            ))}
+        </div>
+      </div>
+    )}
   </div>
 )}
       
