@@ -740,21 +740,37 @@ const validarPlaza = async (alumno) => {
   }
 
   // 3. ❓ CONFIRMACIÓN
-  if (confirm(`✅ ¿Validar plaza definitiva para ${alumno.nombre}?\n\n📅 INICIO: ${fechaInicioParaEmail}\n📍 GRUPO: ${alumno.actividad}`)) {
-      try {
-          const hoy = new Date().toISOString().split('T')[0];
-          const padreId = alumno.parentId || alumno.user;
-          const emailPadre = padres[padreId]?.email;
+if (confirm(`✅ ¿Validar plaza definitiva para ${alumno.nombre}?\n\n📅 INICIO: ${fechaInicioParaEmail}\n📍 GRUPO: ${alumno.actividad}`)) {
+  try {
+      const hoy = new Date().toISOString().split('T')[0];
+      
+      // 🚩 GENERAMOS LA FECHA TÉCNICA (Formato AAAA-MM-DD)
+      let fechaTecnica;
+      
+      // Si el texto de inicio NO contiene la palabra "hoy", es que empieza el mes que viene
+      if (!fechaInicioParaEmail.toLowerCase().includes('hoy')) {
+          const proximoMes = new Date();
+          proximoMes.setMonth(proximoMes.getMonth() + 1);
+          proximoMes.setDate(1);
+          fechaTecnica = proximoMes.toISOString().split('T')[0];
+      } else {
+          fechaTecnica = hoy;
+      }
 
-          // Actualizar Firebase
-          await updateDoc(doc(db, 'students', alumno.id), { 
-              estado: 'inscrito',
-              actividadId: actId,
-              validadoAdmin: true,
-              fechaAlta: hoy,
-              revisadoAdmin: true,
-              fechaInicioReal: fechaInicioParaEmail // Guardamos la fecha que le prometemos por email
-          });
+      const padreId = alumno.parentId || alumno.user;
+      const emailPadre = padres[padreId]?.email;
+
+      // Actualizar Firebase
+      await updateDoc(doc(db, 'students', alumno.id), { 
+          estado: 'inscrito',
+          actividadId: actId,
+          validadoAdmin: true,
+          // 🚩 USAMOS LA FECHA TÉCNICA PARA EVITAR EL "INVALID DATE"
+          fechaAlta: fechaTecnica,
+          revisadoAdmin: true,
+          // Guardamos el texto bonito solo para mostrarlo
+          fechaInicioReal: fechaInicioParaEmail 
+      });
 
           // 📧 4. ENVÍO DE EMAIL AUTOMÁTICO
           if (emailPadre) {
@@ -1727,26 +1743,8 @@ const estaLibre = hijo.estado === 'sin_inscripcion' || hijo.estado === 'baja_fin
         !estaAdmitido ? 'bg-yellow-50 border-yellow-200' : 
         'bg-green-50 border-green-100'
       }`}>
-    
-    {/* 🗑️ BOTÓN DE BORRAR (Para familias) */}
-    <button 
-      onClick={async (e) => {
-        e.stopPropagation();
-        if (window.confirm(`¿Seguro que quieres eliminar a ${hijo.nombre}? Se perderá la plaza en ${hijo.actividad}.`)) {
-          try {
-            await deleteDoc(doc(db, 'students', hijo.id));
-            alert("🗑️ Alumno eliminado correctamente.");
-          } catch (error) {
-            console.error(error);
-            alert("Error al eliminar.");
-          }
-        }
-      }}
-      className="absolute top-2 right-2 text-gray-400 hover:text-red-500 transition-colors p-1"
-      title="Eliminar inscripción"
-    >
-      🗑️
-    </button>
+
+
 
     {/* CASO: PENDIENTE DE VALIDAR (AMARILLO) */}
     {!estaAdmitido && hijo.estado === 'inscrito' ? (
@@ -1809,17 +1807,18 @@ const estaLibre = hijo.estado === 'sin_inscripcion' || hijo.estado === 'baja_fin
         )}
     </div>
     
-{/* SECCIÓN DE LA CITA DE NIVEL - SOLUCIÓN SIN BLOQUEOS */}
+{/* SECCIÓN DE LA CITA DE NIVEL - CAMBIO PARA INMEDIATEZ */}
 <div className="flex items-center gap-2">
   <span className="text-2xl">🗓️</span>
   <div>
     <p className="font-bold text-orange-900 text-[10px] uppercase">Cita para Prueba</p>
     
-    {/* 🚩 SOLO desaparece si hay texto real en citaNivel. Si cancela y está vacío, el botón vuelve. */}
-    {(hijo.citaNivel && String(hijo.citaNivel).trim().length > 5) ? (
-      <div className="mt-1 bg-white/80 p-2 rounded-lg border border-green-200 shadow-sm animate-in fade-in zoom-in">
+    {/* 🚩 CONDICIÓN MEJORADA: Si el estado ya es reserva, el botón ROJO desaparece 
+        aunque el texto de la cita tarde medio segundo en llegar. */}
+    {(hijo.citaNivel || hijo.estado === 'prueba_reservada') ? (
+      <div className="mt-1 bg-white/80 p-2 rounded-lg border border-green-200 shadow-sm animate-in fade-in">
         <p className="text-indigo-950 font-black leading-tight text-xs">
-          {hijo.citaNivel}
+          {hijo.citaNivel || "Reserva confirmada"}
         </p>
         <div className="flex items-center gap-1 mt-1">
           <span className="text-green-600 text-[10px]">●</span>
@@ -1831,6 +1830,7 @@ const estaLibre = hijo.estado === 'sin_inscripcion' || hijo.estado === 'baja_fin
     ) : (
       <button 
         type="button"
+        disabled={loading}
         onClick={() => { setAlumnoSeleccionado(hijo); setModoModal('prueba'); }} 
         className="mt-1 text-red-600 font-black underline cursor-pointer animate-pulse hover:text-red-800 text-sm block"
       >
