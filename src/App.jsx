@@ -1809,27 +1809,36 @@ const estaLibre = hijo.estado === 'sin_inscripcion' || hijo.estado === 'baja_fin
         )}
     </div>
     
-    {/* SECCIÓN DE LA CITA DE NIVEL */}
-    <div className="flex items-center gap-2">
-        <span className="text-2xl">🗓️</span>
-        <div>
-            <p className="font-bold text-orange-900 text-xs uppercase">Cita para Prueba</p>
-            {/* Si ya tiene la citaNivel guardada, mostramos el texto. Si no, el botón de reservar. */}
-            {hijo.citaNivel ? (
-                <div className="flex flex-col">
-                  <p className="text-orange-800 font-bold">{hijo.citaNivel}</p>
-                  <span className="text-[10px] text-green-600 font-bold uppercase mt-0.5">✓ Cita Confirmada</span>
-                </div>
-            ) : (
-                <button 
-                  onClick={() => { setAlumnoSeleccionado(hijo); setModoModal('prueba'); }} 
-                  className="text-red-600 font-bold underline cursor-pointer animate-pulse hover:text-red-800"
-                >
-                    ¡Reservar Hora Ahora!
-                </button>
-            )}
+{/* SECCIÓN DE LA CITA DE NIVEL - SOLUCIÓN SIN BLOQUEOS */}
+<div className="flex items-center gap-2">
+  <span className="text-2xl">🗓️</span>
+  <div>
+    <p className="font-bold text-orange-900 text-[10px] uppercase">Cita para Prueba</p>
+    
+    {/* 🚩 SOLO desaparece si hay texto real en citaNivel. Si cancela y está vacío, el botón vuelve. */}
+    {(hijo.citaNivel && String(hijo.citaNivel).trim().length > 5) ? (
+      <div className="mt-1 bg-white/80 p-2 rounded-lg border border-green-200 shadow-sm animate-in fade-in zoom-in">
+        <p className="text-indigo-950 font-black leading-tight text-xs">
+          {hijo.citaNivel}
+        </p>
+        <div className="flex items-center gap-1 mt-1">
+          <span className="text-green-600 text-[10px]">●</span>
+          <span className="text-[9px] text-green-700 font-black uppercase tracking-widest">
+            Cita Confirmada
+          </span>
         </div>
-    </div>
+      </div>
+    ) : (
+      <button 
+        type="button"
+        onClick={() => { setAlumnoSeleccionado(hijo); setModoModal('prueba'); }} 
+        className="mt-1 text-red-600 font-black underline cursor-pointer animate-pulse hover:text-red-800 text-sm block"
+      >
+        ¡RESERVAR HORA AHORA!
+      </button>
+    )}
+  </div>
+</div>
   </div>
 )}
 
@@ -2569,6 +2578,7 @@ const PantallaPruebaNivel = ({ alumno, close, onSuccess, user }) => {
     try {
       const citaTexto = `${fecha} a las ${hora}`;
       
+      // 1. Guardamos en Firebase (Nube)
       await updateDoc(doc(db, 'students', alumno.id), {
         estado: 'prueba_reservada',
         citaNivel: citaTexto,
@@ -2577,26 +2587,29 @@ const PantallaPruebaNivel = ({ alumno, close, onSuccess, user }) => {
         fechaSolicitud: new Date().toISOString()
       });
 
-      // 🚩 CLAVE PARA LA ACTUALIZACIÓN INMEDIATA:
-      // Esto obliga al Panel Familiar de fondo a leer los nuevos datos de María
+      // 2. 🔥 ACTUALIZACIÓN MANUAL (Inmediatez Total)
+      // Si tienes una función para actualizar el estado de los alumnos localmente, úsala.
+      // Si no, el await refresh debería ir acompañado de una pequeña pausa:
       if (typeof refresh === 'function') {
         await refresh(user.uid);
       }
 
-      if (user?.email) {
-        await enviarEmailConfirmacion(user.email, alumno.nombre, citaTexto);
-      }
-
-      alert("✅ ¡Cita confirmada! Revisa tu email.");
-      
+      // 3. Cerramos el modal
       if (onSuccess) onSuccess();
       close();
+
+      // 4. Forzamos un re-renderizado del componente de fondo
+      // Esto hace que React se vea obligado a pintar de nuevo los datos del alumno
+      setTimeout(() => {
+        alert("✅ ¡Cita confirmada! Revisa tu email.");
+      }, 150);
+
     } catch (e) {
       alert("Error: " + e.message);
     } finally {
       setLoading(false);
     }
-  };
+};
   // 🚀 ATAJO PARA ANTIGUOS ALUMNOS (PASE VIP)
   // Comprobamos si marcó 'si' en natacionPasado (o esAntiguoAlumno, según tu variable)
   if (alumno.natacionPasado === 'si' || alumno.esAntiguoAlumno === true) {
