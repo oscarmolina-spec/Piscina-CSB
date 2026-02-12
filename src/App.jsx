@@ -691,14 +691,28 @@ const imprimirListaAsistencia = (datos, infoGrupo) => {
   `);
   ventana.document.close();
 };
+// --- 🚩 PASO 1: LÓGICA DE FECHAS DE ALTA (Colocar aquí) ---
+const obtenerInfoAlta = () => {
+  const hoy = new Date();
+  const diaActual = hoy.getDate();
+  const mesActualNom = hoy.toLocaleString('es-ES', { month: 'long' });
+  
+  const fechaProximoMes = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 1);
+  const mesSiguienteNom = fechaProximoMes.toLocaleString('es-ES', { month: 'long' });
+
+  return {
+    diaCortePasado: diaActual > 20,
+    mesActual: mesActualNom,
+    mesSiguiente: mesSiguienteNom,
+    fechaInicioSiguiente: `1 de ${mesSiguienteNom}`
+  };
+};
 const validarPlaza = async (alumno) => {
   if (userRole !== 'admin') return alert("⛔ Solo coordinadores.");
   
-  // 🔍 BUSCADOR DE IDs (Para que el Radar funcione)
+  // 1. 🔍 BUSCADOR DE IDs (Lo que ya tenías)
   let actId = alumno.actividadId;
   const actText = (alumno.actividad || "").toLowerCase();
-
-  // Si el alumno no tiene ID de actividad grabado, lo deducimos por el nombre
   if (!actId) {
       if (actText.includes('chapoteo')) actId = 'chapoteo';
       else if (actText.includes('16:15')) actId = 'primaria_1615';
@@ -711,22 +725,63 @@ const validarPlaza = async (alumno) => {
       else if (actText.includes('aquagym')) actId = 'aquagym';
   }
 
-  if (confirm(`✅ ¿Validar plaza definitiva para ${alumno.nombre}?\nGrupo: ${alumno.actividad}\nDías: ${alumno.dias}`)) {
+  // 2. 📅 LÓGICA DE FECHAS (Regla del día 20)
+  const infoFechas = obtenerInfoAlta();
+  let fechaInicioParaEmail = "";
+
+  if (infoFechas.diaCortePasado) {
+    // Si hoy es después del 20, forzamos mes siguiente
+    fechaInicioParaEmail = infoFechas.fechaInicioSiguiente;
+  } else {
+    // Si es 20 o antes, miramos qué eligió el padre (por defecto próximo mes si no hay dato)
+    fechaInicioParaEmail = alumno.inicioDeseado === 'inmediato' 
+      ? `Inmediato (Mes de ${infoFechas.mesActual})` 
+      : infoFechas.fechaInicioSiguiente;
+  }
+
+  // 3. ❓ CONFIRMACIÓN
+  if (confirm(`✅ ¿Validar plaza definitiva para ${alumno.nombre}?\n\n📅 INICIO: ${fechaInicioParaEmail}\n📍 GRUPO: ${alumno.actividad}`)) {
       try {
           const hoy = new Date().toISOString().split('T')[0];
+          const padreId = alumno.parentId || alumno.user;
+          const emailPadre = padres[padreId]?.email;
 
+          // Actualizar Firebase
           await updateDoc(doc(db, 'students', alumno.id), { 
-              estado: 'inscrito',     // Pasa a ser alumno oficial
-              actividadId: actId,     // 👈 ESENCIAL PARA EL RADAR
-              validadoAdmin: true,    // Confirmación de que el admin lo vio
+              estado: 'inscrito',
+              actividadId: actId,
+              validadoAdmin: true,
               fechaAlta: hoy,
-              revisadoAdmin: true     // Marcamos como gestionado
+              revisadoAdmin: true,
+              fechaInicioReal: fechaInicioParaEmail // Guardamos la fecha que le prometemos por email
           });
 
-          alert("✅ ¡Hecho! El alumno ya ocupa su plaza en el Radar.");
+          // 📧 4. ENVÍO DE EMAIL AUTOMÁTICO
+          if (emailPadre) {
+            await addDoc(collection(db, 'mail'), {
+              to: emailPadre,
+              message: {
+                subject: `✅ Alta confirmada - Natación: ${alumno.nombre}`,
+                html: `
+                  <div style="font-family: sans-serif; line-height: 1.6; color: #333;">
+                    <h2 style="color: #059669;">¡Hola! Tu alta ya es efectiva.</h2>
+                    <p>La inscripción de <strong>${alumno.nombre}</strong> ha sido validada por la coordinación.</p>
+                    <div style="background: #f3f4f6; padding: 15px; border-radius: 10px; border: 1px solid #e5e7eb;">
+                      <p style="margin: 5px 0;"><strong>📅 Fecha de inicio:</strong> ${fechaInicioParaEmail}</p>
+                      <p style="margin: 5px 0;"><strong>🏊‍♂️ Actividad:</strong> ${alumno.actividad}</p>
+                      <p style="margin: 5px 0;"><strong>🗓️ Días:</strong> ${alumno.dias}</p>
+                    </div>
+                    <p>Recuerda traer todo el equipo necesario (gorro, bañador, chanclas y toalla). ¡Te esperamos!</p>
+                  </div>
+                `
+              }
+            });
+          }
+
+          alert(`✅ ¡Hecho! El alumno está inscrito y el email de bienvenida enviado a: ${emailPadre}`);
       } catch (error) {
           console.error("Error al validar:", error);
-          alert("❌ Error: No se pudo actualizar la ficha.");
+          alert("❌ Error: No se pudo completar el proceso.");
       }
   }
 };
@@ -1990,7 +2045,9 @@ const PantallaInscripcion = ({ alumno, close, onRequirePrueba, user, refresh }) 
   const [datosAlumno, setDatosAlumno] = useState({ 
     nombre: alumno.nombre, 
     curso: alumno.curso, 
-    fechaNacimiento: alumno.fechaNacimiento || '' 
+    fechaNacimiento: alumno.fechaNacimiento || '',
+    // 🚩 AÑADE ESTO AQUÍ: Es el valor por defecto
+    inicioDeseado: 'proximo' 
   });
   const [verNormas, setVerNormas] = useState(false);
   const [autorizaFotos, setAutorizaFotos] = useState(alumno.autorizaFotos === true);
@@ -2026,6 +2083,19 @@ const PantallaInscripcion = ({ alumno, close, onRequirePrueba, user, refresh }) 
     });
     return () => unsub();
   }, []);
+  // 🚩 LÓGICA PARA EL SELECTOR DE FECHAS
+  const infoAlta = (() => {
+    const hoy = new Date();
+    const dia = hoy.getDate();
+    const mesActual = hoy.toLocaleString('es-ES', { month: 'long' });
+    const sigMes = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 1).toLocaleString('es-ES', { month: 'long' });
+    
+    return { 
+      diaCortePasado: dia > 20, 
+      mesActual, 
+      sigMes 
+    };
+  })();
 
 // 3. Función que calcula si hay hueco o lista de espera
 const obtenerEstadoPlaza = (actividadId, diaSeleccionado, cursoAlumno) => {
@@ -2107,11 +2177,10 @@ const obtenerEstadoPlaza = (actividadId, diaSeleccionado, cursoAlumno) => {
       dias: op.dias,
       horario: op.horario,
       precio: op.precio,
-      estado: 'inscrito',
-      // --- CAMPOS AÑADIDOS ---
-      fechaAlta: new Date().toISOString(), // Esto registra la fecha y hora exacta
-      revisadoAdmin: false,               // Por defecto, nadie está revisado aún
-      // -----------------------
+      // 🚩 ELIMINAMOS LA LÍNEA DE ESTADO DE AQUÍ
+      fechaAlta: new Date().toISOString(),
+      revisadoAdmin: false,
+      inicioDeseado: datosAlumno.inicioDeseado || 'proximo', 
       autorizaFotos: autorizaFotos,
       aceptaNormas: normasRef.current
   };
@@ -2127,19 +2196,34 @@ const obtenerEstadoPlaza = (actividadId, diaSeleccionado, cursoAlumno) => {
         d.esAntiguoAlumno === 'true' ||
         d.antiguo === 'si';
 
-    // CASO A: SOLO ENTRA SI NO ES INFANTIL Y NO ES VIP
-    if (act.requierePrueba && !esInfantil && !tienePaseVIP && !d.citaNivel && d.estado !== 'prueba_reservada') {
-        if(!confirm(`⚠️ Esta actividad requiere PRUEBA DE NIVEL.\n\n¿Continuar para elegir hora?`)) return;
+    // CASO A: REVISADO Y ASEGURADO
+if (act.requierePrueba && !esInfantil && !tienePaseVIP && !d.citaNivel && d.estado !== 'prueba_reservada') {
+  if(!confirm(`⚠️ Esta actividad requiere PRUEBA DE NIVEL.\n\n¿Continuar para elegir hora?`)) return;
 
-        await updateDoc(alumnoRef, { 
-            ...datosComunes,
-            estado: 'prueba_reservada'
-        });
-        
-        refresh(user.uid);
-        onRequirePrueba();
-        return; 
-    }
+  try {
+      // Guardamos con el estado explícito
+      await updateDoc(alumnoRef, { 
+          ...datosComunes,
+          estado: 'prueba_reservada' // 🔥 Ahora no hay conflicto porque no está en datosComunes
+      });
+      
+      // Forzamos la actualización de la ficha del padre
+      await refresh(user.uid);
+      
+      // Cerramos el modal de inscripción
+      close(); 
+
+      // Abrimos el de la cita con un margen de seguridad
+      setTimeout(() => {
+          onRequirePrueba();
+      }, 400); 
+
+  } catch (error) {
+      console.error("Error:", error);
+      alert("Error al conectar con el servidor.");
+  }
+  return; 
+}
 
     // CASO B: INSCRIPCIÓN DIRECTA (VIP, INFANTIL, ADULTOS O PRUEBA SUPERADA)
     
@@ -2158,18 +2242,28 @@ const obtenerEstadoPlaza = (actividadId, diaSeleccionado, cursoAlumno) => {
     // 3. Pedimos confirmación
     if (!confirm(mensajeConfirmacion)) return;
     
-    // 4. Guardamos en Firebase
-    await updateDoc(alumnoRef, { 
-        ...datosComunes,
-        estado: estadoFinalReal // Aquí se guarda 'inscrito' o 'lista_espera'
-    });
-    
-    alert(infoPlaza.lleno ? "✅ Te has apuntado a la lista de espera correctamente." : "✅ ¡Inscripción realizada con éxito!");
-    refresh(user.uid); 
-    close();
-};
+// 4. Guardamos en Firebase
+await updateDoc(alumnoRef, { 
+  ...datosComunes,
+  estado: estadoFinalReal 
+});
 
-  return (
+// Esperamos a que el sistema recargue los datos
+await refresh(user.uid); 
+
+// Cerramos el modal
+close();
+
+// Mensaje de éxito con un pequeño retraso para no bloquear el cierre
+setTimeout(() => {
+  alert(infoPlaza.lleno 
+      ? "✅ Te has apuntado a la lista de espera correctamente." 
+      : "✅ ¡Inscripción realizada con éxito!"
+  );
+}, 100);
+}; // <--- ESTA LLAVE CIERRA LA FUNCIÓN "inscribir"
+
+return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl flex flex-col max-h-[90vh]">
         
@@ -2180,23 +2274,80 @@ const obtenerEstadoPlaza = (actividadId, diaSeleccionado, cursoAlumno) => {
         </div>
 
         {/* CUERPO CON SCROLL */}
-        <div className="p-6 overflow-y-auto flex-1">
-            
-            {/* DATOS BÁSICOS */}
-            <div className="grid grid-cols-2 gap-4 mb-6 bg-gray-50 p-4 rounded-lg border border-gray-100">
-                <div>
-                    <label className="text-xs font-bold text-gray-500 uppercase block mb-1">Nombre</label>
-                    <input 
-                        className="w-full border-b bg-transparent font-bold text-gray-800 focus:outline-none" 
-                        value={datosAlumno.nombre} 
-                        onChange={e=>setDatosAlumno({...datosAlumno, nombre: e.target.value})} 
-                    />
-                </div>
-                <div>
-                    <label className="text-xs font-bold text-gray-500 uppercase block mb-1">Curso Escolar</label>
-                    <div className="font-bold text-blue-600 bg-white px-2 py-1 rounded border inline-block">{datosAlumno.curso}</div>
-                </div>
-            </div>
+<div className="p-6 overflow-y-auto flex-1">
+
+{/* 🚩 BLOQUE DE FECHA OBLIGATORIO (PASO 1) */}
+<div className="mb-8 p-5 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl border-2 border-blue-200 shadow-sm">
+    <div className="flex items-center justify-center gap-2 mb-4">
+        <span className="bg-blue-600 text-white text-[10px] font-black px-2 py-0.5 rounded-full">PASO 1</span>
+        <p className="text-[11px] font-black text-blue-900 uppercase tracking-widest">
+            ¿Cuándo quieres comenzar?
+        </p>
+    </div>
+    
+    <div className="grid grid-cols-2 gap-4">
+        {/* Opción Mes Siguiente */}
+        <button 
+            type="button"
+            onClick={() => setDatosAlumno({ ...datosAlumno, inicioDeseado: 'proximo' })}
+            className={`group relative p-4 rounded-xl border-2 transition-all flex flex-col items-center justify-center text-center ${
+                datosAlumno.inicioDeseado === 'proximo' 
+                ? 'border-blue-600 bg-white shadow-lg ring-4 ring-blue-100' 
+                : 'border-gray-200 bg-gray-50/50 grayscale hover:grayscale-0'
+            }`}
+        >
+            <span className={`text-[10px] font-bold mb-1 ${datosAlumno.inicioDeseado === 'proximo' ? 'text-blue-600' : 'text-gray-400'}`}>OPCIÓN RECOMENDADA</span>
+            <span className="text-sm font-black text-gray-800 uppercase">1 de {infoAlta.sigMes}</span>
+            {datosAlumno.inicioDeseado === 'proximo' && <span className="absolute -top-2 -right-2 bg-blue-600 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs shadow-md">✓</span>}
+        </button>
+
+        {/* Opción Mes Actual (Día 20) */}
+{!infoAlta.diaCortePasado && (
+    <button 
+        type="button"
+        onClick={() => setDatosAlumno({ ...datosAlumno, inicioDeseado: 'inmediato' })}
+        className={`group relative p-4 rounded-xl border-2 transition-all flex flex-col items-center justify-center text-center ${
+            datosAlumno.inicioDeseado === 'inmediato' 
+            ? 'border-orange-500 bg-orange-50 shadow-lg ring-4 ring-orange-200 scale-105' 
+            : 'border-gray-200 bg-gray-50/50 opacity-70'
+        }`}
+    >
+        <span className={`text-[10px] font-black mb-1 px-2 py-0.5 rounded-full ${datosAlumno.inicioDeseado === 'inmediato' ? 'bg-orange-600 text-white' : 'bg-gray-200 text-gray-500'}`}>
+            EMPEZAR HOY
+        </span>
+        
+        <span className="text-sm font-black text-gray-900 uppercase">
+            Mes de {infoAlta.mesActual}
+        </span>
+        
+        {/* RECUADRO DE ADVERTENCIA ECONÓMICA MUY CLARO */}
+        <div className={`mt-2 p-2 rounded-lg border-2 flex flex-col items-center gap-1 ${datosAlumno.inicioDeseado === 'inmediato' ? 'bg-white border-red-200' : 'bg-transparent border-gray-200'}`}>
+            <span className="text-lg">⚠️</span>
+            <p className="text-[10px] font-black text-red-600 leading-tight uppercase">
+                ¡ATENCIÓN!<br/>
+                SE COBRARÁ EL MES DE<br/>
+                <span className="text-xs font-extrabold">{infoAlta.mesActual.toUpperCase()} COMPLETO</span>
+            </p>
+        </div>
+
+        {datosAlumno.inicioDeseado === 'inmediato' && (
+            <span className="absolute -top-2 -right-2 bg-orange-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs shadow-md font-bold">✓</span>
+        )}
+    </button>
+)}
+    </div>
+
+    {infoAlta.diaCortePasado && (
+        <p className="text-[10px] text-gray-500 text-center mt-3 italic">
+            * Las inscripciones para {infoAlta.mesActual} están cerradas por fecha de corte.
+        </p>
+    )}
+</div>
+
+{/* DATOS BÁSICOS (Lo que ya tenías) */}
+<div className="grid grid-cols-2 gap-4 mb-6 bg-gray-50 p-4 rounded-lg border border-gray-100">
+    {/* ... nombre y curso ... */}
+</div>
 
            {/* SECCIÓN DE NORMATIVA DESPLEGABLE */}
 <div className="mb-4">
@@ -2426,12 +2577,18 @@ const PantallaPruebaNivel = ({ alumno, close, onSuccess, user }) => {
         fechaSolicitud: new Date().toISOString()
       });
 
+      // 🚩 CLAVE PARA LA ACTUALIZACIÓN INMEDIATA:
+      // Esto obliga al Panel Familiar de fondo a leer los nuevos datos de María
+      if (typeof refresh === 'function') {
+        await refresh(user.uid);
+      }
+
       if (user?.email) {
-        // Llamamos a tu función personalizada del Portón Azul
         await enviarEmailConfirmacion(user.email, alumno.nombre, citaTexto);
       }
 
       alert("✅ ¡Cita confirmada! Revisa tu email.");
+      
       if (onSuccess) onSuccess();
       close();
     } catch (e) {
