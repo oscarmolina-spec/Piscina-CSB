@@ -1807,18 +1807,19 @@ const estaLibre = hijo.estado === 'sin_inscripcion' || hijo.estado === 'baja_fin
         )}
     </div>
     
-{/* SECCIÓN DE LA CITA DE NIVEL - CAMBIO PARA INMEDIATEZ */}
+{/* SECCIÓN DE LA CITA DE NIVEL - VERSIÓN FINAL SEGURA */}
 <div className="flex items-center gap-2">
   <span className="text-2xl">🗓️</span>
   <div>
     <p className="font-bold text-orange-900 text-[10px] uppercase">Cita para Prueba</p>
     
-    {/* 🚩 CONDICIÓN MEJORADA: Si el estado ya es reserva, el botón ROJO desaparece 
-        aunque el texto de la cita tarde medio segundo en llegar. */}
-    {(hijo.citaNivel || hijo.estado === 'prueba_reservada') ? (
-      <div className="mt-1 bg-white/80 p-2 rounded-lg border border-green-200 shadow-sm animate-in fade-in">
+    {/* 🚩 LA LLAVE MAESTRA:
+        Si el estado es 'prueba_reservada', el botón rojo DESAPARECE.
+        Mostramos el texto de la cita si existe, y si no, un mensaje de carga. */}
+    {hijo.estado === 'prueba_reservada' || hijo.citaNivel ? (
+      <div className="mt-1 bg-white/80 p-2 rounded-lg border border-green-200 shadow-sm">
         <p className="text-indigo-950 font-black leading-tight text-xs">
-          {hijo.citaNivel || "Reserva confirmada"}
+          {hijo.citaNivel || "Cita confirmada"} 
         </p>
         <div className="flex items-center gap-1 mt-1">
           <span className="text-green-600 text-[10px]">●</span>
@@ -1828,13 +1829,13 @@ const estaLibre = hijo.estado === 'sin_inscripcion' || hijo.estado === 'baja_fin
         </div>
       </div>
     ) : (
+      /* El botón rojo solo sale si el estado NO es reserva Y NO hay citaNivel */
       <button 
         type="button"
-        disabled={loading}
         onClick={() => { setAlumnoSeleccionado(hijo); setModoModal('prueba'); }} 
-        className="mt-1 text-red-600 font-black underline cursor-pointer animate-pulse hover:text-red-800 text-sm block"
+        className="mt-1 text-red-600 font-black underline animate-pulse text-sm block cursor-pointer"
       >
-        ¡RESERVAR HORA AHORA!
+        ⚠️ ¡RESERVAR HORA AHORA!
       </button>
     )}
   </div>
@@ -2578,7 +2579,6 @@ const PantallaPruebaNivel = ({ alumno, close, onSuccess, user }) => {
     try {
       const citaTexto = `${fecha} a las ${hora}`;
       
-      // 1. Guardamos en Firebase (Nube)
       await updateDoc(doc(db, 'students', alumno.id), {
         estado: 'prueba_reservada',
         citaNivel: citaTexto,
@@ -2587,22 +2587,28 @@ const PantallaPruebaNivel = ({ alumno, close, onSuccess, user }) => {
         fechaSolicitud: new Date().toISOString()
       });
 
-      // 2. 🔥 ACTUALIZACIÓN MANUAL (Inmediatez Total)
-      // Si tienes una función para actualizar el estado de los alumnos localmente, úsala.
-      // Si no, el await refresh debería ir acompañado de una pequeña pausa:
+      // 🚩 EL CAMBIO CLAVE AQUÍ:
+      // Primero: Cerramos el modal de la cita
+      close(); 
+
+      // Segundo: Forzamos al Panel Familiar a olvidar que había un alumno seleccionado
+      // Esto cerrará automáticamente cualquier flujo de inscripción que estuviera por debajo
+      if (typeof setAlumnoSeleccionado === 'function') {
+        setAlumnoSeleccionado(null);
+      }
+      
+      // Tercero: Limpiamos el modo del modal para volver a la vista base del panel
+      if (typeof setModoModal === 'function') {
+        setModoModal(null);
+      }
+
+      // Cuarto: Refrescamos los datos para que el botón se ponga verde
       if (typeof refresh === 'function') {
         await refresh(user.uid);
       }
-
-      // 3. Cerramos el modal
-      if (onSuccess) onSuccess();
-      close();
-
-      // 4. Forzamos un re-renderizado del componente de fondo
-      // Esto hace que React se vea obligado a pintar de nuevo los datos del alumno
       setTimeout(() => {
-        alert("✅ ¡Cita confirmada! Revisa tu email.");
-      }, 150);
+        alert("✅ ¡Cita confirmada correctamente!");
+      }, 300);
 
     } catch (e) {
       alert("Error: " + e.message);
@@ -2650,7 +2656,6 @@ const PantallaPruebaNivel = ({ alumno, close, onSuccess, user }) => {
             <h3 className="font-black text-xl flex items-center gap-2">🏊 Prueba de Nivel: LUNES</h3>
             <p className="text-blue-100 text-xs font-medium uppercase">{alumno.nombre}</p>
           </div>
-          <button onClick={close} className="text-2xl hover:bg-white/20 rounded-full px-2">✕</button>
         </div>
         
         <div className="p-6 overflow-y-auto flex-1">
@@ -2699,15 +2704,23 @@ const PantallaPruebaNivel = ({ alumno, close, onSuccess, user }) => {
           </div>
         </div>
 
-        <div className="p-4 bg-gray-50 border-t flex justify-end gap-4">
-          <button onClick={close} className="px-6 py-2 font-bold text-gray-400">Cancelar</button>
+{/* PIE DEL MODAL BLINDADO (Sustituye tu bloque anterior por este) */}
+        <div className="p-4 bg-gray-50 border-t flex flex-col items-center gap-3">
+          
+          {/* Añadimos un aviso visual de que es obligatorio */}
+          <p className="text-[10px] font-black text-orange-600 uppercase tracking-tighter">
+            ⚠️ Debes seleccionar una hora para completar el registro
+          </p>
+
           <button 
             onClick={confirmarReserva}
             disabled={loading || !hora}
-            className="px-10 py-3 bg-blue-600 text-white rounded-2xl font-black shadow-xl disabled:bg-gray-200"
+            className="w-full py-4 bg-blue-600 text-white rounded-2xl font-black shadow-xl disabled:bg-gray-200 disabled:text-gray-400 transition-all transform active:scale-95"
           >
-            {loading ? 'Confirmando...' : 'Confirmar Lunes'}
+            {loading ? 'Procesando reserva...' : 'FINALIZAR Y CONFIRMAR CITA'}
           </button>
+
+          {/* 🚩 EL BOTÓN DE CANCELAR HA SIDO ELIMINADO */}
         </div>
       </div>
     </div>
@@ -2727,10 +2740,13 @@ const Login = ({ setView }) => {
   const [regData, setRegData] = useState({ 
     tipo: 'interno', 
     
+    // 🚩 AÑADE ESTA LÍNEA AQUÍ
+    personaContacto: '', 
+
     // 📞 DATOS DE CONTACTO (Ahora para TODOS: Internos y Externos)
     telefono1: '', 
     telefono2: '',
-    emailContacto: '', 
+    emailContacto: '',
 
     // 💳 DATOS PAGADOR (Solo Externos)
     nombrePagador: '', 
@@ -2762,9 +2778,7 @@ const Login = ({ setView }) => {
     if (regData.password !== confirmPassword) return alert("⛔ Las contraseñas NO coinciden.");
     if (regData.password.length < 6) return alert("⚠️ La contraseña debe tener al menos 6 caracteres.");
 
-    // 2. Validaciones Alumno
-    if (!regData.nombreAlumno) return alert('⚠️ Falta el NOMBRE del alumno.');
-    if (!regData.fechaNacAlumno) return alert('⚠️ Falta la FECHA DE NACIMIENTO.');
+
 
     // 3. Validaciones Específicas
     if (regData.tipo === 'externo') {
@@ -2891,7 +2905,7 @@ const Login = ({ setView }) => {
             <div className="bg-orange-50 p-5 rounded-xl border border-orange-200 animate-fade-in">
                 <h3 className="font-bold text-orange-900 mb-3 border-b border-orange-200 pb-1">👤 Datos Completos del Pagador</h3>
                 <div className="grid md:grid-cols-2 gap-4">
-                    <input className="border p-2 rounded bg-white" placeholder="Nombre Completo Titular *" onChange={e => setRegData({ ...regData, nombrePagador: e.target.value })} />
+                    <input className="border p-2 rounded bg-white" placeholder="Nombre y apellidos del Titular *" onChange={e => setRegData({ ...regData, nombrePagador: e.target.value })} />
                     <input className="border p-2 rounded bg-white" placeholder="DNI / NIE *" onChange={e => setRegData({ ...regData, dniPagador: e.target.value })} />
                     
                     <input className="border p-2 rounded bg-white font-bold text-blue-600" placeholder="Teléfono 1 (9 cifras) *" onChange={e => setRegData({ ...regData, telefono1: e.target.value })} />
@@ -2923,97 +2937,42 @@ const Login = ({ setView }) => {
                 </div>
             </div>
           ) : (
-              <div className="bg-blue-50 p-5 rounded-xl border border-blue-100 animate-fade-in">
-                  <h3 className="font-bold text-blue-900 mb-3 border-b border-blue-200 pb-1">👤 Datos de Contacto</h3>
-                  <p className="text-sm text-blue-800 mb-3">Al ser alumno del centro, usaremos la cuenta bancaria que consta en secretaría.</p>
-                  <div className="space-y-4">
-                      <div>
-                          <label className="text-xs font-bold text-blue-800 uppercase">Tu Email de Contacto (Será tu Usuario) *</label>
-                          <input type="email" className="w-full border p-2 rounded bg-white font-bold text-blue-900" placeholder="ejemplo@correo.com" onChange={e => setRegData({ ...regData, emailContacto: e.target.value })} />
-                      </div>
-                    {/* Aquí añadimos el móvil único para internos */}
-<div>
-    <label className="text-xs font-bold text-blue-800 uppercase">Teléfono Móvil (9 cifras) *</label>
-    <input 
-  type="tel" 
-  className="w-full border p-2 rounded bg-white font-bold text-blue-600" 
-  placeholder="600000000" 
-  // 🚩 Asegúrate de añadir estas dos líneas:
-  value={regData.telefono1 || ''} 
-  onChange={e => setRegData(prev => ({ ...prev, telefono1: e.target.value }))} 
-/>
-</div>
-                  </div>
-              </div>
-          )}
-
-          {/* 3. DATOS DEL ALUMNO (SIEMPRE IGUAL) */}
-          <div className="bg-gray-50 p-5 rounded-xl border border-gray-200">
-            <h3 className="font-bold text-gray-800 mb-3 border-b pb-1">🎓 Primer Alumno</h3>
-            <div className="grid md:grid-cols-2 gap-4">
-  {/* Nombre: Ocupa todo el ancho */}
-  <input 
-    className="border p-2 rounded md:col-span-2 bg-white" 
-    placeholder="Nombre y Apellidos del Alumno *" 
-    onChange={e => setRegData({ ...regData, nombreAlumno: e.target.value })} 
-  />
-  {/* NUEVA PREGUNTA DE NATACIÓN */}
-  <div className="md:col-span-2 bg-blue-50 p-4 rounded-xl border border-blue-200 my-2">
-      <p className="text-sm font-bold text-blue-900 mb-3">
-        ¿Estuvo inscrito en natación extraescolar en este colegio durante el curso pasado?
-      </p>
-      <div className="flex flex-wrap gap-6">
-        <label className="flex items-center gap-2 cursor-pointer group">
-          <input 
-            type="radio" 
-            name="natacionPasado" 
-            checked={regData.natacionPasado === 'si'}
-            onChange={() => setRegData({...regData, natacionPasado: 'si'})} 
-          /> 
-          <span className="text-sm font-medium text-gray-700">Sí (Sin prueba de nivel)</span>
-        </label>
+            <div className="bg-blue-50 p-5 rounded-xl border border-blue-100 animate-fade-in">
+                <h3 className="font-bold text-blue-900 mb-3 border-b border-blue-200 pb-1">👤 Datos de Contacto</h3>
+                <p className="text-sm text-blue-800 mb-3">Al ser alumno del centro, usaremos la cuenta bancaria que consta en secretaría.</p>
+                <div className="space-y-4">
+                    
+                    {/* 🚩 NUEVO: Persona de contacto */}
+                    <div>
+                        <label className="text-xs font-bold text-blue-800 uppercase">Persona de Contacto *</label>
+                        <input 
+                            type="text" 
+                            className="w-full border p-2 rounded bg-white font-bold text-blue-900" 
+                            placeholder="Nombre y apellidos del responsable" 
+                            value={regData.personaContacto || ''}
+                            onChange={e => setRegData({ ...regData, personaContacto: e.target.value })} 
+                        />
+                    </div>
         
-        <label className="flex items-center gap-2 cursor-pointer group">
-          <input 
-            type="radio" 
-            name="natacionPasado" 
-            checked={regData.natacionPasado === 'no'}
-            onChange={() => setRegData({...regData, natacionPasado: 'no'})} 
-          /> 
-          <span className="text-sm font-medium text-gray-700">No</span>
-        </label>
-      </div>
-    </div>
-
-  {/* Curso y Letra: Comparten fila */}
-  <select className="border p-2 rounded bg-white" onChange={e => setRegData({ ...regData, curso: e.target.value })}>
-    {LISTA_CURSOS.map(c => <option key={c.val} value={c.val}>{c.label}</option>)}
-  </select>
-  <select className="border p-2 rounded bg-white" onChange={e => setRegData({ ...regData, letra: e.target.value })}>
-    <option>A</option><option>B</option><option>C</option>
-  </select>
-
-
-
-  {/* Fecha de Nacimiento: También en su propia fila */}
-  <div className="md:col-span-2">
-    <label className="text-[10px] font-bold text-gray-400 uppercase block mb-1">Fecha de Nacimiento *</label>
-    <input 
-      type="date" 
-      className="w-full border p-2 rounded bg-white" 
-      onChange={e => setRegData({ ...regData, fechaNacAlumno: e.target.value })} 
-    />
-  </div>
-
-  {/* Alergias */}
-  <textarea 
-    className="border p-2 rounded md:col-span-2 text-sm bg-white" 
-    placeholder="Alergias o problemas médicos (Opcional)" 
-    rows="2" 
-    onChange={e => setRegData({ ...regData, alergias: e.target.value })}
-  ></textarea>
-</div>
-          </div>
+                    <div>
+                        <label className="text-xs font-bold text-blue-800 uppercase">Tu Email de Contacto (Será tu Usuario) *</label>
+                        <input type="email" className="w-full border p-2 rounded bg-white font-bold text-blue-900" placeholder="ejemplo@correo.com" onChange={e => setRegData({ ...regData, emailContacto: e.target.value })} />
+                    </div>
+        
+                    <div>
+                        <label className="text-xs font-bold text-blue-800 uppercase">Teléfono Móvil (9 cifras) *</label>
+                        <input 
+                            type="tel" 
+                            className="w-full border p-2 rounded bg-white font-bold text-blue-600" 
+                            placeholder="600000000" 
+                            value={regData.telefono1 || ''} 
+                            onChange={e => setRegData(prev => ({ ...prev, telefono1: e.target.value }))} 
+                        />
+                    </div>
+                </div>
+            </div>
+        )
+        } {/* 🚩 RECUERDA: Esta es la llave que cierra el condicional y quita el error de la contraseña */}
 
           {/* 4. CONTRASEÑA (SIEMPRE AL FINAL) */}
           <div className="border-t pt-4">
