@@ -616,7 +616,7 @@ const LandingPage = ({ setView }) => {
 
 {/* Botón Instagram con Logo Vectorial Corregido */}
 <a 
-  href="https://www.instagram.com/cs_buenaventura/" 
+  href="https://www.instagram.com/cs_buenaventura?igsh=aml2ZXptbjRiYW53" 
   target="_blank" 
   rel="noopener noreferrer" 
   className="flex items-center justify-center gap-2 p-3 bg-slate-50 rounded-xl border border-slate-100 hover:bg-white transition shadow-sm group"
