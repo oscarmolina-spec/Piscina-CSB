@@ -486,10 +486,12 @@ const LandingPage = ({ setView }) => {
         <span className="text-2xl">🗺️</span>
         <span className="font-black text-[10px] uppercase tracking-widest">Mapa</span>
       </a>
-      <a href="#material" className="flex flex-col items-center justify-center gap-2 p-4 bg-white rounded-2xl shadow-sm border border-slate-100 hover:text-blue-600 transition-all">
-        <span className="text-2xl">🎒</span>
-        <span className="font-black text-[10px] uppercase tracking-widest">Equipamiento</span>
-      </a>
+      <a href="#material" className="flex flex-col items-center justify-center gap-2 p-4 bg-white rounded-2xl shadow-sm border border-slate-100 hover:text-blue-600 transition-all min-w-0">
+  <span className="text-2xl">🎒</span>
+  <span className="font-black text-[9px] uppercase tracking-wider leading-none text-center">
+    Equipamiento
+  </span>
+</a>
       <a href="#normativa" className="flex flex-col items-center justify-center gap-2 p-4 bg-white rounded-2xl shadow-sm border border-slate-100 hover:text-blue-600 transition-all">
         <span className="text-2xl">📅</span>
         <span className="font-black text-[10px] uppercase tracking-widest">Normas</span>
