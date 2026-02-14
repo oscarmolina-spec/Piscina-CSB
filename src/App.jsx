@@ -321,6 +321,7 @@ const enviarEmailConfirmacion = async (email, alumno, cita) => {
 // ==========================================
 const LandingPage = ({ setView }) => {
   const [tab, setTab] = useState('actividades');
+  const [filtroEtapa, setFiltroEtapa] = useState('todos');
 
   return (
     <div className="font-sans text-gray-800 bg-white min-h-screen flex flex-col">
@@ -380,55 +381,91 @@ const LandingPage = ({ setView }) => {
           {/* VISTA ACTIVIDADES (CON RATIO MÁXIMO Y MÍNIMO) */}
 {tab === 'actividades' && (
   <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 animate-fade-in">
-    {OFERTA_ACTIVIDADES.map((act) => (
-      <div key={act.id} className="bg-white rounded-xl shadow-md overflow-hidden border border-gray-100 flex flex-col hover:shadow-xl transition-shadow">
-        {/* Encabezado Azul */}
-        <div className="bg-blue-600 p-4 relative">
-          <h3 className="text-white font-bold text-lg pr-8 text-left">{act.nombre}</h3>
-          <div className="flex flex-wrap gap-2 mt-2">
-            <span className="bg-blue-800 text-white text-xs px-2 py-1 rounded shadow-sm font-mono">
-              📅 {act.diasResumen}
-            </span>
-            
-            {/* NUEVO: Badge de Alumnos Máximos */}
-            <span className="bg-white/20 text-white text-xs px-2 py-1 rounded shadow-sm font-bold border border-white/10">
-              👥 Máx. {act.alumnosMax} Alumnos
-            </span>
+     <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mb-6 text-center">
+    Navegación Rápida
+  </p>
+    {/* 🔍 FILTRO INTELIGENTE POR ETAPA */}
+<div className="flex flex-wrap justify-center gap-3 mb-10 animate-fade-in">
+  {[
+    { id: 'todos', label: '🌟 Todas', color: 'bg-slate-800' },
+    { id: 'infantil', label: '👶 Infantil', color: 'bg-pink-500' },
+    { id: 'primaria', label: '👦 Primaria', color: 'bg-blue-500' },
+    { id: 'secundaria', label: '🎓 ESO/Bach', color: 'bg-purple-600' },
+    { id: 'adultos', label: '👨‍👩‍👧 Adultos', color: 'bg-emerald-600' }
+  ].map((boton) => (
+    <button
+      key={boton.id}
+      onClick={() => setFiltroEtapa(boton.id)}
+      className={`px-5 py-2 rounded-full font-black text-xs uppercase tracking-widest transition-all duration-300 transform hover:scale-105 shadow-sm
+        ${filtroEtapa === boton.id 
+          ? `${boton.color} text-white shadow-lg ring-4 ring-offset-2 ring-opacity-50 ring-${boton.color.split('-')[1]}-400` 
+          : 'bg-white text-slate-400 hover:bg-slate-50 border border-slate-100'}`}
+    >
+      {boton.label}
+    </button>
+  ))}
+</div>
+    {/* 📦 GRID DE TARJETAS (Tu código exacto con filter) */}
+    <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+      {OFERTA_ACTIVIDADES
+        .filter(act => {
+          if (filtroEtapa === 'todos') return true;
+          if (filtroEtapa === 'infantil') return act.cursos.some(c => c.includes('INF'));
+          if (filtroEtapa === 'primaria') return act.cursos.some(c => c.includes('PRI'));
+          if (filtroEtapa === 'secundaria') return act.cursos.some(c => c.includes('ESO') || c.includes('BACH'));
+          if (filtroEtapa === 'adultos') return act.cursos.includes('ADULTO');
+          return true;
+        })
+        .map((act) => (
+          <div key={act.id} className="bg-white rounded-xl shadow-md overflow-hidden border border-gray-100 flex flex-col hover:shadow-xl transition-shadow">
+            {/* Encabezado Azul */}
+            <div className="bg-blue-600 p-4 relative">
+              <h3 className="text-white font-bold text-lg pr-8 text-left">{act.nombre}</h3>
+              <div className="flex flex-wrap gap-2 mt-2">
+                <span className="bg-blue-800 text-white text-xs px-2 py-1 rounded shadow-sm font-mono">
+                  📅 {act.diasResumen}
+                </span>
+                
+                {/* NUEVO: Badge de Alumnos Máximos */}
+                <span className="bg-white/20 text-white text-xs px-2 py-1 rounded shadow-sm font-bold border border-white/10">
+                  👥 Máx. {act.alumnosMax} Alumnos
+                </span>
 
-            {act.requierePrueba && (
-              <span className="bg-red-500 text-white text-[10px] md:text-xs px-2 py-1 rounded font-bold shadow-sm animate-pulse whitespace-nowrap">
-                ❗ Requiere Prueba de Nivel
-              </span>
-            )}
-          </div>
-        </div>
+                {act.requierePrueba && (
+                  <span className="bg-red-500 text-white text-[10px] md:text-xs px-2 py-1 rounded font-bold shadow-sm animate-pulse whitespace-nowrap">
+                    ❗ Requiere Prueba de Nivel
+                  </span>
+                )}
+              </div>
+            </div>
 
-        {/* Cuerpo de la tarjeta */}
-        <div className="p-5 flex-1 flex flex-col">
-          <p className="text-gray-600 text-sm mb-4 flex-1 whitespace-pre-line leading-relaxed text-left">
-            {act.descripcion}
-          </p>
-          
-          {/* Aviso amarillo */}
-          <div className="bg-yellow-50 border border-yellow-200 p-3 rounded text-xs text-yellow-800 mb-4 font-medium flex gap-2 text-left">
-            <span>⚠️</span>
-            <span>{act.aviso}</span>
-          </div>
+            {/* Cuerpo de la tarjeta */}
+            <div className="p-5 flex-1 flex flex-col">
+              <p className="text-gray-600 text-sm mb-4 flex-1 whitespace-pre-line leading-relaxed text-left">
+                {act.descripcion}
+              </p>
+              
+              {/* Aviso amarillo */}
+              <div className="bg-yellow-50 border border-yellow-200 p-3 rounded text-xs text-yellow-800 mb-4 font-medium flex gap-2 text-left">
+                <span>⚠️</span>
+                <span>{act.aviso}</span>
+              </div>
 
-          {/* Precio y Mínimo al final */}
-          <div className="border-t pt-3 mt-auto flex justify-between items-center">
-             <div className="text-left">
-                <p className="text-[10px] text-gray-400 font-bold uppercase">Mínimo para grupo:</p>
-                <p className="text-xs font-bold text-blue-800">{act.minAlumnos} alumnos</p>
-             </div>
-             <div className="flex items-center">
-                <span className="text-xs text-gray-400 mr-2">Precio:</span>
-                <p className="text-2xl font-black text-blue-600">{act.precioResumen}</p>
-             </div>
+              {/* Precio y Mínimo al final */}
+              <div className="border-t pt-3 mt-auto flex justify-between items-center">
+                 <div className="text-left">
+                    <p className="text-[10px] text-gray-400 font-bold uppercase">Mínimo para grupo:</p>
+                    <p className="text-xs font-bold text-blue-800">{act.minAlumnos} alumnos</p>
+                 </div>
+                 <div className="flex items-center">
+                    <span className="text-xs text-gray-400 mr-2">Precio:</span>
+                    <p className="text-2xl font-black text-blue-600">{act.precioResumen}</p>
+                 </div>
+              </div>
+            </div>
           </div>
-        </div>
-      </div>
-    ))}
+        ))}
+    </div>
   </div>
 )}
 
@@ -436,29 +473,49 @@ const LandingPage = ({ setView }) => {
 {tab === 'info' && (
             <div className="space-y-10 animate-fade-in">
               
-              {/* 🧭 ÍNDICE VISUAL DE SECCIONES */}
-              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 shadow-sm">
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4 text-center">
-                  Navegación Rápida
-                </p>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                  <a href="#mapa" className="flex items-center justify-center gap-2 p-3 bg-white rounded-xl shadow-sm border border-slate-100 hover:border-blue-400 hover:text-blue-600 transition-all font-bold text-xs">
-                    🗺️ Mapa
-                  </a>
-                  <a href="#material" className="flex items-center justify-center gap-2 p-3 bg-white rounded-xl shadow-sm border border-slate-100 hover:border-blue-400 hover:text-blue-600 transition-all font-bold text-xs">
-                    🎒 Material
-                  </a>
-                  <a href="#normativa" className="flex items-center justify-center gap-2 p-3 bg-white rounded-xl shadow-sm border border-slate-100 hover:border-blue-400 hover:text-blue-600 transition-all font-bold text-xs">
-                    📅 Normas
-                    </a>
-                  <a href="#faq" className="flex items-center justify-center gap-2 p-3 bg-white rounded-xl shadow-sm border border-slate-100 hover:border-blue-400 hover:text-blue-600 transition-all font-bold text-xs">
-                   🤔 Preguntas
-                  </a>
-                  <a href="#contacto" className="flex items-center justify-center gap-2 p-3 bg-white rounded-xl shadow-sm border border-slate-100 hover:border-blue-400 hover:text-blue-600 transition-all font-bold text-xs">
-                    📞 Contacto
-                  </a>
-                </div>
-              </div>
+{/* 🧭 ÍNDICE VISUAL DE SECCIONES (3 ARRIBA, 2 ABAJO) */}
+<div className="bg-slate-50 p-6 rounded-[32px] border border-slate-100 shadow-sm mb-10">
+  <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mb-6 text-center">
+    Navegación Rápida
+  </p>
+  
+  <div className="flex flex-col gap-4 max-w-2xl mx-auto">
+    {/* Fila superior: 3 botones */}
+    <div className="grid grid-cols-3 gap-4">
+      {[
+        { h: "#mapa", t: "Mapa", i: "🗺️" },
+        { h: "#material", t: "Equipamiento", i: "🎒" },
+        { h: "#normativa", t: "Normas", i: "📅" }
+      ].map((item, idx) => (
+        <a 
+          key={idx}
+          href={item.h} 
+          className="flex flex-col items-center justify-center gap-2 p-4 bg-white rounded-2xl shadow-sm border border-slate-100 hover:border-blue-400 hover:text-blue-600 hover:shadow-md hover:-translate-y-1 transition-all duration-300 group"
+        >
+          <span className="text-2xl group-hover:scale-110 transition-transform">{item.i}</span>
+          <span className="font-black text-[10px] uppercase tracking-widest">{item.t}</span>
+        </a>
+      ))}
+    </div>
+
+    {/* Fila inferior: 2 botones centrados */}
+    <div className="grid grid-cols-2 gap-4 max-w-[66%] mx-auto w-full">
+      {[
+        { h: "#faq", t: "Preguntas", i: "🤔" },
+        { h: "#contacto", t: "Contacto", i: "📞" }
+      ].map((item, idx) => (
+        <a 
+          key={idx}
+          href={item.h} 
+          className="flex flex-col items-center justify-center gap-2 p-4 bg-white rounded-2xl shadow-sm border border-slate-100 hover:border-blue-400 hover:text-blue-600 hover:shadow-md hover:-translate-y-1 transition-all duration-300 group"
+        >
+          <span className="text-2xl group-hover:scale-110 transition-transform">{item.i}</span>
+          <span className="font-black text-[10px] uppercase tracking-widest">{item.t}</span>
+        </a>
+      ))}
+    </div>
+  </div>
+</div>
 
                {/* MAPA */}
                <div id="mapa" className="bg-white p-6 rounded-xl shadow border border-gray-200 scroll-mt-20">
