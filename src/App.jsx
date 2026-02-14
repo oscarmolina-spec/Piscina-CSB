@@ -399,9 +399,30 @@ const LandingPage = ({ setView }) => {
             </div>
           )}
 
-          {/* VISTA INFO COMPLETA (TEXTOS LARGOS RECUPERADOS) */}
-          {tab === 'info' && (
+{/* VISTA INFO COMPLETA CON ÍNDICE DE ACCESO RÁPIDO */}
+{tab === 'info' && (
             <div className="space-y-10 animate-fade-in">
+              
+              {/* 🧭 ÍNDICE VISUAL DE SECCIONES */}
+              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 shadow-sm">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4 text-center">
+                  Navegación Rápida
+                </p>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <a href="#mapa" className="flex items-center justify-center gap-2 p-3 bg-white rounded-xl shadow-sm border border-slate-100 hover:border-blue-400 hover:text-blue-600 transition-all font-bold text-xs">
+                    🗺️ Mapa
+                  </a>
+                  <a href="#material" className="flex items-center justify-center gap-2 p-3 bg-white rounded-xl shadow-sm border border-slate-100 hover:border-blue-400 hover:text-blue-600 transition-all font-bold text-xs">
+                    🎒 Material
+                  </a>
+                  <a href="#normativa" className="flex items-center justify-center gap-2 p-3 bg-white rounded-xl shadow-sm border border-slate-100 hover:border-blue-400 hover:text-blue-600 transition-all font-bold text-xs">
+                    📅 Normas
+                  </a>
+                  <a href="#contacto" className="flex items-center justify-center gap-2 p-3 bg-white rounded-xl shadow-sm border border-slate-100 hover:border-blue-400 hover:text-blue-600 transition-all font-bold text-xs">
+                    📞 Contacto
+                  </a>
+                </div>
+              </div>
                {/* MAPA */}
                <div className="bg-white p-6 rounded-xl shadow border border-gray-200">
                   <h3 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">🗺️ Mapa de Accesos</h3>
@@ -411,17 +432,52 @@ const LandingPage = ({ setView }) => {
                   <p className="text-center text-xs text-gray-500 mt-2">Acceso por el portón azul al final del patio.</p>
                </div>
 
-              {/* MATERIAL NECESARIO */}
-              <div className="bg-white rounded-xl shadow-md border border-gray-200 overflow-hidden">
-                <div className="bg-blue-600 p-4 text-white font-bold text-lg flex items-center gap-2">🎒 Material Necesario</div>
-                <div className="p-6 grid grid-cols-2 md:grid-cols-5 gap-6 text-center">
-                  <div className="flex flex-col items-center"><span className="text-3xl mb-2">👙</span> <span className="font-bold text-gray-700">Bañador</span></div>
-                  <div className="flex flex-col items-center"><span className="text-3xl mb-2">🧼</span> <span className="font-bold text-gray-700">Toalla</span></div>
-                  <div className="flex flex-col items-center"><span className="text-3xl mb-2">🥽</span> <span className="font-bold text-gray-700">Gafas</span></div>
-                  <div className="flex flex-col items-center"><span className="text-3xl mb-2">🎩</span> <span className="font-bold text-gray-700">Gorro</span></div>
-                  <div className="flex flex-col items-center"><span className="text-3xl mb-2">🩴</span> <span className="font-bold text-gray-700">Chanclas</span></div>
-                </div>
-              </div>
+              {/* MATERIAL NECESARIO - REDISEÑO PROFESIONAL */}
+<div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden my-8">
+  {/* Cabecera con gradiente sutil */}
+  <div className="bg-gradient-to-r from-blue-700 to-blue-600 p-5 text-white">
+    <div className="flex items-center gap-3">
+      <span className="text-2xl">🎒</span>
+      <div>
+        <h3 className="font-black uppercase tracking-wider text-sm">Equipamiento</h3>
+        <p className="text-blue-100 text-[10px] font-medium opacity-90">REQUERIDO PARA CADA CLASE</p>
+      </div>
+    </div>
+  </div>
+
+  {/* Grid de Materiales */}
+  <div className="p-6 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
+    {[
+      { icon: "🩲", label: "Bañador", desc: "Deportivo" },
+      { icon: "🧣", label: "Toalla", desc: "O Albornoz" },
+      { icon: "🥽", label: "Gafas", desc: "Ajustadas" },
+      { icon: "🧢", label: "Gorro", desc: "Silicona/Lycra" },
+      { icon: "🩴", label: "Chanclas", desc: "Goma" },
+    ].map((item, idx) => (
+      <div 
+        key={idx} 
+        className="group p-4 rounded-2xl border border-gray-50 bg-gray-50/30 hover:bg-blue-50 hover:border-blue-100 transition-all duration-300 flex flex-col items-center shadow-sm hover:shadow-md"
+      >
+        <div className="w-14 h-14 bg-white rounded-full flex items-center justify-center text-3xl shadow-sm group-hover:scale-110 transition-transform duration-300 mb-3">
+          {item.icon}
+        </div>
+        <span className="font-black text-gray-800 text-[11px] uppercase tracking-wide">
+          {item.label}
+        </span>
+        <span className="text-[9px] text-gray-400 font-bold group-hover:text-blue-500 transition-colors uppercase mt-1">
+          {item.desc}
+        </span>
+      </div>
+    ))}
+  </div>
+
+  {/* Recordatorio de Higiene sutil */}
+  <div className="bg-gray-50 p-3 border-t border-gray-100 text-center">
+    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">
+      ✨ Recuerda duchar antes de entrar al agua
+    </p>
+  </div>
+</div>
 
               {/* RECOGIDA ALUMNOS (TEXTOS COMPLETOS) */}
               <div className="grid md:grid-cols-1 gap-6">
@@ -459,56 +515,139 @@ const LandingPage = ({ setView }) => {
               </div>
 
 {/* ======================================================== */}
-              {/* ⚠️ NORMATIVA DE BAJAS Y ALTAS (SE MANTIENE IGUAL)        */}
-              {/* ======================================================== */}
-              <div className="bg-amber-50 border-2 border-amber-200 rounded-xl p-8">
-                <h3 className="text-2xl font-bold text-amber-800 mb-6">⚠️ Normativa de Bajas y Altas</h3>
-                <div className="grid md:grid-cols-1 gap-6">
-                  <div>
-                    <h4 className="font-bold text-amber-900 text-lg mb-2">📅 Bajas</h4>
-                    <p className="text-amber-900 text-sm">
-                      La fecha límite para solicitar la baja es el <strong>día 25 de cada mes</strong>. Si se comunica después, se cobrará el mes siguiente completo sin excepciones.
-                    </p>
-                  </div>
-                  <div className="border-t border-amber-200 pt-6">
-                    <h4 className="font-bold text-amber-900 text-lg mb-2">🆕 Altas y Mensualidades</h4>
-                    <p className="text-amber-900 text-sm">
-                      Si el alumno se incorpora una vez iniciado el mes, se deberá abonar la <strong>mensualidad completa</strong>. No se realizan prorrateos por días sueltos.
-                    </p>
-                  </div>
-                </div>
-              </div>
+{/* ⚠️ GESTIÓN DE ALTAS Y BAJAS - DISEÑO PROFESIONAL       */}
+{/* ======================================================== */}
+<div className="bg-white rounded-2xl shadow-sm border border-amber-100 overflow-hidden my-10">
+  {/* Encabezado de Advertencia */}
+  <div className="bg-gradient-to-r from-amber-600 to-amber-500 p-5 text-white">
+    <div className="flex items-center gap-3">
+      <span className="text-2xl">📅</span>
+      <div>
+        <h3 className="font-black uppercase tracking-wider text-sm">Calendario Administrativo</h3>
+        <p className="text-amber-100 text-[10px] font-medium opacity-90">NORMAS DE INSCRIPCIÓN Y CANCELACIÓN</p>
+      </div>
+    </div>
+  </div>
 
-              {/* ======================================================== */}
-              {/* 📞 NUEVA SECCIÓN: CONTACTO Y UBICACIÓN (AÑADIDA)         */}
+  <div className="p-6 md:p-8 space-y-8">
+    {/* SECCIÓN BAJAS */}
+    <div className="relative pl-8 border-l-2 border-amber-200">
+      <div className="absolute -left-[9px] top-0 w-4 h-4 bg-amber-500 rounded-full border-4 border-white shadow-sm"></div>
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="max-w-xl">
+          <h4 className="font-black text-amber-900 text-lg uppercase tracking-tight flex items-center gap-2">
+            Solicitud de Bajas
+          </h4>
+          <p className="text-amber-800/80 text-sm mt-2 leading-relaxed font-medium">
+            La fecha límite para procesar cualquier baja es el <span className="bg-amber-200 text-amber-900 px-1.5 py-0.5 rounded font-black">Día 25</span> de cada mes.
+          </p>
+        </div>
+        <div className="bg-amber-100/50 px-4 py-3 rounded-xl border border-amber-200 flex flex-col items-center min-w-[140px]">
+          <span className="text-[10px] font-black text-amber-600 uppercase">Corte mensual</span>
+          <span className="text-2xl font-black text-amber-900 leading-none mt-1">Día 25</span>
+        </div>
+      </div>
+      <p className="mt-4 text-[11px] text-amber-700/60 font-bold uppercase tracking-wide bg-amber-50 p-3 rounded-lg border border-amber-100/50">
+        ⚠️ Comunicaciones posteriores al día 25 implican el cobro de la siguiente mensualidad completa.
+      </p>
+    </div>
+
+   {/* SECCIÓN ALTAS - MEJORADA (MÁS LEGIBLE) */}
+   <div className="relative pl-8 border-l-2 border-blue-500">
+      {/* Círculo indicador más grande */}
+      <div className="absolute -left-[11px] top-0 w-5 h-5 bg-blue-600 rounded-full border-4 border-white shadow-sm"></div>
+      
+      <h4 className="font-black text-slate-900 text-xl uppercase tracking-tight">
+        Altas y Mensualidades
+      </h4>
+      
+      <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Bloque 1 */}
+        <div className="p-5 bg-blue-50/50 rounded-2xl border border-blue-100">
+          <span className="text-xs font-black text-blue-600 uppercase tracking-widest">Política de Pago</span>
+          <p className="text-slate-800 text-base font-bold mt-2 leading-relaxed">
+            Las incorporaciones con el mes ya iniciado requieren el abono de la <span className="text-blue-700 underline decoration-2 underline-offset-4">mensualidad completa</span>.
+          </p>
+        </div>
+
+        {/* Bloque 2 */}
+        <div className="p-5 bg-slate-50 rounded-2xl border border-slate-100">
+          <span className="text-xs font-black text-slate-400 uppercase tracking-widest">Aviso de Prorrateos</span>
+          <p className="text-slate-800 text-base font-bold mt-2 leading-relaxed">
+            No se realizan descuentos ni devoluciones por días sueltos o falta de asistencia.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {/* Espaciador inferior limpio (Sustituye al bloque negro de Transparencia) */}
+  <div className="h-4 bg-gray-50/50"></div>
+</div>
+
+{/* ======================================================== */}
+              {/* 📞 SECCIÓN: CONTACTO Y UBICACIÓN (VERSIÓN MEJORADA)      */}
               {/* ======================================================== */}
               <div className="grid md:grid-cols-2 gap-6 pt-4">
                 
                 {/* TARJETA DE CONTACTO */}
-                <div className="bg-white border-l-4 border-blue-500 rounded-xl p-6 shadow-md hover:shadow-lg transition">
-                  <h3 className="text-xl font-bold text-blue-900 mb-4 flex items-center gap-2">📞 Contacto</h3>
+                <div className="bg-white border-l-4 border-blue-600 rounded-xl p-6 shadow-md hover:shadow-lg transition">
+                  <h3 className="text-xl font-black text-blue-900 mb-6 flex items-center gap-2 uppercase tracking-tighter">📞 Contacto y Redes</h3>
                   
-                  <div className="space-y-5">
+                  <div className="space-y-6">
                     {/* Teléfono */}
-                    <div className="flex items-center gap-3">
-                        <div className="bg-blue-100 p-2 rounded-full text-lg">☎️</div>
+                    <div className="flex items-center gap-4">
+                        <div className="bg-blue-100 w-12 h-12 flex items-center justify-center rounded-full text-xl shadow-sm">☎️</div>
                         <div>
-                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Secretaría</p>
-                            <a href="tel:915267161" className="text-xl font-bold text-blue-700 hover:text-blue-900 transition">
+                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Secretaría General</p>
+                            <a href="tel:915267161" className="text-2xl font-black text-blue-700 hover:text-blue-900 transition">
                                 915 26 71 61
                             </a>
                         </div>
                     </div>
 
+                    {/* NUEVOS ENLACES: WEB E INSTAGRAM CON LOGO REAL */}
+<div className="grid grid-cols-2 gap-3 pt-2">
+    {/* Botón Web Colegio */}
+    <a href="https://www.sanbuenaventura.org/" target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-2 p-3 bg-slate-50 rounded-xl border border-slate-100 hover:bg-blue-50 transition shadow-sm group">
+        <span className="text-lg group-hover:scale-110 transition-transform">🌐</span>
+        <span className="text-[10px] font-black text-gray-600 uppercase">Web Colegio</span>
+    </a>
+
+    {/* Botón Instagram con Logo Vectorial */}
+    <a href="https://www.instagram.com/cs_buenaventura?igsh=aml2ZXptbjRiYW53" target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-2 p-3 bg-slate-50 rounded-xl border border-slate-100 hover:bg-white transition shadow-sm group">
+        <svg 
+            viewBox="0 0 24 24" 
+            className="w-5 h-5 group-hover:scale-110 transition-transform"
+            style={{ filter: 'drop-shadow(0px 1px 1px rgba(0,0,0,0.1))' }}
+        >
+            <defs>
+                <radialGradient id="instagrad" r="150%" cx="30%" cy="107%">
+                    <stop stopColor="#fdf497" offset="0%" />
+                    <stop stopColor="#fdf497" offset="5%" />
+                    <stop stopColor="#fd5949" offset="45%" />
+                    <stop stopColor="#d6249f" offset="60%" />
+                    <stop stopColor="#285AEB" offset="90%" />
+                </radialGradient>
+            </defs>
+            <path 
+                fill="url(#instagrad)" 
+                d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z" 
+            />
+        </svg>
+        <span className="text-[10px] font-black text-gray-600 uppercase tracking-tight">Instagram</span>
+    </a>
+</div>
+
                     {/* Emails */}
-                    <div className="flex items-start gap-3 border-t border-gray-100 pt-4">
-                        <div className="bg-orange-100 p-2 rounded-full text-lg">📧</div>
-                        <div className="flex flex-col gap-1 w-full">
-                             <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Correos Electrónicos</p>
-                            <a href="mailto:extraescolarespiscina@sanbuenaventura.org" className="text-sm font-medium text-gray-600 hover:text-blue-600 transition break-all">
+                    <div className="flex items-start gap-3 border-t border-gray-100 pt-6">
+                        <div className="bg-orange-100 w-10 h-10 flex items-center justify-center rounded-full text-lg shrink-0">📧</div>
+                        <div className="flex flex-col gap-2 w-full">
+                             <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Correos Electrónicos</p>
+                            <a href="mailto:extraescolarespiscina@sanbuenaventura.org" className="text-[13px] font-bold text-gray-700 hover:text-blue-600 transition break-all leading-tight">
                                 • extraescolarespiscina@sanbuenaventura.org
                             </a>
-                            <a href="mailto:extraescolares@sanbuenaventura.org" className="text-sm font-medium text-gray-600 hover:text-blue-600 transition break-all">
+                            <a href="mailto:extraescolares@sanbuenaventura.org" className="text-[13px] font-bold text-gray-700 hover:text-blue-600 transition break-all leading-tight">
                                 • extraescolares@sanbuenaventura.org
                             </a>
                         </div>
@@ -517,15 +656,15 @@ const LandingPage = ({ setView }) => {
                 </div>
 
                 {/* TARJETA DE UBICACIÓN */}
-                <div className="bg-white border-l-4 border-green-500 rounded-xl p-6 shadow-md hover:shadow-lg transition flex flex-col justify-between">
+                <div className="bg-white border-l-4 border-green-600 rounded-xl p-6 shadow-md hover:shadow-lg transition flex flex-col justify-between">
                   <div>
-                    <h3 className="text-xl font-bold text-green-800 mb-4 flex items-center gap-2">📍 Ubicación</h3>
+                    <h3 className="text-xl font-black text-green-900 mb-6 flex items-center gap-2 uppercase tracking-tighter">📍 Ubicación</h3>
                     
-                    <div className="flex items-start gap-3 mb-6">
-                        <div className="bg-green-100 p-2 rounded-full text-lg">🏫</div>
+                    <div className="flex items-start gap-4 mb-6">
+                        <div className="bg-green-100 w-12 h-12 flex items-center justify-center rounded-xl text-2xl shadow-sm shrink-0">🏫</div>
                         <div>
-                            <p className="font-bold text-gray-800">Colegio San Buenaventura</p>
-                            <p className="text-sm text-gray-600 mt-1 leading-relaxed">
+                            <p className="font-black text-gray-900 uppercase text-sm tracking-tight">Colegio San Buenaventura</p>
+                            <p className="text-base font-medium text-gray-600 mt-1 leading-relaxed">
                                 C. de El Greco, 16,<br/>
                                 Latina, 28011 Madrid
                             </p>
@@ -534,12 +673,12 @@ const LandingPage = ({ setView }) => {
                   </div>
 
                   <a 
-                    href="https://www.google.com/maps/search/?api=1&query=Calle+de+El+Greco+16+Madrid" 
+                    href="https://www.google.com/maps/dir/?api=1&destination=Colegio+San+Buenaventura+Madrid" 
                     target="_blank" 
                     rel="noopener noreferrer"
-                    className="flex items-center justify-center gap-2 w-full bg-green-600 text-white font-bold py-3 rounded-lg hover:bg-green-700 transition shadow transform hover:-translate-y-1"
+                    className="flex items-center justify-center gap-3 w-full bg-slate-900 text-white font-black py-4 rounded-2xl hover:bg-green-700 transition shadow-xl transform active:scale-95 uppercase tracking-widest text-sm"
                   >
-                    🗺️ Cómo llegar (Google Maps)
+                    🗺️ Cómo llegar (Maps)
                   </a>
                 </div>
 
@@ -787,7 +926,7 @@ if (confirm(`✅ ¿Validar plaza definitiva para ${alumno.nombre}?\n\n📅 INICI
                       <p style="margin: 5px 0;"><strong>🏊‍♂️ Actividad:</strong> ${alumno.actividad}</p>
                       <p style="margin: 5px 0;"><strong>🗓️ Días:</strong> ${alumno.dias}</p>
                     </div>
-                    <p>Recuerda traer todo el equipo necesario (gorro, bañador, chanclas y toalla). ¡Te esperamos!</p>
+                    <p>Recuerda traer todo el equipo necesario (gorro, gafas, bañador, chanclas y toalla). ¡Te esperamos!</p>
                   </div>
                 `
               }
