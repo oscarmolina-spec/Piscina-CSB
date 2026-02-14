@@ -85,8 +85,10 @@ const OFERTA_ACTIVIDADES = [
     requierePrueba: false, 
     diasResumen: 'L-V', 
     precioResumen: '45€', 
+    alumnosMax: 8, // <--- Añadido
+    minAlumnos: 5, // <--- Añadido para que sea dinámico
     descripcion: 'Iniciación y familiarización con el medio acuático. El monitor está dentro del agua para mayor seguridad y confianza.\n\n⬇️ HORARIOS ⬇️\n• 1 día/sem (45€): Lunes a Viernes (16:00-17:00).', 
-    aviso: 'Mínimo 5 alumnos.',
+    aviso: 'Plazas limitadas por estricto orden de inscripción.', // He cambiado el aviso porque el "mínimo" ya saldrá abajo
     opciones: [
         { dias: 'Lunes', horario: '16:00-17:00', precio: '45€' },
         { dias: 'Martes', horario: '16:00-17:00', precio: '45€' },
@@ -102,8 +104,10 @@ const OFERTA_ACTIVIDADES = [
     requierePrueba: true, 
     diasResumen: 'L-V', 
     precioResumen: '45€ / 65€', 
+    alumnosMax: 12, // El máximo que me has indicado
+    minAlumnos: 6,  // El mínimo que tenías en el aviso
     descripcion: 'Desarrollo de estilos y técnica. Se divide en subgrupos por nivel. Ideal para perfeccionar la natación.\n\n⬇️ ELIGE TU OPCIÓN ⬇️\n⭐ PACK 2 DÍAS (65€): L/X o M/J.\n⭐ DÍA SUELTO (45€): L, M, X, J o V.', 
-    aviso: 'Mínimo 6 alumnos.',
+    aviso: 'Plazas limitadas por nivel y estricto orden de inscripción.', 
     opciones: [
         { dias: '[PACK 2 DÍAS] Lunes y Miércoles', horario: '16:15-17:15', precio: '65€' },
         { dias: '[PACK 2 DÍAS] Martes y Jueves', horario: '16:15-17:15', precio: '65€' },
@@ -115,14 +119,16 @@ const OFERTA_ACTIVIDADES = [
     ]
   },
   {
-    id: 'primaria_123_tarde', 
-    nombre: '🐟 Natación 1º-3º Prim (17:30-18:00)', 
-    cursos: ['1PRI', '2PRI', '3PRI'], 
-    requierePrueba: true, 
-    diasResumen: 'L-V', 
-    precioResumen: '37€ / 50€', 
-    descripcion: 'Sesiones breves, dinámicas y muy seguras para avanzar en autonomía acuática. Grupos reducidos.\n\n⬇️ ELIGE TU OPCIÓN ⬇️\n⭐ PACK 2 DÍAS (50€): L/X o M/J.\n⭐ DÍA SUELTO (37€): Cualquier día.', 
-    aviso: 'Mínimo 4 alumnos.',
+      id: 'primaria_123_tarde', 
+      nombre: '🐟 Natación 1º-3º Prim (17:30-18:00)', 
+      cursos: ['1PRI', '2PRI', '3PRI'], 
+      requierePrueba: true, 
+      diasResumen: 'L-V', 
+      precioResumen: '37€ / 50€', 
+      alumnosMax: 8, // Configurado según me has pedido
+      minAlumnos: 4, // El mínimo que tenías en el aviso
+      descripcion: 'Sesiones breves, dinámicas y muy seguras para avanzar en autonomía acuática. Grupos reducidos.\n\n⬇️ ELIGE TU OPCIÓN ⬇️\n⭐ PACK 2 DÍAS (50€): L/X o M/J.\n⭐ DÍA SUELTO (37€): Cualquier día.', 
+      aviso: 'Plazas limitadas por nivel y estricto orden de inscripción.', 
     opciones: [
         { dias: '[PACK 2 DÍAS] Lunes y Miércoles', horario: '17:30-18:00', precio: '50€' },
         { dias: '[PACK 2 DÍAS] Martes y Jueves', horario: '17:30-18:00', precio: '50€' },
@@ -140,8 +146,10 @@ const OFERTA_ACTIVIDADES = [
     requierePrueba: true, 
     diasResumen: 'L-V', 
     precioResumen: '37€ / 50€', 
+    alumnosMax: 8, // Configurado según me has pedido
+    minAlumnos: 4, // El mínimo que tenías en el aviso
     descripcion: 'Para quienes quieren seguir mejorando técnica y condición física. Ideal como complemento a otras actividades deportivas.\n\n⬇️ ELIGE TU OPCIÓN ⬇️\n⭐ PACK 2 DÍAS (50€).\n⭐ DÍA SUELTO (37€).', 
-    aviso: 'Mínimo 4 alumnos.',
+    aviso: 'Plazas limitadas por nivel y estricto orden de inscripción.',
     opciones: [
         { dias: '[PACK 2 DÍAS] Lunes (30m) y Miércoles (30m)', horario: '17:30-18:00', precio: '50€' },
         { dias: '[PACK 2 DÍAS] Martes (30m) y Jueves (30m)', horario: '17:30-18:00', precio: '50€' },
@@ -159,8 +167,10 @@ const OFERTA_ACTIVIDADES = [
     requierePrueba: false, 
     diasResumen: 'L-V', 
     precioResumen: '45€ / 60€', 
+    alumnosMax: 12, // Configurado según me has pedido
+    minAlumnos: 7,  // El mínimo que tenías en el aviso
     descripcion: 'Iniciación al waterpolo. Deporte de equipo, balón y natación. Fomenta el compañerismo.\n\n⬇️ ELIGE TU OPCIÓN ⬇️\n⭐ PACK 2 DÍAS (60€): L/X o M/J.\n⭐ DÍA SUELTO (45€): L, M, X, J o V.', 
-    aviso: 'Mínimo 7 alumnos.',
+    aviso: 'Deporte de equipo con plazas limitadas por grupo.',
     opciones: [
         { dias: '[PACK 2 DÍAS] Lunes y Miércoles', horario: '17:30-18:30', precio: '60€' },
         { dias: '[PACK 2 DÍAS] Martes y Jueves', horario: '17:30-18:30', precio: '60€' },
@@ -178,8 +188,10 @@ const OFERTA_ACTIVIDADES = [
     requierePrueba: false, 
     diasResumen: 'M y J', 
     precioResumen: '50€', 
+    alumnosMax: 12, // Configurado según me has pedido
+    minAlumnos: 5,  // El mínimo que tenías en el aviso
     descripcion: 'Actividad de bajo impacto ideal para mantenerse en forma sin sobrecargar articulaciones. Mejora la movilidad y el tono muscular.\n\n⬇️ HORARIOS ⬇️\n• PACK 2 DÍAS (50€): Martes y Jueves (17:30-18:15).', 
-    aviso: 'Mínimo 5 alumnos.',
+    aviso: 'Actividad recomendada para todos los niveles físicos.',
     opciones: [
         { dias: '[PACK] Martes y Jueves', horario: '17:30-18:15', precio: '50€' }
     ]
@@ -191,8 +203,10 @@ const OFERTA_ACTIVIDADES = [
     requierePrueba: false, 
     diasResumen: 'L-V', 
     precioResumen: '37€ / 50€', 
+    alumnosMax: 10, // Configurado según me has pedido
+    minAlumnos: 4,  // El mínimo que tenías en el aviso
     descripcion: 'Clases para adultos que quieran mantenerse activos o mejorar su estilo.\n\n⬇️ ELIGE TU OPCIÓN ⬇️\n⭐ PACK 2 DÍAS (50€): L/X o M/J.\n⭐ DÍA SUELTO (37€): Cualquier día.\n(Horarios variables según el día).', 
-    aviso: 'Mínimo 4 alumnos.',
+    aviso: 'Plazas asignadas por estricto orden de inscripción.',
     opciones: [
         { dias: '[PACK 2 DÍAS] Lunes y Miércoles', horario: '18:00-18:30', precio: '50€' },
         { dias: '[PACK 2 DÍAS] Martes y Jueves', horario: '18:30-19:00', precio: '50€' },
@@ -210,8 +224,10 @@ const OFERTA_ACTIVIDADES = [
     requierePrueba: true, 
     diasResumen: 'L/X o V', 
     precioResumen: '37€ / 50€', 
+    alumnosMax: 10, // Configurado según me has pedido
+    minAlumnos: 4,  // El mínimo que tenías en el aviso
     descripcion: 'Sesiones específicas para adolescentes, con técnica, mantenimiento o preparación física.\n\n⬇️ ELIGE TU OPCIÓN ⬇️\n⭐ PACK 2 DÍAS (50€): Tardes.\n⭐ DÍA SUELTO (37€): Tarde o Mediodía.', 
-    aviso: 'Mínimo 4 alumnos.',
+    aviso: 'Plazas limitadas por nivel y estricto orden de inscripción.',
     opciones: [
         { dias: '[PACK 2 DÍAS] Lunes y Miércoles', horario: '18:30-19:00', precio: '50€' },
         { dias: '[1 DÍA] Lunes', horario: '18:30-19:00', precio: '37€' },
@@ -226,8 +242,10 @@ const OFERTA_ACTIVIDADES = [
     requierePrueba: false, 
     diasResumen: 'L-V', 
     precioResumen: '25€ / 35€', 
+    alumnosMax: 10, // Configurado según me has pedido
+    minAlumnos: 2,  // El mínimo que tenías en el aviso
     descripcion: 'Uso de calle para entrenamiento personal sin monitor. Ideal para quienes buscan nadar a su propio ritmo.\n\n⬇️ ELIGE TU OPCIÓN ⬇️\n⭐ PACK 2 DÍAS (35€): L/X o M/J.\n⭐ DÍA SUELTO (25€): Cualquier día de la semana.', 
-    aviso: 'Mínimo 2 alumnos.',
+    aviso: 'Uso exclusivo de calle para nado continuo sin monitor.',
     opciones: [
         { dias: '[PACK 2 DÍAS] Lunes y Miércoles', horario: '18:30-19:00', precio: '35€' },
         { dias: '[PACK 2 DÍAS] Martes y Jueves', horario: '18:30-19:00', precio: '35€' },
@@ -316,7 +334,7 @@ const LandingPage = ({ setView }) => {
         <img src={IMG_ESCUDO_BLANCO} className="h-28 mx-auto mb-6 drop-shadow-2xl" alt="Escudo" />
         <h1 className="text-4xl md:text-6xl font-black mb-4 text-white leading-tight
   [text-shadow:_2px_2px_0_#2563eb,_-2px_-2px_0_#2563eb,_2px_-2px_0_#2563eb,_-2px_2px_0_#2563eb,_0_4px_6px_rgba(0,0,0,0.3)]">
-  Escuela de Natación <br /> 
+  Natación colegio <br /> 
   <span className="tracking-tight">San Buenaventura</span>
 </h1>
           
@@ -358,45 +376,60 @@ const LandingPage = ({ setView }) => {
       <div className="flex-1 bg-gray-50 py-10">
         <div className="max-w-6xl mx-auto px-6">
           
-          {/* VISTA ACTIVIDADES (CON TARJETAS AZULES COMPLETAS) */}
-          {tab === 'actividades' && (
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 animate-fade-in">
-              {OFERTA_ACTIVIDADES.map((act) => (
-                <div key={act.id} className="bg-white rounded-xl shadow-md overflow-hidden border border-gray-100 flex flex-col hover:shadow-xl transition-shadow">
-                  {/* Encabezado Azul */}
-                  <div className="bg-blue-600 p-4 relative">
-                    <h3 className="text-white font-bold text-lg pr-8">{act.nombre}</h3>
-                    <div className="flex flex-wrap gap-2 mt-2">
-                      <span className="bg-blue-800 text-white text-xs px-2 py-1 rounded shadow-sm font-mono">
-                        📅 {act.diasResumen}
-                      </span>
-                      {act.requierePrueba && (
-                        <span className="bg-red-500 text-white text-[10px] md:text-xs px-2 py-1 rounded font-bold shadow-sm animate-pulse whitespace-nowrap">
-                          ❗ Requiere Prueba de nivel
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  {/* Cuerpo de la tarjeta */}
-                  <div className="p-5 flex-1 flex flex-col">
-                    <p className="text-gray-600 text-sm mb-4 flex-1 whitespace-pre-line leading-relaxed">
-                      {act.descripcion}
-                    </p>
-                    {/* Aviso amarillo */}
-                    <div className="bg-yellow-50 border border-yellow-200 p-3 rounded text-xs text-yellow-800 mb-4 font-medium flex gap-2">
-                      <span>⚠️</span>
-                      <span>{act.aviso}</span>
-                    </div>
-                    {/* Precio al final */}
-                    <div className="border-t pt-3 mt-auto flex justify-end items-center">
-                       <span className="text-xs text-gray-400 mr-2">Precio:</span>
-                       <p className="text-2xl font-black text-blue-600">{act.precioResumen}</p>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+          {/* VISTA ACTIVIDADES (CON RATIO MÁXIMO Y MÍNIMO) */}
+{tab === 'actividades' && (
+  <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 animate-fade-in">
+    {OFERTA_ACTIVIDADES.map((act) => (
+      <div key={act.id} className="bg-white rounded-xl shadow-md overflow-hidden border border-gray-100 flex flex-col hover:shadow-xl transition-shadow">
+        {/* Encabezado Azul */}
+        <div className="bg-blue-600 p-4 relative">
+          <h3 className="text-white font-bold text-lg pr-8 text-left">{act.nombre}</h3>
+          <div className="flex flex-wrap gap-2 mt-2">
+            <span className="bg-blue-800 text-white text-xs px-2 py-1 rounded shadow-sm font-mono">
+              📅 {act.diasResumen}
+            </span>
+            
+            {/* NUEVO: Badge de Alumnos Máximos */}
+            <span className="bg-white/20 text-white text-xs px-2 py-1 rounded shadow-sm font-bold border border-white/10">
+              👥 Máx. {act.alumnosMax} Alumnos
+            </span>
+
+            {act.requierePrueba && (
+              <span className="bg-red-500 text-white text-[10px] md:text-xs px-2 py-1 rounded font-bold shadow-sm animate-pulse whitespace-nowrap">
+                ❗ Requiere Prueba de Nivel
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Cuerpo de la tarjeta */}
+        <div className="p-5 flex-1 flex flex-col">
+          <p className="text-gray-600 text-sm mb-4 flex-1 whitespace-pre-line leading-relaxed text-left">
+            {act.descripcion}
+          </p>
+          
+          {/* Aviso amarillo */}
+          <div className="bg-yellow-50 border border-yellow-200 p-3 rounded text-xs text-yellow-800 mb-4 font-medium flex gap-2 text-left">
+            <span>⚠️</span>
+            <span>{act.aviso}</span>
+          </div>
+
+          {/* Precio y Mínimo al final */}
+          <div className="border-t pt-3 mt-auto flex justify-between items-center">
+             <div className="text-left">
+                <p className="text-[10px] text-gray-400 font-bold uppercase">Mínimo para grupo:</p>
+                <p className="text-xs font-bold text-blue-800">{act.minAlumnos} alumnos</p>
+             </div>
+             <div className="flex items-center">
+                <span className="text-xs text-gray-400 mr-2">Precio:</span>
+                <p className="text-2xl font-black text-blue-600">{act.precioResumen}</p>
+             </div>
+          </div>
+        </div>
+      </div>
+    ))}
+  </div>
+)}
 
 {/* VISTA INFO COMPLETA CON ÍNDICE DE ACCESO RÁPIDO */}
 {tab === 'info' && (
@@ -868,7 +901,7 @@ const LandingPage = ({ setView }) => {
 
       {/* FOOTER */}
       <footer className="bg-gray-900 text-white py-8 text-center text-sm text-gray-400 mt-10 rounded-xl">
-        <p>© 2026 Colegio San Buenaventura - Escuela de Natación</p>
+        <p>© 2026 Colegio San Buenaventura - Natación</p>
       </footer>
 
     </div>
