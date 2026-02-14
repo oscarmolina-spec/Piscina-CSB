@@ -984,9 +984,34 @@ const LandingPage = ({ setView }) => {
         </div>
       </div>
 
-      {/* FOOTER */}
-      <footer className="bg-gray-900 text-white py-8 text-center text-sm text-gray-400 mt-10 rounded-xl">
-        <p>© 2026 Colegio San Buenaventura - Natación</p>
+{/* 🏛️ FOOTER ESTILO ORIGINAL (FULL WIDTH) */}
+<footer className="bg-gray-900 text-white py-8 mt-12 w-full border-t border-white/5">
+        <div className="max-w-6xl mx-auto px-6 flex flex-col md:flex-row items-center justify-between gap-6">
+          
+          {/* Escudo a la izquierda con efecto blanco sutil */}
+          <div className="flex items-center gap-4">
+            <img 
+              src="https://i.ibb.co/KjCWNLrc/CSB.png" 
+              className="h-12 w-auto brightness-0 invert opacity-90 transition-opacity hover:opacity-100" 
+              alt="CSB" 
+            />
+            <div className="h-8 w-[1px] bg-gray-700 hidden md:block"></div>
+          </div>
+
+          {/* Texto Central con mayor tracking */}
+          <div className="text-center md:text-left flex-1 md:ml-6">
+            <p className="text-sm font-medium text-gray-400 tracking-[0.1em]">
+              © 2026 <span className="text-white font-black uppercase ml-1">Colegio San Buenaventura</span> — Natación
+            </p>
+          </div>
+
+          {/* Lado derecho: Un detalle extra de calidad */}
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.8)]"></span>
+            <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Madrid</span>
+          </div>
+          
+        </div>
       </footer>
 
     </div>
