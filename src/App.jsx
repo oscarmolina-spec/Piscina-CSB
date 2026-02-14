@@ -416,6 +416,9 @@ const LandingPage = ({ setView }) => {
                   </a>
                   <a href="#normativa" className="flex items-center justify-center gap-2 p-3 bg-white rounded-xl shadow-sm border border-slate-100 hover:border-blue-400 hover:text-blue-600 transition-all font-bold text-xs">
                     📅 Normas
+                    </a>
+                  <a href="#faq" className="flex items-center justify-center gap-2 p-3 bg-white rounded-xl shadow-sm border border-slate-100 hover:border-blue-400 hover:text-blue-600 transition-all font-bold text-xs">
+                   🤔 Preguntas
                   </a>
                   <a href="#contacto" className="flex items-center justify-center gap-2 p-3 bg-white rounded-xl shadow-sm border border-slate-100 hover:border-blue-400 hover:text-blue-600 transition-all font-bold text-xs">
                     📞 Contacto
@@ -584,6 +587,128 @@ const LandingPage = ({ setView }) => {
   {/* Espaciador inferior limpio (Sustituye al bloque negro de Transparencia) */}
   <div className="h-4 bg-gray-50/50"></div>
 </div>
+ {/* ❓ SECCIÓN AMPLIADA: PREGUNTAS FRECUENTES (FAQ)         */}
+{/* ======================================================== */}
+<div id="faq" className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden my-10 scroll-mt-24">
+  <div className="bg-gradient-to-r from-slate-800 to-slate-700 p-5 text-white text-left">
+    <div className="flex items-center gap-3">
+      <span className="text-2xl">🤔</span>
+      <div>
+        <h3 className="font-black uppercase tracking-wider text-sm">Preguntas Frecuentes</h3>
+        <p className="text-slate-300 text-[10px] font-medium opacity-90">TODO LO QUE NECESITAS SABER SOBRE NOSOTROS</p>
+      </div>
+    </div>
+  </div>
+
+  <div className="p-6 space-y-6">
+    
+    {/* CATEGORÍA: ACCESOS Y RECOGIDAS */}
+    <div>
+      <h4 className="text-[10px] font-black text-blue-600 uppercase tracking-[0.2em] mb-3 text-left">📍 Accesos y Recogidas</h4>
+      <div className="space-y-3">
+        {[
+          {
+            q: "¿Dónde se recoge a los alumnos al finalizar la clase?",
+            a: "La recogida se realiza en la puerta de las instalaciones de la piscina. Podrá acceder por el Portón Azul hasta las 18:30. A partir de esa hora, el acceso se realizará exclusivamente por la puerta del parking."
+          },
+          {
+            q: "¿Por dónde entran y salen los alumnos a partir de las 18:30?",
+            a: "El acceso principal al colegio se cierra. La entrada y salida se realiza exclusivamente por la puerta que está al final deñ parking del colegio. Pueden encontrar un mapa en la parte superior de esta sección."
+          },
+          {
+            q: "¿Cómo es la recogida de los alumnos de Infantil?",
+            a: "Para los alumnos de Infantil que terminan su clase, los monitores los recogen directamente en su clase. de vestuarios o punto de entrega acordado."
+          },
+          {
+            q: "¿Pueden entrar los padres a los vestuarios?",
+            a: "Siguiendo la normativa de autonomía y seguridad, el acceso de adultos a vestuarios está limitado. Los alumnos de Primaria deben cambiarse solos para fomentar su independencia. En Infantil, se permite asistencia mínima si es estrictamente necesario."
+          }
+        ].map((item, idx) => (
+          <details key={idx} className="group border border-slate-100 rounded-xl">
+            <summary className="flex justify-between items-center p-4 bg-slate-50/50 cursor-pointer list-none hover:bg-white">
+              <span className="text-sm font-bold text-slate-700 text-left leading-tight">{item.q}</span>
+              <span className="text-blue-500 transition-transform group-open:rotate-180 ml-2">▼</span>
+            </summary>
+            <div className="p-4 bg-white text-sm text-slate-600 leading-relaxed border-t border-slate-50 text-left">
+              {item.a}
+            </div>
+          </details>
+        ))}
+      </div>
+    </div>
+
+    {/* CATEGORÍA: INSCRIPCIONES Y PAGOS */}
+    <div>
+      <h4 className="text-[10px] font-black text-orange-600 uppercase tracking-[0.2em] mb-3 text-left">💳 Inscripciones y Pagos</h4>
+      <div className="space-y-3">
+        {[
+          {
+            q: "¿Cómo me doy de baja en la actividad?",
+            a: "Las bajas deben comunicarse antes del día 25 del mes anterior al que se desea hacer efectiva la baja. La baja se tramita desde el áera privada de cada usuario."
+          },
+          {
+            q: "¿Qué pasa si devuelvo un recibo mensual?",
+            a: "La devolución de un recibo genera gastos bancarios que deberán ser abonados por la familia. Si el impago persiste, el alumno perderá la plaza automáticamente."
+          },
+          {
+            q: "¿Hay que pagar matrícula cada año?",
+            a: "No, no hay matrícula."
+          }
+        ].map((item, idx) => (
+          <details key={idx} className="group border border-slate-100 rounded-xl">
+            <summary className="flex justify-between items-center p-4 bg-slate-50/50 cursor-pointer list-none hover:bg-white">
+              <span className="text-sm font-bold text-slate-700 text-left leading-tight">{item.q}</span>
+              <span className="text-blue-500 transition-transform group-open:rotate-180 ml-2">▼</span>
+            </summary>
+            <div className="p-4 bg-white text-sm text-slate-600 leading-relaxed border-t border-slate-50 text-left">
+              {item.a}
+            </div>
+          </details>
+        ))}
+      </div>
+    </div>
+
+    {/* CATEGORÍA: DINÁMICA DE CLASES */}
+    <div>
+      <h4 className="text-[10px] font-black text-green-600 uppercase tracking-[0.2em] mb-3 text-left">🏊‍♂️ Sobre las Clases</h4>
+      <div className="space-y-3">
+        {[
+          {
+            q: "¿Cuál es el número máximo de alumnos por grupo y qué horarios hay disponibles?",
+            a: "Puedes consultar el detalle actualizado de horarios, días de clase y ratios de alumnos por monitor en la sección de 'Actividades' al principio de esta página. Allí encontrarás la información específica para cada nivel y edad."
+          },
+          {
+            q: "¿A qué temperatura está el agua de la piscina?",
+            a: "Nuestras instalaciones son de uso deportivo, por lo que el agua se mantiene en el rango óptimo recomendado para la actividad física: entre 27°C y 28°C. Esta temperatura garantiza el confort térmico del alumno durante el ejercicio, evitando tanto el sobrecalentamiento como la fatiga prematura."
+          },
+          {
+            q: "¿Necesito hacer prueba de nivel si soy nuevo?",
+            a: "Sí, todos los alumnos nuevos (de actividades que lo requieran) deben realizar una prueba de nivel previa para asignarles el grupo que mejor se adapte a su habilidad actual y asegurar su aprendizaje."
+          },
+          {
+            q: "¿Qué material debe traer el alumno siempre?",
+            a: "Bañador, gorro de silicona o lycra, gafas de natación, chanclas y toalla o albornoz. Todo marcado con el nombre del alumno a ser posible."
+          },
+          {
+            q: "¿Puedo cambiar de horario a mitad de curso?",
+            a: "Solo si hay plazas disponibles en el nivel correspondiente del nuevo horario solicitado. Deberá consultarse con el coordinador de la actividad."
+          }
+        ].map((item, idx) => (
+          <details key={idx} className="group border border-slate-100 rounded-xl">
+            <summary className="flex justify-between items-center p-4 bg-slate-50/50 cursor-pointer list-none hover:bg-white">
+              <span className="text-sm font-bold text-slate-700 text-left leading-tight">{item.q}</span>
+              <span className="text-blue-500 transition-transform group-open:rotate-180 ml-2">▼</span>
+            </summary>
+            <div className="p-4 bg-white text-sm text-slate-600 leading-relaxed border-t border-slate-50 text-left">
+              {item.a}
+            </div>
+          </details>
+        ))}
+      </div>
+    </div>
+
+  </div>
+</div>
 
 {/* ======================================================== */}
               {/* 📞 SECCIÓN: CONTACTO Y UBICACIÓN (VERSIÓN MEJORADA)      */}
@@ -605,6 +730,7 @@ const LandingPage = ({ setView }) => {
                             </a>
                         </div>
                     </div>
+                   
 
                     {/* NUEVOS ENLACES: WEB E INSTAGRAM (REORDENADOS Y FUNCIONALES) */}
 <div className="grid grid-cols-2 gap-3 pt-2">
@@ -674,6 +800,8 @@ const LandingPage = ({ setView }) => {
                     </div>
                   </div>
                 </div>
+                {/* ======================================================== */}
+
 
                 {/* TARJETA DE UBICACIÓN */}
                 <div className="bg-white border-l-4 border-green-600 rounded-xl p-6 shadow-md hover:shadow-lg transition flex flex-col justify-between">
