@@ -44,14 +44,13 @@ const IMG_ESCUDO = IMG_ESCUDO_COLOR;
 const IMG_PRINCIPAL = 'https://i.ibb.co/HLt30jVK/20241210-084606.jpg';
 const MAPA_IMAGEN_URL = "https://i.ibb.co/35RNNBLz/Info-piscina.png";
 
-// HE CREADO ESTA LISTA NUEVA CON LAS VIEJAS + LAS NUEVAS
 const GALERIA = [
-  'https://i.ibb.co/hJxW45tC/20241210-084225.jpg',
-  'https://i.ibb.co/mrJHGscm/Screenshot-2025-05-09-15-04-17.png',
-  'https://i.ibb.co/Psstvn93/20241210-084647.jpg',
-  'https://i.ibb.co/gFT6zfHC/20241210-083956.jpg',
-  'https://i.ibb.co/pvDBMSbv/20241210-083700.jpg',
-  'https://i.ibb.co/9B0Fb23/20241210-083619.jpg'
+  { url: 'https://i.ibb.co/mrJHGscm/Screenshot-2025-05-09-15-04-17.png', nombre: "Vaso/Cristalera", zona: "Vista General" },
+  { url: 'https://i.ibb.co/Psstvn93/20241210-084647.jpg', nombre: "Zona de Aguas", zona: "Vaso" },
+  { url: 'https://i.ibb.co/gFT6zfHC/20241210-083956.jpg', nombre: "Duchas interiores", zona: "Instalaciones" },
+  { url: 'https://i.ibb.co/pvDBMSbv/20241210-083700.jpg', nombre: "Vestuario Femenino", zona: "Equipado" },
+  { url: 'https://i.ibb.co/hJxW45tC/20241210-084225.jpg', nombre: "Vestuario Masculino", zona: "Equipado" },
+  { url: 'https://i.ibb.co/9B0Fb23/20241210-083619.jpg', nombre: "Entrada/Hall", zona: "Entrada Principal" }
 ];
 // ==========================================
 // 📚 LISTADO MAESTRO DE CURSOS ESCOLARES
@@ -423,8 +422,9 @@ const LandingPage = ({ setView }) => {
                   </a>
                 </div>
               </div>
+
                {/* MAPA */}
-               <div className="bg-white p-6 rounded-xl shadow border border-gray-200">
+               <div id="mapa" className="bg-white p-6 rounded-xl shadow border border-gray-200 scroll-mt-20">
                   <h3 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">🗺️ Mapa de Accesos</h3>
                   <div className="w-full bg-gray-100 rounded-lg overflow-hidden border relative flex justify-center p-4">
                       <img src={MAPA_IMAGEN_URL} className="max-h-[500px] object-contain rounded shadow-sm" alt="Mapa" />
@@ -433,7 +433,7 @@ const LandingPage = ({ setView }) => {
                </div>
 
               {/* MATERIAL NECESARIO - REDISEÑO PROFESIONAL */}
-<div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden my-8">
+<div id="material" className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden my-8 scroll-mt-20">
   {/* Cabecera con gradiente sutil */}
   <div className="bg-gradient-to-r from-blue-700 to-blue-600 p-5 text-white">
     <div className="flex items-center gap-3">
@@ -517,7 +517,7 @@ const LandingPage = ({ setView }) => {
 {/* ======================================================== */}
 {/* ⚠️ GESTIÓN DE ALTAS Y BAJAS - DISEÑO PROFESIONAL       */}
 {/* ======================================================== */}
-<div className="bg-white rounded-2xl shadow-sm border border-amber-100 overflow-hidden my-10">
+<div id="normativa" className="bg-white rounded-2xl shadow-sm border border-amber-100 overflow-hidden my-10 scroll-mt-20">
   {/* Encabezado de Advertencia */}
   <div className="bg-gradient-to-r from-amber-600 to-amber-500 p-5 text-white">
     <div className="flex items-center gap-3">
@@ -588,7 +588,7 @@ const LandingPage = ({ setView }) => {
 {/* ======================================================== */}
               {/* 📞 SECCIÓN: CONTACTO Y UBICACIÓN (VERSIÓN MEJORADA)      */}
               {/* ======================================================== */}
-              <div className="grid md:grid-cols-2 gap-6 pt-4">
+              <div id="contacto" className="grid md:grid-cols-2 gap-6 pt-4 scroll-mt-20">
                 
                 {/* TARJETA DE CONTACTO */}
                 <div className="bg-white border-l-4 border-blue-600 rounded-xl p-6 shadow-md hover:shadow-lg transition">
@@ -687,19 +687,33 @@ const LandingPage = ({ setView }) => {
             </div>
           )}
 
-{/* VISTA INSTALACIONES */}
+{/* VISTA INSTALACIONES CON NOMBRES DINÁMICOS */}
 {tab === 'instalaciones' && (
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 animate-fade-in">
-              {GALERIA.map((foto, index) => (
-                <img 
-                  key={index} 
-                  src={foto} 
-                  className="w-full h-64 object-cover rounded-xl shadow hover:scale-105 transition duration-300" 
-                  alt={`Instalación ${index + 1}`} 
-                />
-              ))}
-            </div>
-          )}
+  <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8 animate-fade-in">
+    {GALERIA.map((foto, index) => (
+      <div key={index} className="group flex flex-col">
+        {/* Contenedor Imagen */}
+        <div className="overflow-hidden rounded-2xl shadow-sm border border-gray-100 bg-gray-50">
+          <img 
+            src={foto.url} 
+            className="w-full h-64 object-cover group-hover:scale-110 transition duration-500" 
+            alt={foto.nombre} 
+          />
+        </div>
+        
+        {/* Textos debajo */}
+        <div className="mt-4 px-1">
+          <h4 className="font-black text-slate-800 uppercase text-[12px] tracking-widest text-left">
+            {foto.nombre}
+          </h4>
+          <p className="text-[10px] text-blue-600 font-bold uppercase mt-1 text-left tracking-tight">
+            {foto.zona}
+          </p>
+        </div>
+      </div>
+    ))}
+  </div>
+)}
 
         </div>
       </div>
