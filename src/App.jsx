@@ -474,45 +474,38 @@ const LandingPage = ({ setView }) => {
             <div className="space-y-10 animate-fade-in">
               
 {/* 🧭 ÍNDICE VISUAL DE SECCIONES (3 ARRIBA, 2 ABAJO) */}
-<div className="bg-slate-50 p-6 rounded-[32px] border border-slate-100 shadow-sm mb-10">
+<div className="bg-slate-50 p-6 rounded-[32px] border border-slate-100 shadow-sm mb-10 max-w-4xl mx-auto">
   <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mb-6 text-center">
     Navegación Rápida
   </p>
   
-  <div className="flex flex-col gap-4 max-w-2xl mx-auto">
-    {/* Fila superior: 3 botones */}
+  <div className="flex flex-col gap-4">
+    {/* Fila superior */}
     <div className="grid grid-cols-3 gap-4">
-      {[
-        { h: "#mapa", t: "Mapa", i: "🗺️" },
-        { h: "#material", t: "Equipamiento", i: "🎒" },
-        { h: "#normativa", t: "Normas", i: "📅" }
-      ].map((item, idx) => (
-        <a 
-          key={idx}
-          href={item.h} 
-          className="flex flex-col items-center justify-center gap-2 p-4 bg-white rounded-2xl shadow-sm border border-slate-100 hover:border-blue-400 hover:text-blue-600 hover:shadow-md hover:-translate-y-1 transition-all duration-300 group"
-        >
-          <span className="text-2xl group-hover:scale-110 transition-transform">{item.i}</span>
-          <span className="font-black text-[10px] uppercase tracking-widest">{item.t}</span>
-        </a>
-      ))}
+      <a href="#mapa" className="flex flex-col items-center justify-center gap-2 p-4 bg-white rounded-2xl shadow-sm border border-slate-100 hover:text-blue-600 transition-all">
+        <span className="text-2xl">🗺️</span>
+        <span className="font-black text-[10px] uppercase tracking-widest">Mapa</span>
+      </a>
+      <a href="#material" className="flex flex-col items-center justify-center gap-2 p-4 bg-white rounded-2xl shadow-sm border border-slate-100 hover:text-blue-600 transition-all">
+        <span className="text-2xl">🎒</span>
+        <span className="font-black text-[10px] uppercase tracking-widest">Material</span>
+      </a>
+      <a href="#normativa" className="flex flex-col items-center justify-center gap-2 p-4 bg-white rounded-2xl shadow-sm border border-slate-100 hover:text-blue-600 transition-all">
+        <span className="text-2xl">📅</span>
+        <span className="font-black text-[10px] uppercase tracking-widest">Normas</span>
+      </a>
     </div>
 
-    {/* Fila inferior: 2 botones centrados */}
-    <div className="grid grid-cols-2 gap-4 max-w-[66%] mx-auto w-full">
-      {[
-        { h: "#faq", t: "Preguntas", i: "🤔" },
-        { h: "#contacto", t: "Contacto", i: "📞" }
-      ].map((item, idx) => (
-        <a 
-          key={idx}
-          href={item.h} 
-          className="flex flex-col items-center justify-center gap-2 p-4 bg-white rounded-2xl shadow-sm border border-slate-100 hover:border-blue-400 hover:text-blue-600 hover:shadow-md hover:-translate-y-1 transition-all duration-300 group"
-        >
-          <span className="text-2xl group-hover:scale-110 transition-transform">{item.i}</span>
-          <span className="font-black text-[10px] uppercase tracking-widest">{item.t}</span>
-        </a>
-      ))}
+    {/* Fila inferior */}
+    <div className="flex justify-center gap-4">
+      <a href="#faq" className="flex flex-col items-center justify-center gap-2 p-4 bg-white rounded-2xl shadow-sm border border-slate-100 hover:text-blue-600 transition-all w-full max-w-[31%]">
+        <span className="text-2xl">🤔</span>
+        <span className="font-black text-[10px] uppercase tracking-widest">Preguntas</span>
+      </a>
+      <a href="#contacto" className="flex flex-col items-center justify-center gap-2 p-4 bg-white rounded-2xl shadow-sm border border-slate-100 hover:text-blue-600 transition-all w-full max-w-[31%]">
+        <span className="text-2xl">📞</span>
+        <span className="font-black text-[10px] uppercase tracking-widest">Contacto</span>
+      </a>
     </div>
   </div>
 </div>
