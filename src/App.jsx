@@ -917,89 +917,97 @@ const LandingPage = ({ setView }) => {
             </div>
           )}
 
-{/* VISTA INSTALACIONES CON NOMBRES DINÁMICOS */}
+{/* VISTA INSTALACIONES (ESTRUCTURA CORREGIDA) */}
 {tab === 'instalaciones' && (
-  <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8 animate-fade-in">
-{/* 📊 SECCIÓN DE ESTADO TÉCNICO (CORREGIDA PARA PC) */}
-<div className="flex flex-col w-full mb-10">
-  
-  {/* 1. EL GRID DE LAS 4 TARJETAS */}
-  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-    {(() => {
-      const now = new Date();
-      const seed = now.getDate() + now.getHours();
-      const getFluctuation = (base, range, seedValue) => {
-        const hash = Math.sin(seedValue) * 10000;
-        const random = hash - Math.floor(hash);
-        return (base + random * range).toFixed(1);
-      };
+  <div className="flex flex-col animate-fade-in w-full space-y-12">
+    
+    {/* 1. PANEL DE ESTADO TÉCNICO (Ocupa todo el ancho) */}
+    <div className="flex flex-col w-full">
+      {/* Grid de 4 tarjetas técnicas */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {(() => {
+          const now = new Date();
+          const seed = now.getDate() + now.getHours();
+          const getFluctuation = (base, range, seedValue) => {
+            const hash = Math.sin(seedValue) * 10000;
+            const random = hash - Math.floor(hash);
+            return (base + random * range).toFixed(1);
+          };
 
-      const stats = [
-        { label: 'Temperatura Agua', val: getFluctuation(27.4, 0.6, seed) + '°C', status: 'ÓPTIMO', icon: '🌡️', color: 'text-blue-600', bg: 'bg-blue-50/50' },
-        { label: 'Nivel de pH', val: getFluctuation(7.1, 0.3, seed + 1), status: 'EQUILIBRADO', icon: '🧪', color: 'text-emerald-600', bg: 'bg-emerald-50/50' },
-        { label: 'Calidad Aire', val: '98%', status: 'EXCELENTE', icon: '💨', color: 'text-cyan-600', bg: 'bg-cyan-50/50' },
-        { label: 'Estado Vaso', val: 'FILTRANDO', status: 'CONTINUO', icon: '🔄', color: 'text-indigo-500', bg: 'bg-indigo-50/50' }
-      ];
+          const stats = [
+            { label: 'Temperatura Agua', val: getFluctuation(27.4, 0.6, seed) + '°C', status: 'ÓPTIMO', icon: '🌡️', color: 'text-blue-600', bg: 'bg-blue-50/50' },
+            { label: 'Nivel de pH', val: getFluctuation(7.1, 0.3, seed + 1), status: 'EQUILIBRADO', icon: '🧪', color: 'text-emerald-600', bg: 'bg-emerald-50/50' },
+            { label: 'Calidad Aire', val: '98%', status: 'EXCELENTE', icon: '💨', color: 'text-cyan-600', bg: 'bg-cyan-50/50' },
+            { label: 'Estado Vaso', val: 'FILTRANDO', status: 'CONTINUO', icon: '🔄', color: 'text-indigo-500', bg: 'bg-indigo-50/50' }
+          ];
 
-      return stats.map((item, idx) => (
-        <div key={idx} className="relative overflow-hidden bg-white p-6 rounded-3xl border border-slate-100 shadow-sm flex flex-col items-center text-center transition-transform hover:scale-[1.02]">
-          <div className={`absolute -top-4 -right-4 w-16 h-16 ${item.bg} rounded-full blur-2xl opacity-50`}></div>
-          <span className="text-3xl mb-3 relative z-10">{item.icon}</span>
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2 relative z-10">{item.label}</p>
-          <p className={`text-2xl font-black ${item.color} leading-none mb-2 relative z-10`}>{item.val}</p>
-          <div className="flex items-center gap-2 bg-slate-50 px-3 py-1 rounded-full relative z-10">
-            <span className="w-1.5 h-1.5 rounded-full animate-pulse bg-emerald-500"></span>
-            <span className="text-[8px] font-black text-slate-500 uppercase tracking-tighter">{item.status}</span>
+          return stats.map((item, idx) => (
+            <div key={idx} className="relative overflow-hidden bg-white p-6 rounded-3xl border border-slate-100 shadow-sm flex flex-col items-center text-center transition-transform hover:scale-[1.02]">
+              <div className={`absolute -top-4 -right-4 w-16 h-16 ${item.bg} rounded-full blur-2xl opacity-50`}></div>
+              <span className="text-3xl mb-3 relative z-10">{item.icon}</span>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2 relative z-10">{item.label}</p>
+              <p className={`text-2xl font-black ${item.color} leading-none mb-2 relative z-10`}>{item.val}</p>
+              <div className="flex items-center gap-2 bg-slate-50 px-3 py-1 rounded-full relative z-10">
+                <span className="w-1.5 h-1.5 rounded-full animate-pulse bg-emerald-500"></span>
+                <span className="text-[8px] font-black text-slate-500 uppercase tracking-tighter">{item.status}</span>
+              </div>
+            </div>
+          ));
+        })()}
+      </div>
+
+      {/* Bloque de sincronización */}
+      <div className="flex justify-end items-center gap-4 mt-6 px-4 py-3 bg-blue-50/30 rounded-2xl border border-blue-100/50 max-w-fit ml-auto">
+        <div className="flex flex-col items-end text-right">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-[10px] font-black text-blue-700 uppercase tracking-[0.2em]">Monitorización en Tiempo Real</span>
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
+            </span>
           </div>
-        </div>
-      ));
-    })()}
-  </div>
-
-  {/* 2. EL BLOQUE DE TEXTO (Ahora sí, debajo del grid) */}
-  <div className="flex justify-end items-center gap-4 mt-6 px-4 py-3 bg-blue-50/30 rounded-2xl border border-blue-100/50 max-w-fit ml-auto">
-    <div className="flex flex-col items-end text-right">
-      <div className="flex items-center gap-2 mb-1">
-        <span className="text-[10px] font-black text-blue-700 uppercase tracking-[0.2em]">
-          Monitorización en Tiempo Real
-        </span>
-        <span className="relative flex h-2 w-2">
-          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-          <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
-        </span>
-      </div>
-      <p className="text-xs text-slate-500 font-bold uppercase tracking-tight">
-        Sincronizado con centralita: <span className="text-blue-600 font-black">{new Date().getHours()}:00h</span>
-      </p>
-      <p className="text-[10px] text-slate-400 font-medium italic">
-        * Los parámetros técnicos se actualizan automáticamente cada 60 minutos.
-      </p>
-    </div>
-    <div className="h-10 w-[3px] bg-gradient-to-b from-blue-400 to-blue-600 rounded-full shadow-sm"></div>
-  </div>
-</div>
-    {GALERIA.map((foto, index) => (
-      <div key={index} className="group flex flex-col">
-        {/* Contenedor Imagen */}
-        <div className="overflow-hidden rounded-2xl shadow-sm border border-gray-100 bg-gray-50">
-          <img 
-            src={foto.url} 
-            className="w-full h-64 object-cover group-hover:scale-110 transition duration-500" 
-            alt={foto.nombre} 
-          />
-        </div>
-        
-        {/* Textos debajo */}
-        <div className="mt-4 px-1">
-          <h4 className="font-black text-slate-800 uppercase text-[12px] tracking-widest text-left">
-            {foto.nombre}
-          </h4>
-          <p className="text-[10px] text-blue-600 font-bold uppercase mt-1 text-left tracking-tight">
-            {foto.zona}
+          <p className="text-xs text-slate-500 font-bold uppercase tracking-tight">
+            Sincronizado con centralita: <span className="text-blue-600 font-black">{new Date().getHours()}:00h</span>
           </p>
+          <p className="text-[10px] text-slate-400 font-medium italic">* Parámetros actualizados automáticamente cada 60 minutos.</p>
         </div>
+        <div className="h-10 w-[3px] bg-gradient-to-b from-blue-400 to-blue-600 rounded-full shadow-sm"></div>
       </div>
-    ))}
+    </div>
+
+    {/* 2. GALERÍA DE FOTOS (Independiente del panel de arriba) */}
+    <div className="w-full">
+      <div className="flex items-center gap-3 mb-8">
+        <div className="h-px bg-slate-100 flex-1"></div>
+        <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.4em]">Explora la instalación</p>
+        <div className="h-px bg-slate-100 flex-1"></div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+        {GALERIA.map((foto, index) => (
+          <div key={index} className="group flex flex-col">
+            {/* Contenedor Imagen */}
+            <div className="overflow-hidden rounded-[24px] shadow-sm border border-gray-100 bg-gray-50 aspect-[4/3]">
+              <img 
+                src={foto.url} 
+                className="w-full h-full object-cover group-hover:scale-110 transition duration-500" 
+                alt={foto.nombre} 
+              />
+            </div>
+            
+            {/* Textos debajo */}
+            <div className="mt-4 px-1">
+              <h4 className="font-black text-slate-800 uppercase text-[12px] tracking-widest text-left">
+                {foto.nombre}
+              </h4>
+              <p className="text-[10px] text-blue-600 font-bold uppercase mt-1 text-left tracking-tight">
+                {foto.zona}
+              </p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
   </div>
 )}
 
