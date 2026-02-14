@@ -378,35 +378,39 @@ const LandingPage = ({ setView }) => {
         <div className="max-w-6xl mx-auto px-6">
 
           
-          {/* VISTA ACTIVIDADES (CON RATIO MÁXIMO Y MÍNIMO) */}
+         {/* VISTA ACTIVIDADES (CORREGIDA) */}
 {tab === 'actividades' && (
-  <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 animate-fade-in">
-     <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mb-6 text-center">
-    Navegación Rápida
-  </p>
-    {/* 🔍 FILTRO INTELIGENTE POR ETAPA */}
-<div className="flex flex-wrap justify-center gap-3 mb-10 animate-fade-in">
-  {[
-    { id: 'todos', label: '🌟 Todas', color: 'bg-slate-800' },
-    { id: 'infantil', label: '👶 Infantil', color: 'bg-pink-500' },
-    { id: 'primaria', label: '👦 Primaria', color: 'bg-blue-500' },
-    { id: 'secundaria', label: '🎓 ESO/Bach', color: 'bg-purple-600' },
-    { id: 'adultos', label: '👨‍👩‍👧 Adultos', color: 'bg-emerald-600' }
-  ].map((boton) => (
-    <button
-      key={boton.id}
-      onClick={() => setFiltroEtapa(boton.id)}
-      className={`px-5 py-2 rounded-full font-black text-xs uppercase tracking-widest transition-all duration-300 transform hover:scale-105 shadow-sm
-        ${filtroEtapa === boton.id 
-          ? `${boton.color} text-white shadow-lg ring-4 ring-offset-2 ring-opacity-50 ring-${boton.color.split('-')[1]}-400` 
-          : 'bg-white text-slate-400 hover:bg-slate-50 border border-slate-100'}`}
-    >
-      {boton.label}
-    </button>
-  ))}
-</div>
-    {/* 📦 GRID DE TARJETAS (Tu código exacto con filter) */}
-    <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+  <div className="flex flex-col animate-fade-in w-full">
+    
+    {/* 1. TÍTULO (Fuera del grid) */}
+    <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mb-6 text-center">
+      Navegación Rápida
+    </p>
+
+    {/* 2. FILTRO (Fuera del grid) */}
+    <div className="flex flex-wrap justify-center gap-3 mb-10">
+      {[
+        { id: 'todos', label: '🌟 Todas', color: 'bg-slate-800' },
+        { id: 'infantil', label: '👶 Infantil', color: 'bg-pink-500' },
+        { id: 'primaria', label: '👦 Primaria', color: 'bg-blue-500' },
+        { id: 'secundaria', label: '🎓 ESO/Bach', color: 'bg-purple-600' },
+        { id: 'adultos', label: '👨‍👩‍👧 Adultos', color: 'bg-emerald-600' }
+      ].map((boton) => (
+        <button
+          key={boton.id}
+          onClick={() => setFiltroEtapa(boton.id)}
+          className={`px-5 py-2 rounded-full font-black text-xs uppercase tracking-widest transition-all duration-300 transform hover:scale-105 shadow-sm
+            ${filtroEtapa === boton.id 
+              ? `${boton.color} text-white shadow-lg ring-4 ring-offset-2 ring-opacity-50` 
+              : 'bg-white text-slate-400 hover:bg-slate-50 border border-slate-100'}`}
+        >
+          {boton.label}
+        </button>
+      ))}
+    </div>
+
+    {/* 3. GRID DE TARJETAS (Solo las tarjetas aquí) */}
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
       {OFERTA_ACTIVIDADES
         .filter(act => {
           if (filtroEtapa === 'todos') return true;
@@ -425,12 +429,9 @@ const LandingPage = ({ setView }) => {
                 <span className="bg-blue-800 text-white text-xs px-2 py-1 rounded shadow-sm font-mono">
                   📅 {act.diasResumen}
                 </span>
-                
-                {/* NUEVO: Badge de Alumnos Máximos */}
                 <span className="bg-white/20 text-white text-xs px-2 py-1 rounded shadow-sm font-bold border border-white/10">
                   👥 Máx. {act.alumnosMax} Alumnos
                 </span>
-
                 {act.requierePrueba && (
                   <span className="bg-red-500 text-white text-[10px] md:text-xs px-2 py-1 rounded font-bold shadow-sm animate-pulse whitespace-nowrap">
                     ❗ Requiere Prueba de Nivel
@@ -439,19 +440,14 @@ const LandingPage = ({ setView }) => {
               </div>
             </div>
 
-            {/* Cuerpo de la tarjeta */}
             <div className="p-5 flex-1 flex flex-col">
               <p className="text-gray-600 text-sm mb-4 flex-1 whitespace-pre-line leading-relaxed text-left">
                 {act.descripcion}
               </p>
-              
-              {/* Aviso amarillo */}
               <div className="bg-yellow-50 border border-yellow-200 p-3 rounded text-xs text-yellow-800 mb-4 font-medium flex gap-2 text-left">
                 <span>⚠️</span>
                 <span>{act.aviso}</span>
               </div>
-
-              {/* Precio y Mínimo al final */}
               <div className="border-t pt-3 mt-auto flex justify-between items-center">
                  <div className="text-left">
                     <p className="text-[10px] text-gray-400 font-bold uppercase">Mínimo para grupo:</p>
