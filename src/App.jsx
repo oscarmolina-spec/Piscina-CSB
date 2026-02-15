@@ -974,7 +974,7 @@ const LandingPage = ({ setView }) => {
           <p className="text-xs text-slate-500 font-bold uppercase tracking-tight">
             Sincronizado con centralita: <span className="text-blue-600 font-black">{new Date().getHours()}:00h</span>
           </p>
-          <p className="text-[10px] text-slate-400 font-medium italic">
+          <p className="text-[8px] text-slate-400 font-medium italic">
             * Parámetros actualizados automáticamente cada 60 minutos.
           </p>
         </div>
