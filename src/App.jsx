@@ -956,25 +956,30 @@ const LandingPage = ({ setView }) => {
         })()}
       </div>
 
-      {/* Bloque de sincronización */}
-      <div className="flex justify-end items-center gap-4 mt-6 px-4 py-3 bg-blue-50/30 rounded-2xl border border-blue-100/50 max-w-fit ml-auto">
-        <div className="flex flex-col items-end text-right">
+{/* Bloque de sincronización (AHORA A LA IZQUIERDA Y SIN ERRORES) */}
+<div className="flex justify-start items-center gap-4 mt-6 px-4 py-3 bg-blue-50/30 rounded-2xl border border-blue-100/50 max-w-fit mr-auto">
+        {/* Barra lateral azul a la izquierda */}
+        <div className="h-10 w-[3px] bg-gradient-to-b from-blue-400 to-blue-600 rounded-full shadow-sm"></div>
+        
+        <div className="flex flex-col items-start text-left">
           <div className="flex items-center gap-2 mb-1">
-            <span className="text-[10px] font-black text-blue-700 uppercase tracking-[0.2em]">Monitorización en Tiempo Real</span>
             <span className="relative flex h-2 w-2">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
               <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
             </span>
+            <span className="text-[10px] font-black text-blue-700 uppercase tracking-[0.2em]">
+              Monitorización en Tiempo Real
+            </span>
           </div>
           <p className="text-xs text-slate-500 font-bold uppercase tracking-tight">
             Sincronizado con centralita: <span className="text-blue-600 font-black">{new Date().getHours()}:00h</span>
-            <p className="text-[10px] text-slate-400 font-medium italic mt-1 leading-tight">
-        * Parámetros actualizados automáticamente <br className="block md:hidden" /> cada 60 minutos.
-      </p>
-    </div>
-        <div className="h-10 w-[3px] bg-gradient-to-b from-blue-400 to-blue-600 rounded-full shadow-sm"></div>
+          </p>
+          <p className="text-[10px] text-slate-400 font-medium italic">
+            * Parámetros actualizados automáticamente cada 60 minutos.
+          </p>
+        </div>
       </div>
-    </div>
+    </div> {/* <--- ESTE ES EL DIV QUE CIERRA EL CONTENEDOR DE LA PESTAÑA */}
 
     {/* 2. GALERÍA DE FOTOS (Independiente del panel de arriba) */}
     <div className="w-full">
