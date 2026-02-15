@@ -968,9 +968,10 @@ const LandingPage = ({ setView }) => {
           </div>
           <p className="text-xs text-slate-500 font-bold uppercase tracking-tight">
             Sincronizado con centralita: <span className="text-blue-600 font-black">{new Date().getHours()}:00h</span>
-          </p>
-          <p className="text-[10px] text-slate-400 font-medium italic">* Parámetros actualizados automáticamente cada 60 minutos.</p>
-        </div>
+            <p className="text-[10px] text-slate-400 font-medium italic mt-1 leading-tight">
+        * Parámetros actualizados automáticamente <br className="block md:hidden" /> cada 60 minutos.
+      </p>
+    </div>
         <div className="h-10 w-[3px] bg-gradient-to-b from-blue-400 to-blue-600 rounded-full shadow-sm"></div>
       </div>
     </div>
