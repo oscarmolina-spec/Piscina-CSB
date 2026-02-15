@@ -85,7 +85,7 @@ const OFERTA_ACTIVIDADES = [
     requierePrueba: false, 
     diasResumen: 'L-V', 
     precioResumen: '45€', 
-    alumnosMax: 8, // <--- Añadido
+    alumnosMax: 16, // <--- Añadido
     minAlumnos: 5, // <--- Añadido para que sea dinámico
     descripcion: 'Iniciación y familiarización con el medio acuático. El monitor está dentro del agua para mayor seguridad y confianza.\n\n⬇️ HORARIOS ⬇️\n• 1 día/sem (45€): Lunes a Viernes (16:00-17:00).', 
     aviso: 'Plazas limitadas por estricto orden de inscripción.', // He cambiado el aviso porque el "mínimo" ya saldrá abajo
@@ -275,7 +275,7 @@ const getNextMondays = () => {
   return r;
 };
 
-// Formato de fecha para ID (YYYY-MM-DD)
+// Formato de fecha para ID (DD-MM-YYYY)
 const getDateId = (d) => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
@@ -421,41 +421,49 @@ const LandingPage = ({ setView }) => {
           return true;
         })
         .map((act) => (
-          <div key={act.id} className="bg-white rounded-xl shadow-md overflow-hidden border border-gray-100 flex flex-col hover:shadow-xl transition-shadow">
-            {/* Encabezado Azul */}
-            <div className="bg-blue-600 p-4 relative">
-              <h3 className="text-white font-bold text-lg pr-8 text-left">{act.nombre}</h3>
+          /* TARJETA CON EFECTO CRISTAL */
+          <div key={act.id} className="bg-white/70 backdrop-blur-md rounded-2xl shadow-lg overflow-hidden border border-white/40 flex flex-col hover:shadow-2xl hover:bg-white/90 transition-all duration-500 group">
+            
+            {/* Encabezado Azul con degradado cristalino */}
+            <div className="bg-gradient-to-br from-blue-600/90 to-blue-700/90 p-4 relative">
+              <h3 className="text-white font-black text-lg pr-8 text-left uppercase tracking-tight">{act.nombre}</h3>
               <div className="flex flex-wrap gap-2 mt-2">
-                <span className="bg-blue-800 text-white text-xs px-2 py-1 rounded shadow-sm font-mono">
+                <span className="bg-blue-900/30 backdrop-blur-sm text-white text-[10px] px-2 py-1 rounded border border-white/10 font-mono">
                   📅 {act.diasResumen}
                 </span>
-                <span className="bg-white/20 text-white text-xs px-2 py-1 rounded shadow-sm font-bold border border-white/10">
+                <span className="bg-white/20 text-white text-[10px] px-2 py-1 rounded font-bold border border-white/10">
                   👥 Máx. {act.alumnosMax} Alumnos
                 </span>
                 {act.requierePrueba && (
-                  <span className="bg-red-500 text-white text-[10px] md:text-xs px-2 py-1 rounded font-bold shadow-sm animate-pulse whitespace-nowrap">
+                  <span className="bg-red-500 text-white text-[10px] px-2 py-1 rounded font-bold shadow-sm animate-pulse whitespace-nowrap">
                     ❗ Requiere Prueba de Nivel
                   </span>
                 )}
               </div>
             </div>
-
+      
             <div className="p-5 flex-1 flex flex-col">
-              <p className="text-gray-600 text-sm mb-4 flex-1 whitespace-pre-line leading-relaxed text-left">
+              <p className="text-slate-600 text-sm mb-4 flex-1 whitespace-pre-line leading-relaxed text-left font-medium">
                 {act.descripcion}
               </p>
-              <div className="bg-yellow-50 border border-yellow-200 p-3 rounded text-xs text-yellow-800 mb-4 font-medium flex gap-2 text-left">
+              
+              {/* Aviso en cristal amarillo */}
+              <div className="bg-amber-400/10 border border-amber-200/50 p-3 rounded-xl text-xs text-amber-900 mb-4 font-semibold flex gap-2 text-left backdrop-blur-sm">
                 <span>⚠️</span>
                 <span>{act.aviso}</span>
               </div>
-              <div className="border-t pt-3 mt-auto flex justify-between items-center">
+      
+              {/* Footer con precios destacados */}
+              <div className="border-t border-slate-100 pt-3 mt-auto flex justify-between items-center">
                  <div className="text-left">
-                    <p className="text-[10px] text-gray-400 font-bold uppercase">Mínimo para grupo:</p>
-                    <p className="text-xs font-bold text-blue-800">{act.minAlumnos} alumnos</p>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter">Mínimo para grupo:</p>
+                    <p className="text-xs font-black text-blue-800">{act.minAlumnos} alumnos</p>
                  </div>
-                 <div className="flex items-center">
-                    <span className="text-xs text-gray-400 mr-2">Precio:</span>
-                    <p className="text-2xl font-black text-blue-600">{act.precioResumen}</p>
+                 <div className="flex flex-col items-end">
+                    <span className="text-[10px] text-slate-400 font-bold uppercase">Precio</span>
+                    <p className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-blue-400">
+                      {act.precioResumen}
+                    </p>
                  </div>
               </div>
             </div>
@@ -559,7 +567,7 @@ const LandingPage = ({ setView }) => {
   {/* Recordatorio de Higiene sutil */}
   <div className="bg-gray-50 p-3 border-t border-gray-100 text-center">
     <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">
-      ✨ Recuerda duchar antes de entrar al agua
+      ✨ Recuerda ducharte antes de entrar al agua
     </p>
   </div>
 </div>
@@ -699,7 +707,7 @@ const LandingPage = ({ setView }) => {
           },
           {
             q: "¿Cómo es la recogida de los alumnos de Infantil?",
-            a: "Para los alumnos de Infantil que terminan su clase, los monitores los recogen directamente en su clase. de vestuarios o punto de entrega acordado."
+            a: "Para los alumnos de Infantil que terminan su clase, los monitores los recogen directamente en su clase."
           },
           {
             q: "¿Pueden entrar los padres a los vestuarios?",
@@ -2587,49 +2595,65 @@ const PantallaInscripcion = ({ alumno, close, onRequirePrueba, user, refresh }) 
     };
   })();
 
-// 3. Función que calcula si hay hueco o lista de espera
-const obtenerEstadoPlaza = (actividadId, diaSeleccionado, cursoAlumno) => {
-  const limites = {
-    chapoteo: 16,
-    primaria_1615: 12,
-    primaria_123_tarde: 8,
-    primaria_456_tarde: 8,
-    waterpolo: 12,
-    adultos: 10,
-    aquagym: 12,
-    eso_bach: 10, // 👈 Ya está incluido, perfecto
-    nado_libre: 10
-  };
-  
-  const max = limites[actividadId] || 10;
-  
-  const ocupados = todosLosAlumnos.filter(a => {
-    const coincideId = a.actividadId === actividadId;
-    const coincideEstado = a.estado === 'inscrito';
-    
-    // 🚩 CAMBIO CLAVE: Comprobamos si el "día seleccionado" está dentro 
-    // del texto de "días" del alumno. Así detectamos los Packs.
-    // Usamos opcional chaining ?. y toLowerCase para evitar errores.
-    const coincideDia = a.dias?.toLowerCase().includes(diaSeleccionado.toLowerCase());
 
-    if (actividadId === 'primaria_1615') {
-      const esPeque = ['1PRI', '2PRI', '3PRI'].includes(cursoAlumno);
-      const cursosFiltro = esPeque ? ['1PRI', '2PRI', '3PRI'] : ['4PRI', '5PRI', '6PRI'];
-      return coincideId && coincideDia && coincideEstado && cursosFiltro.includes(a.curso);
-    }
-    
-    return coincideId && coincideDia && coincideEstado;
-  }).length;
 
-  return { 
-    lleno: ocupados >= max, 
-    esCritico: ocupados >= max * 0.8 && ocupados < max,
-    cupoActual: ocupados, // Útil por si quieres mostrar "Quedan X plazas"
-    maximo: max
+  const obtenerEstadoPlaza = (actividadId, textoDiasSeleccionado, cursoAlumno) => {
+    // 1. Buscamos la actividad en tu catálogo oficial
+    const actividadDoc = OFERTA_ACTIVIDADES.find(a => a.id === actividadId);
+    const max = actividadDoc?.alumnosMax || 10;
+  
+    // 2. Extraemos los días individuales del texto seleccionado
+    // (Transforma "[PACK] Lunes y Miércoles" en ["lunes", "miercoles"])
+    const diasAComprobar = [];
+    const textoLimpiado = textoDiasSeleccionado.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    
+    if (textoLimpiado.includes('lunes')) diasAComprobar.push('lunes');
+    if (textoLimpiado.includes('martes')) diasAComprobar.push('martes');
+    if (textoLimpiado.includes('miercoles')) diasAComprobar.push('miercoles');
+    if (textoLimpiado.includes('jueves')) diasAComprobar.push('jueves');
+    if (textoLimpiado.includes('viernes')) diasAComprobar.push('viernes');
+  
+    // 3. Calculamos la ocupación máxima entre los días elegidos
+    // Si un Pack es Lunes/Miércoles, miramos cuál de los dos días está más lleno
+    let ocupacionMaxEnDias = 0;
+  
+    diasAComprobar.forEach(dia => {
+      const inscritosEseDia = todosLosAlumnos.filter(a => {
+        const coincideAct = a.actividadId === actividadId;
+        const estaInscrito = a.estado === 'inscrito';
+        const diasAlumno = a.dias?.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "") || '';
+        
+        const ocupaEsteDia = diasAlumno.includes(dia);
+  
+        // Filtro especial Primaria 16:15 (Subgrupos por curso)
+        if (actividadId === 'primaria_1615') {
+          const esPeque = ['1PRI', '2PRI', '3PRI'].includes(cursoAlumno);
+          const cursosFiltro = esPeque ? ['1PRI', '2PRI', '3PRI'] : ['4PRI', '5PRI', '6PRI'];
+          return coincideAct && estaInscrito && ocupaEsteDia && cursosFiltro.includes(a.curso);
+        }
+  
+        return coincideAct && estaInscrito && ocupaEsteDia;
+      }).length;
+  
+      if (inscritosEseDia > ocupacionMaxEnDias) {
+        ocupacionMaxEnDias = inscritosEseDia;
+      }
+    });
+  
+    // 4. Resultados finales
+    const plazasLibres = max - ocupacionMaxEnDias;
+  
+    return {
+      lleno: ocupacionMaxEnDias >= max,
+      // 🚩 REGLA DE ORO: Si quedan 3 o menos plazas reales
+      esCritico: max > 0 && plazasLibres <= 3 && plazasLibres > 0,
+      cupoActual: ocupacionMaxEnDias,
+      maximo: max,
+      libres: plazasLibres
+    };
   };
-};
   // 2. FUNCIÓN DE INSCRIPCIÓN
-  const inscribir = async (act, op) => {
+const inscribir = async (act, op) => {
     if (normasRef.current !== true) {
         return alert("⚠️ Es obligatorio aceptar las normas.");
     }
@@ -2639,7 +2663,7 @@ const obtenerEstadoPlaza = (actividadId, diaSeleccionado, cursoAlumno) => {
     const snap = await getDoc(alumnoRef);
     const d = snap.exists() ? snap.data() : alumno;
 
-    // 🕵️‍♂️ MODO DETECTIVE: Esto te dirá en la consola (F12) qué está pasando
+    // 🕵️‍♂️ MODO DETECTIVE
     console.log("DEBUG INSCRIPCIÓN:", {
         nombre: d.nombre,
         curso: d.curso,
@@ -2647,111 +2671,115 @@ const obtenerEstadoPlaza = (actividadId, diaSeleccionado, cursoAlumno) => {
         esAntiguo: d.esAntiguoAlumno
     });
 
-    // ... (Tu lectura de seguridad y console.log anteriores)
-
-    // 1. Detectamos si es Adulto por el ID o por el nombre del curso
     const esAdulto = act.id === 'adultos' || (d.curso || '').toUpperCase().includes('ADULTO');
-
-    // 2. Definimos el estado con prioridad absoluta
-    let estadoFinal = 'inscrito'; // Por defecto, todos inscritos...
-
-    // SOLO si NO es adulto Y la actividad requiere prueba, lo mandamos a 'requiere_prueba'
+    
+    // 🚩 1. CALCULAMOS EL ESTADO INICIAL (Normal o Prueba)
+    let estadoFinal = 'inscrito';
     if (!esAdulto && act.requierePrueba) {
         estadoFinal = 'requiere_prueba';
     }
 
+    // 🚩 2. DATOS COMUNES (He añadido actividadId para que el contador funcione)
     const datosComunes = {
       nombre: d.nombre, 
       curso: d.curso, 
       actividad: act.nombre,
+      actividadId: act.id, // ✅ CRUCIAL: Sin esto el contador no suma
       dias: op.dias,
       horario: op.horario,
       precio: op.precio,
-      // 🚩 ELIMINAMOS LA LÍNEA DE ESTADO DE AQUÍ
       fechaAlta: new Date().toISOString(),
       revisadoAdmin: false,
       inicioDeseado: datosAlumno.inicioDeseado || 'proximo', 
       autorizaFotos: autorizaFotos,
       aceptaNormas: normasRef.current
-  };
+    };
 
-    // 🛡️ EL FILTRO DEFINITIVO (Pase VIP)
     const cursoNombre = (d.curso || '').toUpperCase();
     const esInfantil = cursoNombre.includes('INF');
-    
-    // Comprobamos todas las formas en las que hayamos podido guardar el "SÍ"
-    const tienePaseVIP = 
-        d.natacionPasado === 'si' || 
-        d.esAntiguoAlumno === true || 
-        d.esAntiguoAlumno === 'true' ||
-        d.antiguo === 'si';
+    const tienePaseVIP = d.natacionPasado === 'si' || d.esAntiguoAlumno === true || d.esAntiguoAlumno === 'true' || d.antiguo === 'si';
 
-    // CASO A: REVISADO Y ASEGURADO
-if (act.requierePrueba && !esInfantil && !tienePaseVIP && !d.citaNivel && d.estado !== 'prueba_reservada') {
-  if(!confirm(`⚠️ Esta actividad requiere PRUEBA DE NIVEL.\n\n¿Continuar para elegir hora?`)) return;
+    // CASO A: REVISADO Y ASEGURADO (PRUEBA DE NIVEL)
+    if (act.requierePrueba && !esInfantil && !tienePaseVIP && !d.citaNivel && d.estado !== 'prueba_reservada') {
+      if(!confirm(`⚠️ Esta actividad requiere PRUEBA DE NIVEL.\n\n¿Continuar para elegir hora?`)) return;
+      try {
+          await updateDoc(alumnoRef, { 
+              ...datosComunes,
+              estado: 'prueba_reservada' 
+          });
+          await refresh(user.uid);
+          close(); 
+          setTimeout(() => { onRequirePrueba(); }, 400); 
+      } catch (error) { console.error("Error:", error); }
+      return; 
+    }
 
-  try {
-      // Guardamos con el estado explícito
-      await updateDoc(alumnoRef, { 
-          ...datosComunes,
-          estado: 'prueba_reservada' // 🔥 Ahora no hay conflicto porque no está en datosComunes
-      });
-      
-      // Forzamos la actualización de la ficha del padre
-      await refresh(user.uid);
-      
-      // Cerramos el modal de inscripción
-      close(); 
-
-      // Abrimos el de la cita con un margen de seguridad
-      setTimeout(() => {
-          onRequirePrueba();
-      }, 400); 
-
-  } catch (error) {
-      console.error("Error:", error);
-      alert("Error al conectar con el servidor.");
-  }
-  return; 
-}
-
-    // CASO B: INSCRIPCIÓN DIRECTA (VIP, INFANTIL, ADULTOS O PRUEBA SUPERADA)
-    
-    // 1. Miramos si hay sitio en el grupo elegido
+    // CASO B: INSCRIPCIÓN DIRECTA
+    // 🚩 3. VOLVEMOS A MIRAR EL AFORO JUSTO ANTES DE GUARDAR
     const infoPlaza = obtenerEstadoPlaza(act.id, op.dias, d.curso);
     
-    // 2. Definimos el mensaje y el estado según el aforo
     let mensajeConfirmacion = `¿Confirmar inscripción definitiva en ${act.nombre}?`;
-    let estadoFinalReal = 'inscrito';
+    let estadoFinalReal = estadoFinal; // Mantenemos si era inscrito o requiere_prueba
 
     if (infoPlaza.lleno) {
         mensajeConfirmacion = `⚠️ Este grupo está completo actualmente.\n\n¿Quieres apuntarte a la LISTA DE ESPERA para ${op.dias}? Te avisaremos si queda una vacante.`;
         estadoFinalReal = 'lista_espera';
     }
 
-    // 3. Pedimos confirmación
     if (!confirm(mensajeConfirmacion)) return;
     
-// 4. Guardamos en Firebase
+// 4. GUARDADO FINAL
 await updateDoc(alumnoRef, { 
   ...datosComunes,
   estado: estadoFinalReal 
 });
 
-// Esperamos a que el sistema recargue los datos
-await refresh(user.uid); 
+// 📧 5. DISPARADOR DEL EMAIL (Añadido aquí)
+// Usamos los datos que ya tenemos en la función para que el correo sea instantáneo
+if (user.email) {
+  const esEspera = estadoFinalReal === 'lista_espera';
+  
+  await addDoc(collection(db, 'mail'), {
+    to: user.email,
+    message: {
+      subject: esEspera 
+        ? `⏳ Lista de Espera: ${d.nombre} - ${act.nombre}`
+        : `✅ Inscripción recibida: ${d.nombre} - ${act.nombre}`,
+      html: `
+        <div style="font-family: sans-serif; line-height: 1.6; color: #333;">
+          <h2 style="color: ${esEspera ? '#d97706' : '#059669'};">
+            ${esEspera ? 'Solicitud en Lista de Espera' : '¡Inscripción recibida correctamente!'}
+          </h2>
+          <p>Hola, se ha procesado la solicitud para <strong>${d.nombre}</strong>.</p>
+          
+          <div style="background: #f3f4f6; padding: 15px; border-radius: 10px; border: 1px solid #e5e7eb;">
+            <p style="margin: 5px 0;"><strong>🏊‍♂️ Actividad:</strong> ${act.nombre}</p>
+            <p style="margin: 5px 0;"><strong>🗓️ Días:</strong> ${op.dias}</p>
+            <p style="margin: 5px 0;"><strong>⏰ Horario:</strong> ${op.horario}</p>
+            <p style="margin: 5px 0;"><strong>📊 Estado:</strong> ${esEspera ? 'LISTA DE ESPERA' : 'INSCRITO'}</p>
+          </div>
 
-// Cerramos el modal
+          ${esEspera 
+            ? `<p style="color: #b45309; font-weight: bold;">Actualmente no hay plazas libres para este grupo. Te avisaremos en cuanto quede una vacante libre por orden de llegada.</p>`
+            : `<p>Recuerda traer todo el equipo necesario (gorro, gafas, bañador, chanclas y toalla). ¡Te esperamos!</p>`
+          }
+        </div>
+      `
+    }
+  });
+}
+
+// 6. FINALIZACIÓN
+await refresh(user.uid); 
 close();
 
-// Mensaje de éxito con un pequeño retraso para no bloquear el cierre
 setTimeout(() => {
-  alert(infoPlaza.lleno 
-      ? "✅ Te has apuntado a la lista de espera correctamente." 
-      : "✅ ¡Inscripción realizada con éxito!"
+  alert(estadoFinalReal === 'lista_espera' 
+      ? "✅ Te has apuntado a la lista de espera correctamente. Revisa tu email." 
+      : "✅ ¡Inscripción realizada con éxito! Revisa tu email."
   );
 }, 100);
-}; // <--- ESTA LLAVE CIERRA LA FUNCIÓN "inscribir"
+};
 
 return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
@@ -2765,6 +2793,7 @@ return (
 
         {/* CUERPO CON SCROLL */}
 <div className="p-6 overflow-y-auto flex-1">
+  
 
 {/* 🚩 BLOQUE DE FECHA OBLIGATORIO (PASO 1) */}
 <div className="mb-8 p-5 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl border-2 border-blue-200 shadow-sm">
@@ -2919,49 +2948,58 @@ return (
             {act.opciones.map((op, idx) => {
                 // 🔍 CALCULAMOS EL ESTADO PARA ESTA OPCIÓN
                 const info = obtenerEstadoPlaza(act.id, op.dias, alumno.curso);
+                const plazasLibres = info.maximo - info.cupoActual;
 
                 return (
-                    <button 
-                        key={idx} 
-                        onClick={() => inscribir(act, op)} 
-                        className={`flex justify-between items-center w-full p-3 rounded-lg border transition-all text-left relative ${
-                            info.lleno 
-                            ? 'bg-gray-50 border-gray-200 opacity-80' 
-                            : 'bg-white border-gray-200 hover:border-blue-500 hover:bg-blue-50 shadow-sm'
-                        }`}
-                    >
-                        <div>
-                            <span className={`block font-bold ${info.lleno ? 'text-gray-400' : 'text-gray-800'}`}>
-                                {op.dias}
-                            </span>
-                            <span className="text-xs text-gray-500 font-mono bg-white px-1 rounded border mt-1 inline-block">
-                                ⏰ {op.horario}
-                            </span>
-                        </div>
-                        
-                        <div className="flex flex-col items-end gap-1">
-                            <span className={`font-bold px-3 py-1 rounded-full text-sm block ${
-                                info.lleno ? 'bg-gray-200 text-gray-500' : 'bg-blue-100 text-blue-600'
-                            }`}>
-                                {op.precio}
-                            </span>
+                    <div key={idx} className="space-y-1">
+                        <button 
+                            onClick={() => inscribir(act, op)} 
+                            className={`flex justify-between items-center w-full p-3 rounded-lg border transition-all text-left relative ${
+                                info.lleno 
+                                ? 'bg-amber-50 border-amber-200 shadow-sm' 
+                                : 'bg-white border-gray-200 hover:border-blue-500 hover:bg-blue-50 shadow-sm'
+                            }`}
+                        >
+                            <div>
+                                <span className={`block font-bold ${info.lleno ? 'text-amber-800' : 'text-gray-800'}`}>
+                                    {op.dias}
+                                </span>
+                                <span className="text-xs text-gray-500 font-mono bg-white px-1 rounded border mt-1 inline-block">
+                                    ⏰ {op.horario}
+                                </span>
+                            </div>
+                            
+                            <div className="flex flex-col items-end gap-1">
+                                <span className={`font-bold px-3 py-1 rounded-full text-sm block ${
+                                    info.lleno ? 'bg-amber-200 text-amber-700' : 'bg-blue-100 text-blue-600'
+                                }`}>
+                                    {op.precio}
+                                </span>
 
-                            {/* 🚦 ETIQUETAS DINÁMICAS */}
-                            {info.lleno ? (
-                                <span className="text-[9px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-black uppercase">
-                                    ⏳ Lista Espera
-                                </span>
-                            ) : info.esCritico ? (
-                                <span className="text-[9px] bg-amber-100 text-amber-600 px-2 py-0.5 rounded-full font-black uppercase animate-pulse">
-                                    ⚠️ Últimas plazas
-                                </span>
-                            ) : (
-                                <span className="text-[9px] bg-emerald-100 text-emerald-600 px-2 py-0.5 rounded-full font-black uppercase">
-                                    ✅ Disponible
-                                </span>
-                            )}
-                        </div>
-                    </button>
+                                {/* 🚦 ETIQUETAS DINÁMICAS */}
+                                {info.lleno ? (
+                                    <span className="text-[9px] bg-amber-500 text-white px-2 py-0.5 rounded-full font-black uppercase">
+                                        ⏳ Lista Espera
+                                    </span>
+                                ) : info.esCritico ? (
+                                    <span className="text-[9px] bg-orange-100 text-orange-600 px-2 py-0.5 rounded-full font-black uppercase animate-pulse">
+                                        ⚠️ Quedan {plazasLibres} plazas
+                                    </span>
+                                ) : (
+                                    <span className="text-[9px] bg-emerald-100 text-emerald-600 px-2 py-0.5 rounded-full font-black uppercase">
+                                        ✅ Disponible
+                                    </span>
+                                )}
+                            </div>
+                        </button>
+
+                        {/* PEQUEÑA NOTA ACLARATORIA SI ESTÁ LLENO */}
+                        {info.lleno && (
+                            <p className="text-[9px] text-amber-600 font-bold px-2 italic">
+                                * Se inscribirá automáticamente en lista de espera
+                            </p>
+                        )}
+                    </div>
                 );
             })}
         </div>
