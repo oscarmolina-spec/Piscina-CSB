@@ -1959,14 +1959,15 @@ const listadoBajas = alumnos.filter(a => a.estado === 'baja_pendiente' || a.esta
               </table>
           </div>
       )}
-      {/* --- TAB: PRUEBAS DE NIVEL --- */}
+{/* --- TAB: PRUEBAS DE NIVEL --- */}
 {tab === 'pruebas' && (
     <div className="bg-white rounded shadow overflow-hidden">
         <table className="w-full text-sm text-left">
-            <thead className="bg-gray-100 uppercase text-xs">
+            <thead className="bg-gray-100 uppercase text-xs font-black text-gray-600">
                 <tr>
                     <th className="p-3">Alumno</th>
-                    <th className="p-3">Estado Prueba</th>
+                    <th className="p-3">Grupo Solicitado</th>
+                    <th className="p-3">Cita Prueba</th>
                     <th className="p-3 text-right">Acción</th>
                 </tr>
             </thead>
@@ -1975,27 +1976,49 @@ const listadoBajas = alumnos.filter(a => a.estado === 'baja_pendiente' || a.esta
                     <tr 
                       key={a.id} 
                       onClick={() => abrirFicha(a)} 
-                      className="border-b cursor-pointer hover:bg-blue-50 transition"
+                      className="border-b cursor-pointer hover:bg-blue-50 transition-colors"
                     >
                         <td className="p-3">
-                            <div className="font-bold text-gray-900">{a.nombre}</div>
-                            <div className="text-xs text-gray-500">{a.curso}</div>
+                            <div className="font-bold text-gray-900 leading-tight">{a.nombre}</div>
+                            <div className="text-[10px] text-gray-500 uppercase font-bold">{a.curso}</div>
                         </td>
+                        
+                        {/* 🚩 NUEVO: Grupo seleccionado */}
+                        <td className="p-3 font-bold text-blue-700">
+                            {a.actividad || '---'}
+                        </td>
+
+                        {/* 🚩 NUEVO: Datos de la cita */}
                         <td className="p-3">
-                            {a.estado === 'prueba_reservada' 
-                                ? <span className="text-green-600 font-bold text-xs bg-green-50 px-2 py-1 rounded border border-green-200">📅 CITA RESERVADA</span>
-                                : <span className="text-blue-600 font-bold text-xs bg-blue-50 px-2 py-1 rounded border border-blue-200">🕒 PENDIENTE CITA</span>
-                            }
-                        </td>
+    {a.citaNivel ? (
+        <div className="leading-tight">
+            <p className="font-bold text-gray-800">
+                📅 {a.citaNivel}
+            </p>
+            {/* Solo muestra el reloj y la hora si el campo existe y no está vacío */}
+            {(a.horaCita || a.hora || a.horaNivel || a.horaPrueba) && (
+                <p className="text-xs text-gray-500 mt-0.5">
+                    ⏰ {a.horaCita || a.hora || a.horaNivel || a.horaPrueba}
+                </p>
+            )}
+        </div>
+    ) : (
+        <span className="text-xs text-gray-400 italic font-medium">Sin cita</span>
+    )}
+</td>
+
                         <td className="p-3 text-right">
-                            <button className="bg-blue-600 text-white px-3 py-1 rounded font-bold text-xs shadow">
-                                Gestionar
+                            <button 
+                                onClick={(e) => aceptarAlumno(e, a)}
+                                className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg font-bold text-xs shadow-sm transition-transform active:scale-95"
+                            >
+                                ACEPTAR
                             </button>
                         </td>
                     </tr>
                 ))}
                 {listadoPruebas.length === 0 && (
-                    <tr><td colSpan="3" className="p-4 text-center text-gray-400">No hay pruebas de nivel pendientes.</td></tr>
+                    <tr><td colSpan="4" className="p-10 text-center text-gray-400 font-medium">No hay pruebas de nivel pendientes.</td></tr>
                 )}
             </tbody>
         </table>
