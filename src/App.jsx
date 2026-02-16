@@ -1117,17 +1117,84 @@ const confirmarInscripcion = async (alumnoId) => {
   }, []);
 
   // --- 3. FUNCIONES ---
+  // 🎯 FUNCIÓN PARA VALIDAR DESDE LA CARPETA DE ESPERA
+  const validarPlazaDirecto = async (alumno) => {
+    if (!confirm(`¿Quieres confirmar la plaza para ${alumno.nombre}? Se le enviará el email de bienvenida automáticamente.`)) return;
+
+    try {
+      const alumnoRef = doc(db, 'students', alumno.id);
+      
+      // Calculamos el inicio (Día 1 del mes que viene)
+      const hoy = new Date();
+      const inicio = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 1, 12, 0, 0);
+      const fechaAltaISO = inicio.toISOString();
+
+      // 1. Actualizamos el alumno
+      await updateDoc(alumnoRef, {
+        estado: 'inscrito',
+        fechaAlta: fechaAltaISO,
+        revisadoAdmin: true
+      });
+
+      // 2. Buscamos el email del padre
+      const padreId = alumno.parentId || alumno.user;
+      const emailDestino = padres[padreId]?.email || alumno.email;
+
+      if (emailDestino) {
+        await addDoc(collection(db, 'mail'), {
+          to: emailDestino,
+          message: {
+            subject: `✅ Plaza Confirmada: ${alumno.nombre}`,
+            html: `
+              <div style="font-family: sans-serif; color: #333; max-width: 600px; border: 1px solid #eee; padding: 20px; border-radius: 15px;">
+                <h2 style="color: #059669;">¡Felicidades! Plaza Confirmada</h2>
+                <p>Hola, te informamos de que <strong>${alumno.nombre}</strong> ya tiene su plaza confirmada en la actividad.</p>
+                <div style="background: #f9fafb; padding: 15px; border-radius: 10px; border-left: 5px solid #059669;">
+                  <p><strong>🏊‍♂️ Actividad:</strong> ${alumno.actividad}</p>
+                  <p><strong>🗓️ Horario:</strong> ${alumno.horario} (${alumno.dias})</p>
+                  <p><strong>📅 Comienzo:</strong> 1 de ${inicio.toLocaleString('es-ES', { month: 'long' })}</p>
+                </div>
+                <p style="margin-top: 20px;">Ya podéis acudir directamente el primer día de clase en vuestro horario. ¡Os esperamos!</p>
+              </div>
+            `
+          }
+        });
+      }
+
+      alert("✅ Plaza validada y email enviado.");
+    } catch (error) {
+      console.error("Error al validar:", error);
+      alert("No se pudo validar la plaza.");
+    }
+  };
   
   // Abrir Ficha: Combina datos del alumno con los del padre
   const abrirFicha = (alumno) => {
-    // 🔍 Buscamos al padre por su ID o por su Email (user)
+    // 1. Identificamos al padre
     const padreId = alumno.parentId || alumno.user; 
     const datosPadre = padres[padreId] || {};
     
-    // 💡 Combinamos: primero lo que tiene el alumno, luego lo del padre
-    // Si el alumno tiene teléfono propio, ese mandará.
+    // 2. Buscamos el nombre en "cascada" (si no está en uno, busca en el siguiente)
+    const nombreFinal = 
+        datosPadre.nombre ||              // Campo unificado nuevo
+        datosPadre.personaContacto ||     // Campo de registro interno
+        datosPadre.nombrePagador ||       // Campo de registro externo
+        alumno.nombrePagador ||           // A veces se guarda en el alumno
+        alumno.personaContacto ||         // A veces se guarda en el alumno
+        datosPadre.displayName ||         // Nombre de Google/Auth
+        'No indicado';
+
+    // 3. Hacemos lo mismo con el DNI
+    const dniFinal = 
+        datosPadre.dni || 
+        datosPadre.dniPagador || 
+        alumno.dniPagador || 
+        'No indicado';
+
     setAlumnoSeleccionado({ 
         ...alumno, 
+        nombreTutor: nombreFinal,
+        dniTutor: dniFinal,
         datosPadre: datosPadre 
     });
 };
@@ -1179,26 +1246,34 @@ const imprimirListaAsistencia = (datos, infoGrupo) => {
   `);
   ventana.document.close();
 };
-// --- 🚩 PASO 1: LÓGICA DE FECHAS DE ALTA (Colocar aquí) ---
+// --- 🚩 PASO 1: LÓGICA DE FECHAS DE ALTA (BLINDADA) ---
 const obtenerInfoAlta = () => {
   const hoy = new Date();
   const diaActual = hoy.getDate();
-  const mesActualNom = hoy.toLocaleString('es-ES', { month: 'long' });
   
-  const fechaProximoMes = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 1);
-  const mesSiguienteNom = fechaProximoMes.toLocaleString('es-ES', { month: 'long' });
+  // 1. Datos Mes Actual
+  const mesActualNom = hoy.toLocaleString('es-ES', { month: 'long' });
+  const fechaTecnicaHoy = hoy.toISOString().split('T')[0];
+
+  // 2. Datos Mes Siguiente (Calculado de forma segura)
+  const proximoMesDate = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 1);
+  const mesSiguienteNom = proximoMesDate.toLocaleString('es-ES', { month: 'long' });
+  const fechaTecnicaProximoMes = proximoMesDate.toISOString().split('T')[0];
 
   return {
     diaCortePasado: diaActual > 20,
     mesActual: mesActualNom,
     mesSiguiente: mesSiguienteNom,
-    fechaInicioSiguiente: `1 de ${mesSiguienteNom}`
+    fechaInicioSiguiente: `1 de ${mesSiguienteNom}`,
+    // 🚩 CLAVE: Devolvemos ya las fechas listas para Firebase
+    tecnicaHoy: fechaTecnicaHoy,
+    tecnicaProximoMes: fechaTecnicaProximoMes
   };
 };
 const validarPlaza = async (alumno) => {
   if (userRole !== 'admin') return alert("⛔ Solo coordinadores.");
   
-  // 1. 🔍 BUSCADOR DE IDs (Lo que ya tenías)
+  // 1. 🔍 BUSCADOR DE IDs (Tu lógica exacta)
   let actId = alumno.actividadId;
   const actText = (alumno.actividad || "").toLowerCase();
   if (!actId) {
@@ -1218,75 +1293,68 @@ const validarPlaza = async (alumno) => {
   let fechaInicioParaEmail = "";
 
   if (infoFechas.diaCortePasado) {
-    // Si hoy es después del 20, forzamos mes siguiente
     fechaInicioParaEmail = infoFechas.fechaInicioSiguiente;
   } else {
-    // Si es 20 o antes, miramos qué eligió el padre (por defecto próximo mes si no hay dato)
     fechaInicioParaEmail = alumno.inicioDeseado === 'inmediato' 
       ? `Inmediato (Mes de ${infoFechas.mesActual})` 
       : infoFechas.fechaInicioSiguiente;
   }
 
   // 3. ❓ CONFIRMACIÓN
-if (confirm(`✅ ¿Validar plaza definitiva para ${alumno.nombre}?\n\n📅 INICIO: ${fechaInicioParaEmail}\n📍 GRUPO: ${alumno.actividad}`)) {
-  try {
-      const hoy = new Date().toISOString().split('T')[0];
-      
-      // 🚩 GENERAMOS LA FECHA TÉCNICA (Formato AAAA-MM-DD)
-      let fechaTecnica;
-      
-      // Si el texto de inicio NO contiene la palabra "hoy", es que empieza el mes que viene
-      if (!fechaInicioParaEmail.toLowerCase().includes('hoy')) {
-          const proximoMes = new Date();
-          proximoMes.setMonth(proximoMes.getMonth() + 1);
-          proximoMes.setDate(1);
-          fechaTecnica = proximoMes.toISOString().split('T')[0];
-      } else {
-          fechaTecnica = hoy;
-      }
+  if (confirm(`✅ ¿Validar plaza definitiva para ${alumno.nombre}?\n\n📅 INICIO: ${fechaInicioParaEmail}\n📍 GRUPO: ${alumno.actividad}`)) {
+    try {
+        // --- 🚩 AQUÍ ESTÁ EL CAMBIO ---
+        let fechaTecnica;
+        
+        // Comprobamos si el texto contiene "inmediato" (que es lo que pusimos arriba)
+        if (fechaInicioParaEmail.toLowerCase().includes('inmediato')) {
+            // Alta HOY mismo
+            fechaTecnica = new Date().toISOString().split('T')[0];
+        } else {
+            // Alta el día 1 del MES QUE VIENE
+            const proximoMes = new Date();
+            proximoMes.setMonth(proximoMes.getMonth() + 1);
+            proximoMes.setDate(1);
+            fechaTecnica = proximoMes.toISOString().split('T')[0];
+        }
 
-      const padreId = alumno.parentId || alumno.user;
-      const emailPadre = padres[padreId]?.email;
+        const padreId = alumno.parentId || alumno.user;
+        const emailPadre = padres[padreId]?.email;
 
-      // Actualizar Firebase
-      await updateDoc(doc(db, 'students', alumno.id), { 
-          estado: 'inscrito',
-          actividadId: actId,
-          validadoAdmin: true,
-          // 🚩 USAMOS LA FECHA TÉCNICA PARA EVITAR EL "INVALID DATE"
-          fechaAlta: fechaTecnica,
-          revisadoAdmin: true,
-          // Guardamos el texto bonito solo para mostrarlo
-          fechaInicioReal: fechaInicioParaEmail 
-      });
+        // Actualizar Firebase
+        await updateDoc(doc(db, 'students', alumno.id), { 
+            estado: 'inscrito',
+            actividadId: actId,
+            validadoAdmin: true,
+            fechaAlta: fechaTecnica, // 🎯 Guardará "2026-03-01" si no es inmediato
+            revisadoAdmin: true,
+            fechaInicioReal: fechaInicioParaEmail 
+        });
 
-          // 📧 4. ENVÍO DE EMAIL AUTOMÁTICO
-          if (emailPadre) {
-            await addDoc(collection(db, 'mail'), {
-              to: emailPadre,
-              message: {
-                subject: `✅ Alta confirmada - Natación: ${alumno.nombre}`,
-                html: `
-                  <div style="font-family: sans-serif; line-height: 1.6; color: #333;">
-                    <h2 style="color: #059669;">¡Hola! Tu alta ya es efectiva.</h2>
-                    <p>La inscripción de <strong>${alumno.nombre}</strong> ha sido validada por la coordinación.</p>
-                    <div style="background: #f3f4f6; padding: 15px; border-radius: 10px; border: 1px solid #e5e7eb;">
-                      <p style="margin: 5px 0;"><strong>📅 Fecha de inicio:</strong> ${fechaInicioParaEmail}</p>
-                      <p style="margin: 5px 0;"><strong>🏊‍♂️ Actividad:</strong> ${alumno.actividad}</p>
-                      <p style="margin: 5px 0;"><strong>🗓️ Días:</strong> ${alumno.dias}</p>
-                    </div>
-                    <p>Recuerda traer todo el equipo necesario (gorro, gafas, bañador, chanclas y toalla). ¡Te esperamos!</p>
+        // 📧 4. ENVÍO DE EMAIL AUTOMÁTICO
+        if (emailPadre) {
+          await addDoc(collection(db, 'mail'), {
+            to: emailPadre,
+            message: {
+              subject: `✅ Alta confirmada - Natación: ${alumno.nombre}`,
+              html: `
+                <div style="font-family: sans-serif; line-height: 1.6; color: #333;">
+                  <h2 style="color: #059669;">¡Hola! Tu alta ya es efectiva.</h2>
+                  <p>La inscripción de <strong>${alumno.nombre}</strong> ha sido validada.</p>
+                  <div style="background: #f3f4f6; padding: 15px; border-radius: 10px; border: 1px solid #e5e7eb;">
+                    <p><strong>📅 Inicio:</strong> ${fechaInicioParaEmail}</p>
+                    <p><strong>🏊‍♂️ Actividad:</strong> ${alumno.actividad}</p>
                   </div>
-                `
-              }
-            });
-          }
+                </div>`
+            }
+          });
+        }
 
-          alert(`✅ ¡Hecho! El alumno está inscrito y el email de bienvenida enviado a: ${emailPadre}`);
-      } catch (error) {
-          console.error("Error al validar:", error);
-          alert("❌ Error: No se pudo completar el proceso.");
-      }
+        alert(`✅ ¡Hecho! Grabado con fecha técnica: ${fechaTecnica}`);
+    } catch (error) {
+        console.error("Error al validar:", error);
+        alert("❌ Error en el proceso.");
+    }
   }
 };
 
@@ -1386,7 +1454,7 @@ const archivarBaja = async (alumno) => {
       const dias = (a.dias || '-').replace(/"/g, '""');
       const horario = (a.horario || '-').replace(/"/g, '""');
       const fAlta = (a.fechaAlta || '-').replace(/"/g, '""');
-
+      const estadoExcel = (a.estado === 'lista_espera') ? 'EN ESPERA' : 'INSCRITO';
       // --- LÓGICA BASADA EN TU regData.tipo ---
       // Usamos toUpperCase para que en el Excel quede profesional: "EXTERNO" o "INTERNO"
       const tipoAlumno = (p.tipo === 'externo') ? 'EXTERNO' : 'INTERNO';
@@ -1464,13 +1532,13 @@ const archivarBaja = async (alumno) => {
   // --- 4. LISTAS FILTRADAS ---
   const gruposUnicos = [...new Set(alumnos.map(a => a.actividad).filter(g => g))].sort();
   
-// --- 1. LISTADO GLOBAL (LIMPIO Y SIN FANTASMAS) ---
+/// --- 1. LISTADO GLOBAL (CORREGIDO) ---
 const listadoGlobal = alumnos.filter(a => {
   const coincideNombre = (a.nombre || '').toLowerCase().includes(busqueda.toLowerCase());
   const coincideGrupo = filtroGrupo ? a.actividad === filtroGrupo : true;
   
-  // SOLO dejamos pasar alumnos que tengan estos estados activos
-  const estadosActivos = ['inscrito', 'requiere_prueba', 'prueba_reservada', 'baja_pendiente'];
+  // 🚩 QUITAMOS 'lista_espera' de aquí para que no se mezclen con los inscritos
+  const estadosActivos = ['inscrito', 'requiere_prueba', 'prueba_reservada', 'baja_pendiente']; 
   const esAlumnoReal = estadosActivos.includes(a.estado);
 
   return coincideNombre && coincideGrupo && esAlumnoReal;
@@ -1542,50 +1610,54 @@ const listadoBajas = alumnos.filter(a => a.estado === 'baja_pendiente' || a.esta
   </div>
 </div>
 
-{/* PESTAÑAS AJUSTADAS (RESPONSIVE) */}
+{/* PESTAÑAS AJUSTADAS (RESPONSIVE) - CON LISTA DE ESPERA */}
 <div className="flex gap-1 mb-6 border-b pb-1 overflow-x-auto scrollbar-hide bg-white sticky top-0 z-10">
-          {['global', 'ocupacion', 'pruebas', 'bajas', 'equipo', 'avisos'].map(t => {
-             if ((t === 'equipo' || t === 'bajas') && userRole !== 'admin') return null;
-             
-             let count = 0; 
-             if (t === 'pruebas') count = listadoPruebas.length; 
-             if (t === 'bajas') count = listadoBajas.length;
+  {['global', 'ocupacion', 'pruebas', 'espera', 'bajas', 'equipo', 'avisos'].map(t => {
+     if ((t === 'equipo' || t === 'bajas') && userRole !== 'admin') return null;
+     
+     let count = 0; 
+     if (t === 'pruebas') count = listadoPruebas.length; 
+     if (t === 'bajas') count = listadoBajas.length;
+     // 🚩 Añadimos el contador para la lista de espera
+     if (t === 'espera') count = alumnos.filter(a => a.estado === 'lista_espera').length;
 
-             return (
-                <button 
-                  key={t} 
-                  onClick={() => setTab(t)} 
-                  className={`
-                    px-3 py-3 font-bold uppercase text-[10px] md:text-xs whitespace-nowrap 
-                    flex flex-col md:flex-row items-center justify-center gap-1 flex-1 min-w-[90px]
-                    transition-all duration-200
-                    ${tab === t 
-                      ? 'text-blue-600 border-b-4 border-blue-600 bg-blue-50/50' 
-                      : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'
-                    }
-                  `}
-                >
-                    {/* Iconos para que se identifiquen rápido en móvil */}
-                    <span className="text-sm">
-                      {t === 'global' && '👥'}
-                      {t === 'ocupacion' && '📊'}
-                      {t === 'pruebas' && '🎯'}
-                      {t === 'bajas' && '📉'}
-                      {t === 'equipo' && '🛡️'}
-                      {t === 'avisos' && '📢'}
-                    </span>
-                    
-                    <span>{t === 'ocupacion' ? 'PLAZAS' : t.toUpperCase()}</span>
+     return (
+        <button 
+          key={t} 
+          onClick={() => setTab(t)} 
+          className={`
+            px-3 py-3 font-bold uppercase text-[10px] md:text-xs whitespace-nowrap 
+            flex flex-col md:flex-row items-center justify-center gap-1 flex-1 min-w-[90px]
+            transition-all duration-200
+            ${tab === t 
+              ? (t === 'espera' ? 'text-amber-600 border-b-4 border-amber-600 bg-amber-50/50' : 'text-blue-600 border-b-4 border-blue-600 bg-blue-50/50')
+              : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'
+            }
+          `}
+        >
+            <span className="text-sm">
+              {t === 'global' && '👥'}
+              {t === 'ocupacion' && '📊'}
+              {t === 'pruebas' && '🎯'}
+              {t === 'espera' && '⏳'} {/* 🚩 Icono para espera */}
+              {t === 'bajas' && '📉'}
+              {t === 'equipo' && '🛡️'}
+              {t === 'avisos' && '📢'}
+            </span>
+            
+            <span>
+              {t === 'ocupacion' ? 'PLAZAS' : t === 'espera' ? 'ESPERA' : t.toUpperCase()}
+            </span>
 
-                    {count > 0 && (
-                      <span className="bg-red-500 text-white text-[9px] px-1.5 py-0.5 rounded-full shadow-sm">
-                        {count}
-                      </span>
-                    )}
-                </button>
-             );
-          })}
-      </div>
+            {count > 0 && (
+              <span className={`${t === 'espera' ? 'bg-amber-500' : 'bg-red-500'} text-white text-[9px] px-1.5 py-0.5 rounded-full shadow-sm`}>
+                {count}
+              </span>
+            )}
+        </button>
+     );
+  })}
+</div>
      {/* 📊 MATRIZ DE OCUPACIÓN DIARIA (CORREGIDA) */}
 {tab === 'ocupacion' && (
   <div className="space-y-4 animate-fade-in">
@@ -1700,36 +1772,36 @@ const listadoBajas = alumnos.filter(a => a.estado === 'baja_pendiente' || a.esta
       </div>
     </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
-          {alumnos
-            .filter(a => {
-              const coincideId = a.actividadId === filtroRadar.id;
-              const coincideEstado = a.estado === 'inscrito';
-              const coincideDia = a.dias?.toLowerCase().includes(filtroRadar.dia.toLowerCase());
-              const coincideCurso = filtroRadar.cursos ? filtroRadar.cursos.includes(a.curso) : true;
-              return coincideId && coincideEstado && coincideDia && coincideCurso;
-            })
-            .map(a => (
-              <div 
-                key={a.id} 
-                onClick={() => { setFiltroRadar(null); abrirFicha(a); }}
-                className="bg-white/10 hover:bg-white/20 border border-white/10 p-2 rounded-lg cursor-pointer flex justify-between items-center transition"
-              >
-                <div className="overflow-hidden">
-                  <p className="text-xs font-bold truncate">{a.nombre}</p>
-                  <p className="text-[9px] opacity-60 italic">{a.curso}</p>
-                </div>
-                <span className="text-[10px] bg-white/20 px-1.5 py-0.5 rounded font-mono">ficha →</span>
-              </div>
-            ))}
+    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+  {alumnos
+    .filter(a => {
+      const coincideId = a.actividadId === filtroRadar.id;
+      // 🚩 CAMBIO AQUÍ: Solo dejamos 'inscrito' para que el radar sea real
+      const coincideEstado = a.estado === 'inscrito'; 
+      const coincideDia = a.dias?.toLowerCase().includes(filtroRadar.dia.toLowerCase());
+      const coincideCurso = filtroRadar.cursos ? filtroRadar.cursos.includes(a.curso) : true;
+      return coincideId && coincideEstado && coincideDia && coincideCurso;
+    })
+    .map(a => (
+      <div 
+        key={a.id} 
+        onClick={() => { setFiltroRadar(null); abrirFicha(a); }}
+        className="bg-white/10 hover:bg-white/20 border border-white/10 p-2 rounded-lg cursor-pointer flex justify-between items-center transition"
+      >
+        <div className="overflow-hidden">
+          <p className="text-xs font-bold truncate">{a.nombre}</p>
+          <p className="text-[9px] opacity-60 italic">{a.curso}</p>
         </div>
+        <span className="text-[10px] bg-white/20 px-1.5 py-0.5 rounded font-mono">ficha →</span>
+      </div>
+    ))}
+</div>
       </div>
     )}
   </div>
 )}
-      
 
-     {/* TAB: GLOBAL (CON FECHA DE ALTA Y BOTÓN DE REVISIÓN) */}
+    {/* TAB: GLOBAL (ACTUALIZADO CON LISTA DE ESPERA) */}
 {tab === 'global' && (
     <div className="bg-white rounded shadow overflow-hidden">
         <div className="p-4 border-b bg-gray-50 flex flex-col md:flex-row gap-4">
@@ -1752,11 +1824,22 @@ const listadoBajas = alumnos.filter(a => a.estado === 'baja_pendiente' || a.esta
                     <tr 
                       key={a.id} 
                       onClick={() => abrirFicha(a)} 
-                      className={`border-b cursor-pointer transition ${a.estado === 'baja_pendiente' ? 'bg-red-50' : 'hover:bg-blue-50'}`}
+                      className={`border-b cursor-pointer transition ${
+                          a.estado === 'baja_pendiente' ? 'bg-red-50' : 
+                          a.estado === 'lista_espera' ? 'bg-amber-50 hover:bg-amber-100' : // 🚩 Fila Ámbar
+                          'hover:bg-blue-50'
+                      }`}
                     >
                         <td className="p-3">
-                          <span className="font-bold text-gray-900 block">{a.nombre}</span>
-                          {a.estado === 'baja_pendiente' && <span className="text-[10px] bg-red-100 text-red-600 px-1 rounded">BAJA PENDIENTE</span>}
+                          <span className="font-bold text-gray-900 block">
+                            {a.estado === 'lista_espera' && '⏳ '}{a.nombre}
+                          </span>
+                          
+                          {/* BADGES DINÁMICOS */}
+                          <div className="flex gap-1 mt-1">
+                            {a.estado === 'baja_pendiente' && <span className="text-[10px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded font-black uppercase">BAJA PENDIENTE</span>}
+                            {a.estado === 'lista_espera' && <span className="text-[10px] bg-amber-500 text-white px-1.5 py-0.5 rounded font-black uppercase animate-pulse">EN ESPERA</span>}
+                          </div>
                           
                           <div className="text-blue-600 font-bold text-xs mt-1 bg-blue-50 w-fit px-2 py-0.5 rounded">
                               {a.curso} - {a.letra}
@@ -1764,33 +1847,44 @@ const listadoBajas = alumnos.filter(a => a.estado === 'baja_pendiente' || a.esta
                         </td>
                         <td className="p-3">
                           <div className="font-bold text-gray-800">{a.actividad || '-'}</div>
-                          {a.dias && <div className="text-[10px] text-gray-500 mt-1">📅 {a.dias} | ⏰ {a.horario}</div>}
+                          {a.dias && <div className="text-[10px] text-gray-500 mt-1 font-medium">📅 {a.dias} | ⏰ {a.horario}</div>}
                           
-                          {/* FECHA DE ALTA FORMATEADA */}
-                          <div className="text-[10px] mt-1">
-                            {a.fechaAlta 
-                                ? <span className="text-green-600 font-bold italic">Alta: {new Date(a.fechaAlta).toLocaleDateString('es-ES')}</span> 
-                                : <span className="text-gray-400">Sin fecha de alta</span>}
-                          </div>
+{/* FECHA ADAPTADA (BLINDADA CONTRA FORMATOS ISO) */}
+<div className="text-[10px] mt-1">
+  {a.estado === 'lista_espera' ? (
+      <span className="text-amber-600 font-bold italic">
+        Solicitud: {a.fechaAlta ? a.fechaAlta.split('T')[0].split('-').reverse().join('/') : 'Hoy'}
+      </span>
+  ) : a.fechaAlta ? (
+      <span className="text-green-600 font-bold italic">
+        {/* 🚩 PASO 1: .split('T')[0] limpia las horas y la "T" si existen */}
+        {/* 🚩 PASO 2: .split('-').reverse().join('/') pone el formato DD/MM/AAAA */}
+        Alta: {a.fechaAlta.split('T')[0].split('-').reverse().join('/')}
+      </span> 
+  ) : (
+      <span className="text-gray-400">Sin fecha de alta</span>
+  )}
+</div>
                         </td>
                         <td className="p-3 text-right">
                           <div className="flex items-center justify-end gap-2" onClick={(e) => e.stopPropagation()}>
                             
-                            {/* BOTÓN DE CONFIRMACIÓN RÁPIDA */}
+                            {/* BOTÓN DE ACCIÓN INTELIGENTE */}
                             <button 
-                                onClick={() => confirmarInscripcion(a.id)}
-                                className={`px-2 py-1 rounded text-[10px] font-bold uppercase transition ${
-                                    a.revisadoAdmin 
-                                    ? 'bg-green-100 text-green-700 border border-green-200' 
-                                    : 'bg-orange-100 text-orange-700 border border-orange-200 hover:bg-orange-200'
+                                onClick={() => a.estado === 'lista_espera' ? abrirFicha(a) : confirmarInscripcion(a.id)}
+                                className={`px-2 py-1 rounded text-[10px] font-black uppercase shadow-sm border transition ${
+                                    a.estado === 'lista_espera'
+                                    ? 'bg-amber-500 text-white border-amber-600 hover:bg-amber-600'
+                                    : a.revisadoAdmin 
+                                      ? 'bg-green-100 text-green-700 border-green-200' 
+                                      : 'bg-orange-100 text-orange-700 border-orange-200 hover:bg-orange-200'
                                 }`}
                             >
-                                {a.revisadoAdmin ? '✅ OK' : '⏳ Confirmar'}
+                                {a.estado === 'lista_espera' ? '🚀 Gestionar' : a.revisadoAdmin ? '✅ OK' : '⏳ Confirmar'}
                             </button>
 
-                            {/* BOTÓN BORRAR (Solo Admin) */}
                             {userRole === 'admin' && (
-                                <button onClick={(e) => borrarAlumno(e, a.id)} className="text-red-400 hover:text-red-600 p-2 hover:bg-red-50 rounded-full">
+                                <button onClick={(e) => borrarAlumno(e, a.id)} className="text-red-400 hover:text-red-600 p-2 hover:bg-red-50 rounded-full transition">
                                     🗑️
                                 </button>
                             )}
@@ -1802,30 +1896,6 @@ const listadoBajas = alumnos.filter(a => a.estado === 'baja_pendiente' || a.esta
         </table>
     </div>
 )}
-
-      {/* TAB: PRUEBAS */}
-      {tab === 'pruebas' && (
-          <div className="bg-white rounded shadow overflow-hidden">
-              <div className="p-3 bg-blue-50 text-blue-800 text-xs font-bold border-b">ℹ️ Validar Plazas</div>
-              <table className="w-full text-sm text-left">
-                  <thead className="bg-gray-100 uppercase text-xs"><tr><th className="p-3">Cita</th><th className="p-3">Alumno</th><th className="p-3">Solicita</th><th className="p-3 text-right">Acción</th></tr></thead>
-                  <tbody>
-                      {listadoPruebas.map(a => (
-                          <tr key={a.id} onClick={() => abrirFicha(a)} className="hover:bg-orange-50 cursor-pointer border-b">
-                              <td className="p-3 text-blue-600 font-bold">{a.citaNivel || 'Sin hora'}</td>
-                              <td className="p-3 font-bold">
-                                  {a.nombre}
-                                  <div className="text-[10px] text-gray-400 font-normal">{a.estado === 'inscrito' ? 'Pre-inscrito' : 'Reserva'}</div>
-                                  <span className="text-blue-600 text-xs font-bold">{a.curso} - {a.letra}</span>
-                              </td>
-                              <td className="p-3"><span className="bg-orange-100 text-orange-800 px-2 py-1 rounded text-xs font-bold">{a.actividad || 'Sin elegir'}</span></td>
-                              <td className="p-3 text-right"><button onClick={(e) => { e.stopPropagation(); validarPlaza(a); }} className="bg-green-500 text-white px-3 py-1 rounded font-bold text-xs shadow hover:bg-green-600">✅ OK</button></td>
-                          </tr>
-                      ))}
-                  </tbody>
-              </table>
-          </div>
-      )}
 
      {/* TAB: BAJAS (AHORA SE PUEDE ABRIR LA FICHA) */}
      {tab === 'bajas' && (
@@ -1889,6 +1959,96 @@ const listadoBajas = alumnos.filter(a => a.estado === 'baja_pendiente' || a.esta
               </table>
           </div>
       )}
+      {/* --- TAB: PRUEBAS DE NIVEL --- */}
+{tab === 'pruebas' && (
+    <div className="bg-white rounded shadow overflow-hidden">
+        <table className="w-full text-sm text-left">
+            <thead className="bg-gray-100 uppercase text-xs">
+                <tr>
+                    <th className="p-3">Alumno</th>
+                    <th className="p-3">Estado Prueba</th>
+                    <th className="p-3 text-right">Acción</th>
+                </tr>
+            </thead>
+            <tbody>
+                {listadoPruebas.map(a => (
+                    <tr 
+                      key={a.id} 
+                      onClick={() => abrirFicha(a)} 
+                      className="border-b cursor-pointer hover:bg-blue-50 transition"
+                    >
+                        <td className="p-3">
+                            <div className="font-bold text-gray-900">{a.nombre}</div>
+                            <div className="text-xs text-gray-500">{a.curso}</div>
+                        </td>
+                        <td className="p-3">
+                            {a.estado === 'prueba_reservada' 
+                                ? <span className="text-green-600 font-bold text-xs bg-green-50 px-2 py-1 rounded border border-green-200">📅 CITA RESERVADA</span>
+                                : <span className="text-blue-600 font-bold text-xs bg-blue-50 px-2 py-1 rounded border border-blue-200">🕒 PENDIENTE CITA</span>
+                            }
+                        </td>
+                        <td className="p-3 text-right">
+                            <button className="bg-blue-600 text-white px-3 py-1 rounded font-bold text-xs shadow">
+                                Gestionar
+                            </button>
+                        </td>
+                    </tr>
+                ))}
+                {listadoPruebas.length === 0 && (
+                    <tr><td colSpan="3" className="p-4 text-center text-gray-400">No hay pruebas de nivel pendientes.</td></tr>
+                )}
+            </tbody>
+        </table>
+    </div>
+)}
+
+{/* --- TAB: LISTA DE ESPERA (CORREGIDO) --- */}
+{tab === 'espera' && (
+    <div className="bg-white rounded shadow overflow-hidden border-t-4 border-amber-500">
+        <table className="w-full text-sm text-left">
+            <thead className="bg-amber-50 uppercase text-xs text-amber-800">
+                <tr>
+                    <th className="p-3">Alumno</th>
+                    <th className="p-3">Actividad Solicitada</th>
+                    <th className="p-3 text-right">Acción</th>
+                </tr>
+            </thead>
+            <tbody>
+                {alumnos.filter(a => a.estado === 'lista_espera').map(a => (
+                    <tr 
+                      key={a.id} 
+                      onClick={() => abrirFicha(a)} 
+                      className="border-b cursor-pointer hover:bg-amber-50 transition"
+                    >
+                        <td className="p-3">
+                            <div className="font-bold text-gray-900">{a.nombre}</div>
+                            <div className="text-xs text-blue-600 font-bold">{a.curso}</div>
+                        </td>
+                        <td className="p-3">
+                            <div className="font-medium text-gray-800">{a.actividad}</div>
+                            <div className="text-[10px] text-gray-500">📅 {a.dias} | ⏰ {a.horario}</div>
+                        </td>
+                        <td className="p-3 text-right">
+                            {/* 🚩 CAMBIO AQUÍ: Añadimos e.stopPropagation y la función */}
+                            <button 
+                                onClick={(e) => {
+                                    e.stopPropagation(); // Evita que se abra la ficha al validar
+                                    validarPlazaDirecto(a);
+                                }}
+                                className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded font-black text-xs shadow transition-all active:scale-95"
+                            >
+                                Validar Plaza
+                            </button>
+                        </td>
+                    </tr>
+                ))}
+                {alumnos.filter(a => a.estado === 'lista_espera').length === 0 && (
+                    <tr><td colSpan="3" className="p-4 text-center text-gray-400 italic">La lista de espera está vacía.</td></tr>
+                )}
+            </tbody>
+        </table>
+    </div>
+)}
 
       {/* TABS EXTRA */}
       {tab === 'equipo' && userRole === 'admin' && (
@@ -1947,6 +2107,7 @@ function FichaAlumno({ alumno, cerrar, userRole }) {
           <button onClick={cerrar} className="bg-white/10 hover:bg-white/20 rounded-full p-2 text-white transition">✕</button>
         </div>
 
+
         {/* CONTENIDO */}
         <div className="p-6 space-y-6 text-gray-800">
           
@@ -1991,25 +2152,44 @@ function FichaAlumno({ alumno, cerrar, userRole }) {
               </a>
           </div>
 
-          {/* 3. DATOS SENSIBLES (SOLO ADMIN) */}
-          {userRole === 'admin' ? (
-            <div className="border-t pt-4 space-y-4">
-              <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">💳 Datos de Facturación</h3>
-              <div className="grid md:grid-cols-2 gap-4 text-sm">
-                <div className="bg-gray-50 p-3 rounded border"><span className="block text-gray-500 text-xs font-bold uppercase">Nombre Tutor</span><span className="font-medium text-lg">{alumno.nombrePagador || p.nombrePagador || '-'}</span></div>
-                <div className="bg-gray-50 p-3 rounded border"><span className="block text-gray-500 text-xs font-bold uppercase">DNI</span><span className="font-medium">{alumno.dniPagador || p.dniPagador || alumno.dni || '-'}</span></div>
-                <div className="bg-gray-50 p-3 rounded border"><span className="block text-gray-500 text-xs font-bold uppercase">Email</span><span className="font-medium">{alumno.emailContacto || p.email || '-'}</span></div>
-                <div className="bg-gray-100 p-3 rounded font-mono text-gray-700 border md:col-span-2">
-                  <span className="block text-gray-400 text-[10px] font-bold uppercase mb-1">IBAN de Cobro</span>
-                  {alumno.iban || p.iban || 'No indicado'}
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div className="bg-amber-50 p-4 rounded border border-amber-200 text-amber-800 text-sm italic">
-               🔒 Los datos bancarios y de facturación están protegidos. Contacta con administración si los necesitas.
-            </div>
-          )}
+          {/* 3. DATOS DE RESPONSABLE Y FACTURACIÓN (SOLO ADMIN) */}
+{userRole === 'admin' ? (
+  <div className="border-t pt-4 space-y-4">
+    <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">💳 Datos de Responsable</h3>
+    <div className="grid md:grid-cols-2 gap-4 text-sm">
+      
+      {/* NOMBRE DEL TUTOR / CONTACTO / PAGADOR */}
+      <div className="bg-blue-50 p-3 rounded border border-blue-200">
+        <span className="block text-blue-500 text-xs font-bold uppercase">Nombre Responsable</span>
+        <span className="font-bold text-lg text-gray-900">
+          {alumno.nombreTutor || alumno.nombrePagador || p.personaContacto || p.nombrePagador || p.nombre || '-'}
+        </span>
+      </div>
+
+      {/* DNI UNIFICADO */}
+      <div className="bg-gray-50 p-3 rounded border border-gray-300">
+        <span className="block text-gray-500 text-xs font-bold uppercase">DNI / NIE</span>
+        <span className="font-bold text-lg text-gray-900">
+          {alumno.dniTutor || alumno.dni || alumno.dniPagador || p.dni || p.dniPagador || '-'}
+        </span>
+      </div>
+
+      <div className="bg-gray-50 p-3 rounded border border-gray-300">
+        <span className="block text-gray-500 text-xs font-bold uppercase">Email Principal</span>
+        <span className="font-medium">{p.email || alumno.email || '-'}</span>
+      </div>
+
+      <div className="bg-gray-100 p-3 rounded font-mono text-gray-700 border md:col-span-2">
+        <span className="block text-gray-400 text-[10px] font-bold uppercase mb-1">IBAN de Cobro</span>
+        <span className="font-bold tracking-wider">{alumno.iban || p.iban || 'No indicado'}</span>
+      </div>
+    </div>
+  </div>
+) : (
+  <div className="bg-amber-50 p-4 rounded border border-amber-200 text-amber-800 text-sm italic">
+     🔒 Los datos bancarios y de facturación están protegidos.
+  </div>
+)}
 
           {/* 4. SALUD (SIEMPRE VISIBLE) */}
           {(alumno.alergias || alumno.observaciones) && (
@@ -2189,25 +2369,29 @@ const estaLibre = hijo.estado === 'sin_inscripcion' || hijo.estado === 'baja_fin
           let bordeColor = 'bg-gray-400';
           let estadoTexto = 'Sin Actividad';
           
-          // 2. CONFIGURAMOS COLORES
-          if (hijo.estado === 'inscrito') {
-              if (estaAdmitido) {
-                  bordeColor = 'bg-green-500';
-                  estadoTexto = '✅ Inscrito';
-              } else {
-                  bordeColor = 'bg-yellow-400';
-                  estadoTexto = '⏳ Pendiente Validación';
-              }
-          } else if (hijo.estado === 'prueba_reservada') {
-              bordeColor = 'bg-orange-500';
-              estadoTexto = '⏳ Prueba Pendiente';
-          } else if (hijo.estado === 'baja_pendiente') {
-              bordeColor = 'bg-red-500';
-              estadoTexto = '📉 Baja Solicitada';
-          } else if (hijo.estado === 'baja_finalizada') {
-              bordeColor = 'bg-gray-600';
-              estadoTexto = '⚫ Baja Finalizada';
-          }
+          // 2. CONFIGURAMOS COLORES (Versión actualizada con Lista de Espera)
+if (hijo.estado === 'inscrito') {
+  if (estaAdmitido) {
+      bordeColor = 'bg-green-500';
+      estadoTexto = '✅ Inscrito';
+  } else {
+      bordeColor = 'bg-yellow-400';
+      estadoTexto = '⏳ Pendiente Validación';
+  }
+} else if (hijo.estado === 'lista_espera') {
+  // 🚩 NUEVO: Color Ámbar para que el padre sepa que está en cola
+  bordeColor = 'bg-amber-500'; 
+  estadoTexto = '⏳ Lista de Espera';
+} else if (hijo.estado === 'prueba_reservada') {
+  bordeColor = 'bg-orange-500';
+  estadoTexto = '⏳ Prueba Pendiente';
+} else if (hijo.estado === 'baja_pendiente') {
+  bordeColor = 'bg-red-500';
+  estadoTexto = '📉 Baja Solicitada';
+} else if (hijo.estado === 'baja_finalizada') {
+  bordeColor = 'bg-gray-600';
+  estadoTexto = '⚫ Baja Finalizada';
+}
 
           return (
             <div key={hijo.id} className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 relative overflow-hidden group mb-4">
@@ -2224,19 +2408,34 @@ const estaLibre = hijo.estado === 'sin_inscripcion' || hijo.estado === 'baja_fin
                 <div className="flex flex-col items-end gap-2"><span className="px-2 py-1 rounded text-[10px] font-extrabold uppercase bg-gray-100 text-gray-500">{estadoTexto}</span></div>
               </div>
 
-              {/* DATOS DE ACTIVIDAD (Inscrito o Baja Pendiente) */}
-{(hijo.estado === 'inscrito' || hijo.estado === 'baja_pendiente') && (
+              {/* DATOS DE ACTIVIDAD (Inscrito, Baja Pendiente o LISTA DE ESPERA) */}
+{(hijo.estado === 'inscrito' || hijo.estado === 'baja_pendiente' || hijo.estado === 'lista_espera') && (
   <div className={`ml-3 mt-4 p-3 rounded-lg border text-sm relative
       ${hijo.estado === 'baja_pendiente' ? 'bg-red-50 border-red-200' : 
+        hijo.estado === 'lista_espera' ? 'bg-amber-50 border-amber-200' : // 🚩 Nuevo estilo Ámbar
         !estaAdmitido ? 'bg-yellow-50 border-yellow-200' : 
         'bg-green-50 border-green-100'
       }`}>
 
-
-
-    {/* CASO: PENDIENTE DE VALIDAR (AMARILLO) */}
-    {!estaAdmitido && hijo.estado === 'inscrito' ? (
-        <div className="text-center pr-6"> {/* pr-6 para no chocar con la papelera */}
+    {/* CASO NUEVO: LISTA DE ESPERA */}
+    {hijo.estado === 'lista_espera' ? (
+        <div className="pr-6">
+            <p className="font-bold text-amber-900 text-sm uppercase mb-1">{hijo.actividad}</p>
+            <div className="flex gap-2 text-amber-800 text-xs mb-2 font-medium">
+                <span>📅 {hijo.dias}</span><span>⏰ {hijo.horario}</span>
+            </div>
+            <div className="bg-white/60 rounded p-2 border border-amber-200">
+                <p className="font-bold text-amber-800 text-[10px] uppercase mb-0.5">⏳ En espera de vacante</p>
+                <p className="text-[10px] text-amber-700 leading-tight">
+                  No hay plazas disponibles. Te avisaremos por orden de lista en cuanto quede un hueco libre.
+                </p>
+            </div>
+        </div>
+    ) : 
+    
+    /* CASO: PENDIENTE DE VALIDAR (AMARILLO - El tuyo) */
+    !estaAdmitido && hijo.estado === 'inscrito' ? (
+        <div className="text-center pr-6">
             <p className="font-bold text-yellow-900 text-sm uppercase mb-1">{hijo.actividad}</p>
             <div className="flex justify-center gap-2 text-yellow-800 text-xs mb-2 opacity-80">
                 <span>📅 {hijo.dias}</span><span>⏰ {hijo.horario}</span>
@@ -2244,7 +2443,6 @@ const estaLibre = hijo.estado === 'sin_inscripcion' || hijo.estado === 'baja_fin
             <div className="bg-white/50 rounded p-1 border border-yellow-200">
                 <p className="font-bold text-yellow-800 text-xs">⏳ Solicitud Recibida</p>
                 <p className="text-[10px] text-yellow-700">
-                  {/* Texto dinámico: si es adulto/waterpolo no hablamos de "nivel" */}
                   {(hijo.actividad || '').toUpperCase().includes('ADULTO') || (hijo.actividad || '').toUpperCase().includes('WATERPOLO')
                     ? "El club está revisando tu inscripción."
                     : "El coordinador está validando el nivel."
@@ -2253,7 +2451,7 @@ const estaLibre = hijo.estado === 'sin_inscripcion' || hijo.estado === 'baja_fin
             </div>
         </div>
     ) : (
-        /* CASO: ADMITIDO O BAJA PENDIENTE (VERDE/ROJO) */
+        /* CASO: ADMITIDO O BAJA PENDIENTE (VERDE/ROJO - El tuyo) */
         <div className="pr-6">
           <p className="font-bold mb-1 text-gray-800 uppercase">{hijo.actividad}</p>
           <div className="flex items-center gap-2 text-gray-600">
@@ -2679,18 +2877,34 @@ const inscribir = async (act, op) => {
         estadoFinal = 'requiere_prueba';
     }
 
-    // 🚩 2. DATOS COMUNES (He añadido actividadId para que el contador funcione)
+    // 🚩 2. DATOS COMUNES (BLINDAJE TOTAL CONTRA ERRORES DE FECHA)
+    const hoyParaCalculo = new Date();
+    const diaActual = hoyParaCalculo.getDate();
+    const inicioDeseado = datosAlumno.inicioDeseado || 'proximo';
+
+    let fechaFinalISO;
+
+    if (inicioDeseado === 'inmediato' && diaActual <= 20) {
+        // CASO 1: Hoy mismo
+        fechaFinalISO = hoyParaCalculo.toISOString();
+    } else {
+        // CASO 2: Día 1 del mes que viene (FORZADO MANUAL)
+        // Usamos el constructor (Año, Mes + 1, Día 1, Hora 12) para evitar saltos de zona horaria
+        const proximoMes = new Date(hoyParaCalculo.getFullYear(), hoyParaCalculo.getMonth() + 1, 1, 12, 0, 0);
+        fechaFinalISO = proximoMes.toISOString();
+    }
+
     const datosComunes = {
       nombre: d.nombre, 
       curso: d.curso, 
       actividad: act.nombre,
-      actividadId: act.id, // ✅ CRUCIAL: Sin esto el contador no suma
+      actividadId: act.id, 
       dias: op.dias,
       horario: op.horario,
       precio: op.precio,
-      fechaAlta: new Date().toISOString(),
+      fechaAlta: fechaFinalISO, // 🎯 Ahora sí será siempre día 01 o hoy
       revisadoAdmin: false,
-      inicioDeseado: datosAlumno.inicioDeseado || 'proximo', 
+      inicioDeseado: inicioDeseado, 
       autorizaFotos: autorizaFotos,
       aceptaNormas: normasRef.current
     };
@@ -3296,64 +3510,57 @@ const Login = ({ setView }) => {
     if (regData.password !== confirmPassword) return alert("⛔ Las contraseñas NO coinciden.");
     if (regData.password.length < 6) return alert("⚠️ La contraseña debe tener al menos 6 caracteres.");
 
-
+    // 2. Determinar Email de Usuario
+    const emailFinal = regData.tipo === 'externo' ? regData.emailPagador : regData.emailContacto;
+    if (!emailFinal) return alert("⚠️ Falta el email para crear tu cuenta.");
 
     // 3. Validaciones Específicas
     if (regData.tipo === 'externo') {
       if (!regData.nombrePagador) return alert('⚠️ Falta: Nombre del Pagador');
       if (!regData.dniPagador) return alert('⚠️ Falta: DNI del Pagador');
       
-      // VALIDACIÓN DEL IBAN
-      const ibanLimpio = (regData.iban || '').replace(/\s/g, ''); // Quitamos espacios por si acaso
-      const ibanRegex = /^ES\d{22}$/; // Empieza por ES y siguen exactamente 22 dígitos
-
-      if (!ibanRegex.test(ibanLimpio)) {
-        return alert('⚠️ IBAN Inválido: Debe empezar por ES y tener 22 números después (Total 24 caracteres).');
-      }
+      const ibanLimpio = (regData.iban || '').replace(/\s/g, '');
+      const ibanRegex = /^ES\d{22}$/;
+      if (!ibanRegex.test(ibanLimpio)) return alert('⚠️ IBAN Inválido: Debe empezar por ES y tener 22 números después.');
     
-      
-      // --- BLOQUEO TELÉFONO EXTERNO ---
       const tel1 = regData.telefono1 ? String(regData.telefono1).trim() : "";
-      if (tel1.length < 9) return alert(`⛔ El teléfono debe tener 9 cifras (has puesto ${tel1.length})`);
-      // --------------------------------
+      if (tel1.length < 9) return alert(`⛔ El teléfono debe tener 9 cifras`);
       
       if (!regData.direccion) return alert('⚠️ Falta: Dirección');
       if (!regData.cp) return alert('⚠️ Falta: Código Postal');
       if (!regData.iban) return alert('⚠️ Falta: IBAN Bancario');
-      if (!regData.emailPagador) return alert('⚠️ Falta: EMAIL del Pagador (será tu usuario)');
-  } else {
-      // --- BLOQUEO TELÉFONO INTERNO ---
-      // Si para internos usas otro campo de teléfono, asegúrate de que el nombre sea correcto (ej: regData.telefonoContacto)
+    } else {
+      // VALIDACIÓN REGISTRO INTERNO
+      if (!regData.personaContacto) return alert('⚠️ Falta: Nombre de la persona de contacto');
+      
       const telInterno = regData.telefono1 ? String(regData.telefono1).trim() : ""; 
       if (telInterno && telInterno.length < 9) {
-          return alert(`⛔ El teléfono debe tener 9 cifras (has puesto ${telInterno.length})`);
+          return alert(`⛔ El teléfono debe tener 9 cifras`);
       }
-      // --------------------------------
-
-      if (!regData.emailContacto) return alert('⚠️ Falta: Tu Email de contacto (será tu usuario)');
-  }
+    }
 
     try {
-      // El email de usuario será el del pagador (externo) o el de contacto (interno)
       const emailFinal = regData.tipo === 'externo' ? regData.emailPagador : regData.emailContacto;
 
-      // Crear en Firebase Auth
+      // A. Crear en Firebase Auth
       const cred = await createUserWithEmailAndPassword(auth, emailFinal, regData.password);
       
-      // Guardar Usuario (Padre/Pagador)
+      // B. Guardar Usuario (Padre/Pagador)
       await setDoc(doc(db, 'users', cred.user.uid), { 
         email: emailFinal, 
         role: 'user', 
         tipo: regData.tipo,
-        
-        // 📞 ESTO ES LO QUE HACEMOS: Mover los teléfonos aquí arriba
-        // para que se guarden siempre, seas interno o externo.
         telefono1: regData.telefono1 || '', 
         telefono2: regData.telefono2 || '',
-
+        
+        // 🚩 ESTO ES LO QUE ARREGLA EL NOMBRE EN LA FICHA:
+        nombre: regData.tipo === 'externo' ? regData.nombrePagador : regData.personaContacto,
+        personaContacto: regData.personaContacto || '',
+        
         ...(regData.tipo === 'externo' ? {
             nombrePagador: regData.nombrePagador, 
             dniPagador: regData.dniPagador, 
+            dni: regData.dniPagador, // 👈 También guardamos el DNI aquí
             direccion: regData.direccion, 
             cp: regData.cp, 
             poblacion: regData.poblacion,
@@ -3361,34 +3568,12 @@ const Login = ({ setView }) => {
         } : {
             emailContacto: regData.emailContacto 
         })
-    });
-      
-      // Guardar Alumno
-      // Guardar Alumno (Corregido)
-      await addDoc(collection(db, 'students'), { 
-        parentId: cred.user.uid, 
-        user: emailFinal, // Guardamos el email para vincularlo fácil
-        nombre: regData.nombreAlumno, 
-        curso: regData.curso, 
-        letra: regData.letra, 
-        fechaNacimiento: regData.fechaNacAlumno, 
-        
-        // 📞 EL CAMBIO CLAVE: Guardamos el teléfono directamente en el alumno
-        telefono: regData.telefono1 || '', 
-        
-        natacionPasado: regData.natacionPasado || 'no',
-        esAntiguoAlumno: regData.natacionPasado === 'si' ? true : false,
-        
-        alergias: regData.alergias || '', 
-        observaciones: regData.observaciones || '',
-        estado: 'sin_inscripcion', 
-        aceptaNormas: false, 
-        autorizaFotos: false 
-    });
-      
-      alert("✅ ¡Registro completado! Ya puedes entrar.");
-      // Limpiamos o redirigimos si quieres
+      });
+
+      // ✅ MENSAJE Y CIERRE DE FUNCIÓN (Sin errores de paréntesis)
+      alert("✅ ¡Cuenta creada con éxito! Ya puedes entrar.");
       setIsRegister(false); 
+
     } catch (e) { 
         if (e.code === 'auth/email-already-in-use') alert('⛔ Ese correo ya está registrado.');
         else alert('Error: ' + e.message); 
