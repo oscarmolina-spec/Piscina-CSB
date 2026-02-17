@@ -1761,77 +1761,77 @@ const listadoBajas = alumnos.filter(a => a.estado === 'baja_pendiente' || a.esta
                 </td>
                 {['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'].map(dia => {
     const ocupados = alumnos.filter(a => {
-      const coincideId = a.actividadId === g.id;
-      const coincideDia = a.dias?.toLowerCase().includes(dia.toLowerCase());
-      const listaCursos = g.cursosRelacionados || g.cursos;
-      const coincideCurso = listaCursos ? listaCursos.includes(a.curso) : true;
-      
-      if (!coincideId || !coincideDia || !coincideCurso) return false;
+  const coincideId = a.actividadId === g.id;
+  const coincideDia = a.dias?.toLowerCase().includes(dia.toLowerCase());
+  const listaCursos = g.cursosRelacionados || g.cursos;
+  const coincideCurso = listaCursos ? listaCursos.includes(a.curso) : true;
+  
+  if (!coincideId || !coincideDia || !coincideCurso) return false;
+
+  // --- LÓGICA TEMPORAL 100% DINÁMICA ---
+  const hoy = new Date();
+  const proximo = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 1);
+  const mesSiguienteISO = `${proximo.getFullYear()}-${String(proximo.getMonth() + 1).padStart(2, '0')}`;
+  
+  // Limpiamos la fecha del alumno para comparar
+  const fechaAlumno = (a.fechaAlta || a.fechaInscripcion || "").toString();
+  const esAltaMesSiguiente = fechaAlumno.includes(mesSiguienteISO);
+
+  if (vistaMes === 'actual') {
+    // VISTA ACTUAL: 
+    // 1. Solo mostramos si está inscrito o tiene baja pendiente
+    // 2. EXCLUIMOS a los que tienen fecha de alta del mes que viene (altas futuras)
+    return (a.estado === 'inscrito' || a.estado === 'baja_pendiente') && !esAltaMesSiguiente;
+  } else {
+    // PREVISIÓN MES SIGUIENTE:
+    const esBajaSolicitada = a.estado === 'baja_pendiente';
     
-      // --- LÓGICA TEMPORAL 100% DINÁMICA ---
-      const hoy = new Date();
-      const proximo = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 1);
-      const mesSiguienteISO = `${proximo.getFullYear()}-${String(proximo.getMonth() + 1).padStart(2, '0')}`;
-      
-      // Limpiamos la fecha del alumno para comparar
-      const fechaAlumno = (a.fechaAlta || a.fechaInscripcion || "").toString();
-      const esAltaMesSiguiente = fechaAlumno.includes(mesSiguienteISO);
-    
-      if (vistaMes === 'actual') {
-        // VISTA ACTUAL: 
-        // 1. Solo mostramos si está inscrito o tiene baja pendiente
-        // 2. EXCLUIMOS a los que tienen fecha de alta del mes que viene (altas futuras)
-        return (a.estado === 'inscrito' || a.estado === 'baja_pendiente') && !esAltaMesSiguiente;
-      } else {
-        // PREVISIÓN MES SIGUIENTE:
-        const esBajaSolicitada = a.estado === 'baja_pendiente';
-        
-        // Si tiene baja pendiente, para el mes que viene ya no ocupa plaza (false)
-        if (esBajaSolicitada) return false; 
-        // Ocupan plaza los inscritos de siempre + los que empiezan nuevos el mes que viene
-        return a.estado === 'inscrito' || esAltaMesSiguiente;
-      }
-    }).length;
-    
-    // 🚩 DETECTAR SI HAY BAJAS (Para el color naranja)
-    // Solo se activa en la vista actual para avisarte de huecos que se van a liberar
-    const tieneBajasProximas = alumnos.some(a => {
-      const coincideId = a.actividadId === g.id;
-      const coincideDia = a.dias?.toLowerCase().includes(dia.toLowerCase());
-      const listaCursos = g.cursosRelacionados || g.cursos;
-      const coincideCurso = listaCursos ? listaCursos.includes(a.curso) : true;
-      return coincideId && coincideDia && coincideCurso && a.estado === 'baja_pendiente';
-    });
-                
-    const critico = ocupados >= g.m;
-    
-    return (
-    <td key={dia} className="p-2">
-      <div 
-        onClick={() => ocupados > 0 && setFiltroRadar({ 
-          id: g.id, 
-          nombre: g.n, 
-          dia: dia, 
-          cursos: g.cursosRelacionados || g.cursos,
-          mesVista: vistaMes // Pasamos el mes para que el radar sepa qué nombres filtrar
-        })}
-        className={`h-12 rounded-xl flex flex-col items-center justify-center border-2 transition-all cursor-pointer hover:shadow-inner active:scale-95 ${
-          ocupados === 0 ? 'border-dashed border-gray-100 text-gray-200' :
-          // Prioridad 1: Naranja si hay bajas próximas (solo en vista actual)
-          (vistaMes === 'actual' && tieneBajasProximas) ? 'bg-orange-500 border-orange-600 text-white font-black shadow-md' :
-          // Prioridad 2: Rojo si está lleno
-          critico ? 'bg-red-500 border-red-600 text-white font-black shadow-md' :
-          // Prioridad 3: Ámbar si está casi lleno (>70%)
-          ocupados > (g.m * 0.7) ? 'bg-amber-50 border-amber-200 text-amber-600' : 
-          // Prioridad 4: Verde (Hueco disponible)
-          'bg-emerald-50 border-emerald-100 text-emerald-600 font-bold'
-        }`}
-      >
-        <span className="text-sm leading-none">{ocupados > 0 ? ocupados : '-'}</span>
-        {ocupados > 0 && <span className="text-[8px] mt-1 opacity-60">/{g.m}</span>}
-      </div>
-    </td>
-    );
+    // Si tiene baja pendiente, para el mes que viene ya no ocupa plaza (false)
+    if (esBajaSolicitada) return false; 
+    // Ocupan plaza los inscritos de siempre + los que empiezan nuevos el mes que viene
+    return a.estado === 'inscrito' || esAltaMesSiguiente;
+  }
+}).length;
+
+// 🚩 DETECTAR SI HAY BAJAS (Para el color naranja)
+// Solo se activa en la vista actual para avisarte de huecos que se van a liberar
+const tieneBajasProximas = alumnos.some(a => {
+  const coincideId = a.actividadId === g.id;
+  const coincideDia = a.dias?.toLowerCase().includes(dia.toLowerCase());
+  const listaCursos = g.cursosRelacionados || g.cursos;
+  const coincideCurso = listaCursos ? listaCursos.includes(a.curso) : true;
+  return coincideId && coincideDia && coincideCurso && a.estado === 'baja_pendiente';
+});
+            
+const critico = ocupados >= g.m;
+
+return (
+<td key={dia} className="p-2">
+  <div 
+    onClick={() => ocupados > 0 && setFiltroRadar({ 
+      id: g.id, 
+      nombre: g.n, 
+      dia: dia, 
+      cursos: g.cursosRelacionados || g.cursos,
+      mesVista: vistaMes // Pasamos el mes para que el radar sepa qué nombres filtrar
+    })}
+    className={`h-12 rounded-xl flex flex-col items-center justify-center border-2 transition-all cursor-pointer hover:shadow-inner active:scale-95 ${
+      ocupados === 0 ? 'border-dashed border-gray-100 text-gray-200' :
+      // Prioridad 1: Naranja si hay bajas próximas (solo en vista actual)
+      (vistaMes === 'actual' && tieneBajasProximas) ? 'bg-orange-500 border-orange-600 text-white font-black shadow-md' :
+      // Prioridad 2: Rojo si está lleno
+      critico ? 'bg-red-500 border-red-600 text-white font-black shadow-md' :
+      // Prioridad 3: Ámbar si está casi lleno (>70%)
+      ocupados > (g.m * 0.7) ? 'bg-amber-50 border-amber-200 text-amber-600' : 
+      // Prioridad 4: Verde (Hueco disponible)
+      'bg-emerald-50 border-emerald-100 text-emerald-600 font-bold'
+    }`}
+  >
+    <span className="text-sm leading-none">{ocupados > 0 ? ocupados : '-'}</span>
+    {ocupados > 0 && <span className="text-[8px] mt-1 opacity-60">/{g.m}</span>}
+  </div>
+</td>
+);
                 })}
               </tr>
             ))}
@@ -1840,68 +1840,100 @@ const listadoBajas = alumnos.filter(a => a.estado === 'baja_pendiente' || a.esta
       </div>
     </div>
 
-    {/* 📋 LISTA DETALLADA DE ALUMNOS (Aparece abajo al pulsar un número) */}
-    {filtroRadar && (
-  <div className="bg-blue-600 rounded-2xl shadow-lg p-4 text-white animate-in slide-in-from-bottom-4 duration-300">
-    <div className="flex justify-between items-center mb-4">
-      <div>
-        <h4 className="font-black text-sm uppercase tracking-tighter">Lista de Asistencia</h4>
-        <p className="text-[10px] opacity-80 font-bold uppercase">{filtroRadar.nombre} — {filtroRadar.dia}</p>
-      </div>
-      
-      {/* 🚩 CONTENEDOR DE BOTONES */}
-      <div className="flex items-center gap-2">
-        <button 
-          onClick={() => {
-            // Filtramos los alumnos exactamente igual que en el Radar
-            const listaParaImprimir = alumnos.filter(a => {
-              const coincideId = a.actividadId === filtroRadar.id;
-              const coincideEstado = a.estado === 'inscrito';
-              const coincideDia = a.dias?.toLowerCase().includes(filtroRadar.dia.toLowerCase());
-              const listaCursos = filtroRadar.cursos; // Ya lo pasamos en el setFiltroRadar
-              const coincideCurso = listaCursos ? listaCursos.includes(a.curso) : true;
-              return coincideId && coincideEstado && coincideDia && coincideCurso;
-            });
-            imprimirListaAsistencia(listaParaImprimir, filtroRadar);
-          }}
-          className="bg-emerald-500 hover:bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-[10px] font-black uppercase flex items-center gap-1.5 shadow-lg transition-all active:scale-95"
-        >
-          <span>🖨️</span> Imprimir
-        </button>
+{/* 📋 LISTA DETALLADA DE ALUMNOS (Aparece abajo al pulsar un número) */}
+{filtroRadar && (
+      <div className="bg-blue-600 rounded-2xl shadow-lg p-4 text-white animate-in slide-in-from-bottom-4 duration-300">
+        <div className="flex justify-between items-center mb-4">
+          <div>
+            <h4 className="font-black text-sm uppercase tracking-tighter">Lista de Asistencia</h4>
+            <p className="text-[10px] opacity-80 font-bold uppercase">{filtroRadar.nombre} — {filtroRadar.dia}</p>
+          </div>
+          
+          {/* 🚩 CONTENEDOR DE BOTONES */}
+          <div className="flex items-center gap-2">
+            <button 
+              onClick={() => {
+                // Filtramos los alumnos exactamente igual que en el Radar dinámico
+                const hoy = new Date();
+                const proximo = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 1);
+                const mesSigISO = `${proximo.getFullYear()}-${String(proximo.getMonth() + 1).padStart(2, '0')}`;
 
-        <button 
-          onClick={() => setFiltroRadar(null)}
-          className="bg-white/20 hover:bg-white/40 p-2 rounded-full transition"
-        >
-          ✕
-        </button>
-      </div>
-    </div>
+                const listaParaImprimir = alumnos.filter(a => {
+                  const coincideId = a.actividadId === filtroRadar.id;
+                  const coincideDia = a.dias?.toLowerCase().includes(filtroRadar.dia.toLowerCase());
+                  const coincideCurso = filtroRadar.cursos ? filtroRadar.cursos.includes(a.curso) : true;
+                  const fechaAlu = (a.fechaAlta || a.fechaInscripcion || "").toString();
 
-    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
-  {alumnos
-    .filter(a => {
-      const coincideId = a.actividadId === filtroRadar.id;
-      // 🚩 CAMBIO AQUÍ: Solo dejamos 'inscrito' para que el radar sea real
-      const coincideEstado = a.estado === 'inscrito'; 
-      const coincideDia = a.dias?.toLowerCase().includes(filtroRadar.dia.toLowerCase());
-      const coincideCurso = filtroRadar.cursos ? filtroRadar.cursos.includes(a.curso) : true;
-      return coincideId && coincideEstado && coincideDia && coincideCurso;
-    })
-    .map(a => (
-      <div 
-        key={a.id} 
-        onClick={() => { setFiltroRadar(null); abrirFicha(a); }}
-        className="bg-white/10 hover:bg-white/20 border border-white/10 p-2 rounded-lg cursor-pointer flex justify-between items-center transition"
-      >
-        <div className="overflow-hidden">
-          <p className="text-xs font-bold truncate">{a.nombre}</p>
-          <p className="text-[9px] opacity-60 italic">{a.curso}</p>
+                  if (!coincideId || !coincideDia || !coincideCurso) return false;
+
+                  if (filtroRadar.mesVista === 'actual') {
+                    const esAltaFutura = fechaAlu.includes(mesSigISO);
+                    return (a.estado === 'inscrito' || a.estado === 'baja_pendiente') && !esAltaFutura;
+                  } else {
+                    if (a.estado === 'baja_pendiente') return false;
+                    return a.estado === 'inscrito' || fechaAlu.includes(mesSigISO);
+                  }
+                });
+                imprimirListaAsistencia(listaParaImprimir, filtroRadar);
+              }}
+              className="bg-emerald-500 hover:bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-[10px] font-black uppercase flex items-center gap-1.5 shadow-lg transition-all active:scale-95"
+            >
+              <span>🖨️</span> Imprimir
+            </button>
+
+            <button 
+              onClick={() => setFiltroRadar(null)}
+              className="bg-white/20 hover:bg-white/40 p-2 rounded-full transition"
+            >
+              ✕
+            </button>
+          </div>
         </div>
-        <span className="text-[10px] bg-white/20 px-1.5 py-0.5 rounded font-mono">ficha →</span>
-      </div>
-    ))}
-</div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+          {alumnos
+            .filter(a => {
+              const coincideId = a.actividadId === filtroRadar.id;
+              const coincideDia = a.dias?.toLowerCase().includes(filtroRadar.dia.toLowerCase());
+              const coincideCurso = filtroRadar.cursos ? filtroRadar.cursos.includes(a.curso) : true;
+              
+              if (!coincideId || !coincideDia || !coincideCurso) return false;
+
+              // Lógica dinámica de meses
+              const hoy = new Date();
+              const proximo = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 1);
+              const mesSigISO = `${proximo.getFullYear()}-${String(proximo.getMonth() + 1).padStart(2, '0')}`;
+              const fechaAlu = (a.fechaAlta || a.fechaInscripcion || "").toString();
+
+              if (filtroRadar.mesVista === 'actual') {
+                // Filtro para el mes en curso: Incluye inscritos/bajas pero quita altas futuras
+                const esAltaFutura = fechaAlu.includes(mesSigISO);
+                return (a.estado === 'inscrito' || a.estado === 'baja_pendiente') && !esAltaFutura;
+              } else {
+                // Filtro para el mes siguiente: Quita bajas y suma altas nuevas
+                if (a.estado === 'baja_pendiente') return false;
+                return a.estado === 'inscrito' || fechaAlu.includes(mesSigISO);
+              }
+            })
+            .map(a => (
+              <div 
+                key={a.id} 
+                onClick={() => { setFiltroRadar(null); abrirFicha(a); }}
+                className="bg-white/10 hover:bg-white/20 border border-white/10 p-2 rounded-lg cursor-pointer flex justify-between items-center transition relative"
+              >
+                <div className="overflow-hidden">
+                  <p className="text-xs font-bold truncate">{a.nombre}</p>
+                  <p className="text-[9px] opacity-60 italic">{a.curso}</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  {a.estado === 'baja_pendiente' && (
+                    <span className="bg-orange-500 text-[7px] px-1.5 py-0.5 rounded font-black uppercase">Baja</span>
+                  )}
+                  <span className="text-[10px] bg-white/20 px-1.5 py-0.5 rounded font-mono">ficha →</span>
+                </div>
+              </div>
+            ))}
+        </div>
       </div>
     )}
   </div>
