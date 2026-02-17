@@ -703,7 +703,7 @@ const LandingPage = ({ setView }) => {
           },
           {
             q: "¿Por dónde entran y salen los alumnos a partir de las 18:30?",
-            a: "El acceso principal al colegio se cierra. La entrada y salida se realiza exclusivamente por la puerta que está al final deñ parking del colegio. Pueden encontrar un mapa en la parte superior de esta sección."
+            a: "El acceso principal al colegio se cierra. La entrada y salida se realiza exclusivamente por la puerta que está al final del parking del colegio. Pueden encontrar un mapa en la parte superior de esta sección."
           },
           {
             q: "¿Cómo es la recogida de los alumnos de Infantil?",
@@ -1083,7 +1083,7 @@ const AdminDashboard = ({ userRole, logout, userEmail }) => {
 
   // ESTADO PARA LA FICHA (ALUMNO SELECCIONADO)
   const [alumnoSeleccionado, setAlumnoSeleccionado] = useState(null);
-
+  const [vistaMes, setVistaMes] = useState('actual');
   const soySuperAdmin = userRole === 'admin'; 
 // --- 1.5 FUNCIONES DE ACCIÓN ---
 const confirmarInscripcion = async (alumnoId) => {
@@ -1165,6 +1165,53 @@ const confirmarInscripcion = async (alumnoId) => {
     } catch (error) {
       console.error("Error al validar:", error);
       alert("No se pudo validar la plaza.");
+    }
+  };
+  // 🎯 FUNCIÓN PARA ACEPTAR DESDE PRUEBAS DE NIVEL (CON AFORO)
+  const aceptarAlumnoDirecto = async (e, alumno) => {
+    if (e && e.stopPropagation) e.stopPropagation();
+
+    const grupoDestino = alumno.actividad || 'Sin asignar';
+    
+    if (grupoDestino === 'Sin asignar') {
+        return alert("⚠️ El alumno no tiene un grupo asignado.");
+    }
+
+    if (!confirm(`¿Inscribir a ${alumno.nombre} en ${grupoDestino} y descontar plaza del aforo?`)) return;
+
+    try {
+      const alumnoRef = doc(db, 'students', alumno.id);
+      
+      // 1. Actualizamos al alumno para que desaparezca de la lista
+      await updateDoc(alumnoRef, {
+        estado: 'inscrito',
+        grupo: grupoDestino,
+        fechaValidacion: new Date().toISOString(),
+        revisadoAdmin: true,
+        validadoAdmin: true // 🚩 Esto es vital para el filtro que vimos antes
+      });
+
+      // 2. ACTUALIZAMOS EL AFORO (Suponiendo que tu colección se llama 'clases' o 'grupos')
+      // Buscamos el documento del grupo que coincide con alumno.actividad
+      // Si tu colección tiene otro nombre, cámbialo aquí:
+      const grupoRef = doc(db, 'clases', grupoDestino); 
+      
+      try {
+        await updateDoc(grupoRef, {
+          // Restamos 1 a las plazas disponibles (si usas un campo llamado 'plazas' o 'cupo')
+          // increment(-1) es la forma segura de Firebase para restar
+          cupo: increment(-1) 
+        });
+        console.log("Plaza descontada del aforo correctamente");
+      } catch (errAforo) {
+        console.warn("No se pudo descontar la plaza automáticamente. Verifica el nombre de la colección.");
+      }
+
+      alert(`✅ ${alumno.nombre} aceptado en ${grupoDestino} y aforo actualizado.`);
+      
+    } catch (error) {
+      console.error("Error al aceptar:", error);
+      alert("No se pudo procesar la inscripción.");
     }
   };
   
@@ -1544,24 +1591,24 @@ const listadoGlobal = alumnos.filter(a => {
   return coincideNombre && coincideGrupo && esAlumnoReal;
 });
 
-// --- 2. LISTADO PRUEBAS (CORREGIDO PARA WATERPOLO) ---
+// --- 2. LISTADO PRUEBAS (FILTRO BLINDADO) ---
 const listadoPruebas = alumnos.filter(a => {
+  // REGLA 1: Si ya está aceptado o revisado, FUERA (esto es lo que hace que desaparezcan al dar al botón)
+  if (a.estado === 'inscrito' || a.revisadoAdmin === true || a.validadoAdmin === true) return false;
+
+  // REGLA 2: Si es una baja o antiguo, FUERA (esto elimina a los fantasmas)
   if (a.estado === 'baja_pendiente' || a.estado === 'baja_finalizada' || a.esAntiguoAlumno) return false;
-  
-  // DETECTAMOS QUIÉNES NO DEBEN ESTAR AQUÍ
-  const esInfantil = (a.curso || '').toUpperCase().includes('INFANTIL') || (a.actividad || '').toUpperCase().includes('INFANTIL');
-  const esAdulto = (a.curso || '').toUpperCase().includes('ADULTO') || (a.actividad || '').toUpperCase().includes('ADULTO');
-  
-  // NUEVO: Detectar si es Waterpolo (por el nombre de la actividad)
-  const esWaterpolo = (a.actividad || '').toUpperCase().includes('WATERPOLO');
-  
-  // REGLA: Si es Infantil, Adulto o Waterpolo, FUERA de esta lista (ya salen en el Global)
-  if (esInfantil || esAdulto || esWaterpolo) return false;
 
-  if (a.estado === 'prueba_reservada') return true;
+  // REGLA 3: Exclusiones por categoría (Waterpolo, Infantil, Adultos)
+  const act = (a.actividad || '').toUpperCase();
+  const cur = (a.curso || '').toUpperCase();
+  if (act.includes('INFANTIL') || cur.includes('INFANTIL') || 
+      act.includes('ADULTO') || cur.includes('ADULTO') || 
+      act.includes('WATERPOLO')) return false;
 
-  // El resto de alumnos inscritos que no han sido validados manualmente
-  return (a.estado === 'inscrito' && !a.validadoAdmin);
+  // REGLA 4: Solo entran los que están esperando prueba
+  // Forzamos que el estado sea 'prueba_reservada' para que no entren fichas viejas
+  return a.estado === 'prueba_reservada';
 });
 
 // 2. CORRECCIÓN BAJAS: Añadimos 'baja_finalizada' para que no desaparezcan
@@ -1663,11 +1710,26 @@ const listadoBajas = alumnos.filter(a => a.estado === 'baja_pendiente' || a.esta
   <div className="space-y-4 animate-fade-in">
     <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
       <div className="p-4 bg-slate-800 text-white flex justify-between items-center">
-        <h3 className="text-xs font-black uppercase tracking-widest flex items-center gap-2">
-          <span>🏊‍♂️</span> Control de Aforo Diario
-        </h3>
-        <span className="text-[10px] bg-emerald-500 text-white px-2 py-0.5 rounded font-bold uppercase">En tiempo real</span>
-      </div>
+  <h3 className="text-xs font-black uppercase tracking-widest flex items-center gap-2">
+    <span>🏊‍♂️</span> Control de Aforo Diario
+  </h3>
+  
+  {/* Selector de Mes */}
+  <div className="flex bg-slate-700 p-1 rounded-lg">
+    <button 
+      onClick={() => setVistaMes('actual')}
+      className={`px-3 py-1 rounded text-[9px] font-black uppercase transition-all ${vistaMes === 'actual' ? 'bg-emerald-500 text-white' : 'text-slate-400'}`}
+    >
+      {new Date().toLocaleString('es-ES', { month: 'long' })}
+    </button>
+    <button 
+      onClick={() => setVistaMes('proximo')}
+      className={`px-3 py-1 rounded text-[9px] font-black uppercase transition-all ${vistaMes === 'proximo' ? 'bg-blue-500 text-white' : 'text-slate-400'}`}
+    >
+      {new Date(new Date().setMonth(new Date().getMonth() + 1)).toLocaleString('es-ES', { month: 'long' })}
+    </button>
+  </div>
+</div>
       
       <div className="overflow-x-auto">
         <table className="w-full text-left">
@@ -1698,34 +1760,78 @@ const listadoBajas = alumnos.filter(a => a.estado === 'baja_pendiente' || a.esta
                   <p className="text-[9px] text-gray-400 font-bold uppercase mt-0.5">Límite: {g.m}</p>
                 </td>
                 {['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'].map(dia => {
-                  const ocupados = alumnos.filter(a => {
-                    const coincideId = a.actividadId === g.id;
-                    const coincideEstado = a.estado === 'inscrito';
-                    const coincideDia = a.dias?.toLowerCase().includes(dia.toLowerCase());
-                    const listaCursos = g.cursosRelacionados || g.cursos;
-                    const coincideCurso = listaCursos ? listaCursos.includes(a.curso) : true;
-                    return coincideId && coincideEstado && coincideDia && coincideCurso;
-                  }).length;
-                  
-                  const critico = ocupados >= g.m;
-
-                  return (
-                    <td key={dia} className="p-2">
-                      <div 
-                        // 🚩 ACCIÓN AL CLICAR: Guarda el filtro para mostrar la lista
-                        onClick={() => ocupados > 0 && setFiltroRadar({ id: g.id, nombre: g.n, dia: dia, cursos: g.cursosRelacionados || g.cursos })}
-                        className={`h-12 rounded-xl flex flex-col items-center justify-center border-2 transition-all cursor-pointer hover:shadow-inner active:scale-95 ${
-                          ocupados === 0 ? 'border-dashed border-gray-100 text-gray-200' :
-                          critico ? 'bg-red-500 border-red-600 text-white font-black shadow-md' :
-                          ocupados > (g.m * 0.7) ? 'bg-orange-50 border-orange-200 text-orange-600' : 
-                          'bg-emerald-50 border-emerald-100 text-emerald-600 font-bold'
-                        }`}
-                      >
-                        <span className="text-sm leading-none">{ocupados > 0 ? ocupados : '-'}</span>
-                        {ocupados > 0 && <span className="text-[8px] mt-1 opacity-60">/{g.m}</span>}
-                      </div>
-                    </td>
-                  );
+    const ocupados = alumnos.filter(a => {
+      const coincideId = a.actividadId === g.id;
+      const coincideDia = a.dias?.toLowerCase().includes(dia.toLowerCase());
+      const listaCursos = g.cursosRelacionados || g.cursos;
+      const coincideCurso = listaCursos ? listaCursos.includes(a.curso) : true;
+      
+      if (!coincideId || !coincideDia || !coincideCurso) return false;
+    
+      // --- LÓGICA TEMPORAL 100% DINÁMICA ---
+      const hoy = new Date();
+      const proximo = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 1);
+      const mesSiguienteISO = `${proximo.getFullYear()}-${String(proximo.getMonth() + 1).padStart(2, '0')}`;
+      
+      // Limpiamos la fecha del alumno para comparar
+      const fechaAlumno = (a.fechaAlta || a.fechaInscripcion || "").toString();
+      const esAltaMesSiguiente = fechaAlumno.includes(mesSiguienteISO);
+    
+      if (vistaMes === 'actual') {
+        // VISTA ACTUAL: 
+        // 1. Solo mostramos si está inscrito o tiene baja pendiente
+        // 2. EXCLUIMOS a los que tienen fecha de alta del mes que viene (altas futuras)
+        return (a.estado === 'inscrito' || a.estado === 'baja_pendiente') && !esAltaMesSiguiente;
+      } else {
+        // PREVISIÓN MES SIGUIENTE:
+        const esBajaSolicitada = a.estado === 'baja_pendiente';
+        
+        // Si tiene baja pendiente, para el mes que viene ya no ocupa plaza (false)
+        if (esBajaSolicitada) return false; 
+        // Ocupan plaza los inscritos de siempre + los que empiezan nuevos el mes que viene
+        return a.estado === 'inscrito' || esAltaMesSiguiente;
+      }
+    }).length;
+    
+    // 🚩 DETECTAR SI HAY BAJAS (Para el color naranja)
+    // Solo se activa en la vista actual para avisarte de huecos que se van a liberar
+    const tieneBajasProximas = alumnos.some(a => {
+      const coincideId = a.actividadId === g.id;
+      const coincideDia = a.dias?.toLowerCase().includes(dia.toLowerCase());
+      const listaCursos = g.cursosRelacionados || g.cursos;
+      const coincideCurso = listaCursos ? listaCursos.includes(a.curso) : true;
+      return coincideId && coincideDia && coincideCurso && a.estado === 'baja_pendiente';
+    });
+                
+    const critico = ocupados >= g.m;
+    
+    return (
+    <td key={dia} className="p-2">
+      <div 
+        onClick={() => ocupados > 0 && setFiltroRadar({ 
+          id: g.id, 
+          nombre: g.n, 
+          dia: dia, 
+          cursos: g.cursosRelacionados || g.cursos,
+          mesVista: vistaMes // Pasamos el mes para que el radar sepa qué nombres filtrar
+        })}
+        className={`h-12 rounded-xl flex flex-col items-center justify-center border-2 transition-all cursor-pointer hover:shadow-inner active:scale-95 ${
+          ocupados === 0 ? 'border-dashed border-gray-100 text-gray-200' :
+          // Prioridad 1: Naranja si hay bajas próximas (solo en vista actual)
+          (vistaMes === 'actual' && tieneBajasProximas) ? 'bg-orange-500 border-orange-600 text-white font-black shadow-md' :
+          // Prioridad 2: Rojo si está lleno
+          critico ? 'bg-red-500 border-red-600 text-white font-black shadow-md' :
+          // Prioridad 3: Ámbar si está casi lleno (>70%)
+          ocupados > (g.m * 0.7) ? 'bg-amber-50 border-amber-200 text-amber-600' : 
+          // Prioridad 4: Verde (Hueco disponible)
+          'bg-emerald-50 border-emerald-100 text-emerald-600 font-bold'
+        }`}
+      >
+        <span className="text-sm leading-none">{ocupados > 0 ? ocupados : '-'}</span>
+        {ocupados > 0 && <span className="text-[8px] mt-1 opacity-60">/{g.m}</span>}
+      </div>
+    </td>
+    );
                 })}
               </tr>
             ))}
@@ -1849,23 +1955,29 @@ const listadoBajas = alumnos.filter(a => a.estado === 'baja_pendiente' || a.esta
                           <div className="font-bold text-gray-800">{a.actividad || '-'}</div>
                           {a.dias && <div className="text-[10px] text-gray-500 mt-1 font-medium">📅 {a.dias} | ⏰ {a.horario}</div>}
                           
-{/* FECHA ADAPTADA (BLINDADA CONTRA FORMATOS ISO) */}
+{/* FECHA ADAPTADA (BLINDADA CONTRA CRASHES) */}
 <div className="text-[10px] mt-1">
-  {a.estado === 'lista_espera' ? (
-      <span className="text-amber-600 font-bold italic">
-        Solicitud: {a.fechaAlta ? a.fechaAlta.split('T')[0].split('-').reverse().join('/') : 'Hoy'}
-      </span>
-  ) : a.fechaAlta ? (
-      <span className="text-green-600 font-bold italic">
-        {/* 🚩 PASO 1: .split('T')[0] limpia las horas y la "T" si existen */}
-        {/* 🚩 PASO 2: .split('-').reverse().join('/') pone el formato DD/MM/AAAA */}
-        Alta: {a.fechaAlta.split('T')[0].split('-').reverse().join('/')}
-      </span> 
-  ) : (
-      <span className="text-gray-400">Sin fecha de alta</span>
-  )}
-</div>
-                        </td>
+  {(() => {
+    // 🚩 Intentamos obtener una fecha limpia sin romper el código
+    let fechaLimpia = '---';
+    try {
+      const f = a.fechaAlta || a.fechaInscripcion;
+      if (f) {
+        // Si es texto (ISO), cortamos la T. Si es objeto, convertimos a ISO y cortamos.
+        const iso = typeof f === 'string' ? f : (f.toDate ? f.toDate() : new Date(f)).toISOString();
+        fechaLimpia = iso.split('T')[0].split('-').reverse().join('/');
+      }
+    } catch (e) { fechaLimpia = 'Error fecha'; }
+
+    if (a.estado === 'lista_espera') {
+      return <span className="text-amber-600 font-bold italic">Solicitud: {fechaLimpia}</span>;
+    } else if (a.fechaAlta || a.fechaInscripcion) {
+      return <span className="text-green-600 font-bold italic">Alta: {fechaLimpia}</span>;
+    } else {
+      return <span className="text-gray-400">Sin fecha de alta</span>;
+    }
+  })()}
+</div>                        </td>
                         <td className="p-3 text-right">
                           <div className="flex items-center justify-end gap-2" onClick={(e) => e.stopPropagation()}>
                             
@@ -2007,14 +2119,15 @@ const listadoBajas = alumnos.filter(a => a.estado === 'baja_pendiente' || a.esta
     )}
 </td>
 
-                        <td className="p-3 text-right">
-                            <button 
-                                onClick={(e) => aceptarAlumno(e, a)}
-                                className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg font-bold text-xs shadow-sm transition-transform active:scale-95"
-                            >
-                                ACEPTAR
-                            </button>
-                        </td>
+<td className="p-3 text-right">
+    <button 
+        /* 🚩 CAMBIAMOS EL NOMBRE AQUÍ PARA QUE COINCIDA CON EL PASO 1 */
+        onClick={(e) => aceptarAlumnoDirecto(e, a)}
+        className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg font-bold text-xs shadow-sm transition-transform active:scale-95"
+    >
+        ACEPTAR
+    </button>
+</td>
                     </tr>
                 ))}
                 {listadoPruebas.length === 0 && (
@@ -2134,29 +2247,51 @@ function FichaAlumno({ alumno, cerrar, userRole }) {
         {/* CONTENIDO */}
         <div className="p-6 space-y-6 text-gray-800">
           
-          {/* 1. FECHAS (ALTA/BAJA) */}
-          <div className="bg-gray-100 p-4 rounded border border-gray-300 grid grid-cols-2 gap-4 shadow-inner">
-              <div>
-                  <label className="block text-xs font-bold text-gray-500 uppercase mb-1">📅 Fecha de Alta</label>
-                  <input 
-                    type="date" 
-                    defaultValue={alumno.fechaAlta ? new Date(alumno.fechaAlta).toISOString().split('T')[0] : ''}
-                    disabled={userRole !== 'admin'}
-                    onChange={(e) => cambiarFecha('fechaAlta', e)}
-                    className={`w-full p-2 rounded border font-bold ${userRole === 'admin' ? 'bg-white border-blue-400' : 'bg-gray-200'}`}
-                  />
-              </div>
-              <div>
-                  <label className="block text-xs font-bold text-gray-500 uppercase mb-1">🏁 Fecha de Baja</label>
-                  <input 
-                    type="date" 
-                    defaultValue={alumno.fechaBaja ? new Date(alumno.fechaBaja).toISOString().split('T')[0] : ''}
-                    disabled={userRole !== 'admin'}
-                    onChange={(e) => cambiarFecha('fechaBaja', e)}
-                    className={`w-full p-2 rounded border font-bold ${userRole === 'admin' ? 'bg-white border-red-400' : 'bg-gray-200'}`}
-                  />
-              </div>
-          </div>
+{/* 1. FECHAS (REPARACIÓN DE EMERGENCIA) */}
+<div className="bg-gray-100 p-4 rounded border border-gray-300 grid grid-cols-2 gap-4 shadow-inner">
+    <div>
+        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">📅 Fecha de Alta</label>
+        <input 
+          type="date" 
+          defaultValue={(() => {
+            const f = alumno.fechaAlta || alumno.fechaInscripcion;
+            if (!f) return "";
+            // Si es un objeto de Firebase (Timestamp), usamos .toDate()
+            const dateObj = f.toDate ? f.toDate() : new Date(f);
+            return !isNaN(dateObj) ? dateObj.toISOString().split('T')[0] : "";
+          })()}
+          disabled={userRole !== 'admin'}
+          onChange={(e) => cambiarFecha('fechaAlta', e)}
+          className={`w-full p-2 rounded border font-bold ${userRole === 'admin' ? 'bg-white border-blue-400' : 'bg-gray-200'}`}
+        />
+    </div>
+    <div>
+        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">
+          🏁 Fecha de Baja {alumno.estado === 'baja_pendiente' && "⚠️"}
+        </label>
+        <input 
+          type="date" 
+          defaultValue={(() => {
+            const f = alumno.fechaBaja || alumno.fechaBajaEfectiva;
+            if (!f) return "";
+            const dateObj = f.toDate ? f.toDate() : new Date(f);
+            return !isNaN(dateObj) ? dateObj.toISOString().split('T')[0] : "";
+          })()}
+          disabled={userRole !== 'admin'}
+          onChange={(e) => cambiarFecha('fechaBaja', e)}
+          className={`w-full p-2 rounded border font-bold ${
+            alumno.estado === 'baja_pendiente' 
+              ? 'bg-red-50 border-red-500 text-red-700' 
+              : userRole === 'admin' ? 'bg-white border-red-400' : 'bg-gray-200'
+          }`}
+        />
+        {alumno.estado === 'baja_pendiente' && (
+          <p className="text-[9px] text-red-600 font-black mt-1 uppercase leading-none">
+            BAJA SOLICITADA POR EL USUARIO
+          </p>
+        )}
+    </div>
+</div>
 
           {/* 2. EL TELÉFONO (CUADRO VERDE - BUSCA EN TODAS PARTES) */}
           <div className="bg-green-600 p-4 rounded-lg shadow-md flex justify-between items-center text-white">
@@ -2951,12 +3086,13 @@ const inscribir = async (act, op) => {
       return; 
     }
 
-    // CASO B: INSCRIPCIÓN DIRECTA
-    // 🚩 3. VOLVEMOS A MIRAR EL AFORO JUSTO ANTES DE GUARDAR
+// CASO B: INSCRIPCIÓN DIRECTA (VIP, INFANTIL O EXENTO)
+    // 🚩 3. DETERMINAR ESTADO Y VERIFICAR AFORO
     const infoPlaza = obtenerEstadoPlaza(act.id, op.dias, d.curso);
     
+    // Forzamos el estado a 'inscrito' si es VIP, Infantil o ya tiene nivel
+    let estadoFinalReal = (tienePaseVIP || esInfantil || d.citaNivel || d.esAntiguoAlumno) ? 'inscrito' : (estadoFinal || 'inscrito');
     let mensajeConfirmacion = `¿Confirmar inscripción definitiva en ${act.nombre}?`;
-    let estadoFinalReal = estadoFinal; // Mantenemos si era inscrito o requiere_prueba
 
     if (infoPlaza.lleno) {
         mensajeConfirmacion = `⚠️ Este grupo está completo actualmente.\n\n¿Quieres apuntarte a la LISTA DE ESPERA para ${op.dias}? Te avisaremos si queda una vacante.`;
@@ -2965,57 +3101,58 @@ const inscribir = async (act, op) => {
 
     if (!confirm(mensajeConfirmacion)) return;
     
-// 4. GUARDADO FINAL
-await updateDoc(alumnoRef, { 
-  ...datosComunes,
-  estado: estadoFinalReal 
-});
+// 4. GUARDADO FINAL (SINCRO TOTAL CON PANEL ADMIN)
+const grupoFormateado = `${op.dias} ${op.horario}`;
+    
+// 🚩 IMPORTANTE: Forzamos el actividadId para que coincida con tu lógica de Admin
+let idLimpio = act.id;
+if (act.nombre.toLowerCase().includes('16:15')) idLimpio = 'primaria_1615';
+// ... podrías añadir más si ves que otros fallan
 
-// 📧 5. DISPARADOR DEL EMAIL (Añadido aquí)
-// Usamos los datos que ya tenemos en la función para que el correo sea instantáneo
-if (user.email) {
-  const esEspera = estadoFinalReal === 'lista_espera';
-  
-  await addDoc(collection(db, 'mail'), {
-    to: user.email,
-    message: {
-      subject: esEspera 
-        ? `⏳ Lista de Espera: ${d.nombre} - ${act.nombre}`
-        : `✅ Inscripción recibida: ${d.nombre} - ${act.nombre}`,
-      html: `
-        <div style="font-family: sans-serif; line-height: 1.6; color: #333;">
-          <h2 style="color: ${esEspera ? '#d97706' : '#059669'};">
-            ${esEspera ? 'Solicitud en Lista de Espera' : '¡Inscripción recibida correctamente!'}
-          </h2>
-          <p>Hola, se ha procesado la solicitud para <strong>${d.nombre}</strong>.</p>
-          
-          <div style="background: #f3f4f6; padding: 15px; border-radius: 10px; border: 1px solid #e5e7eb;">
-            <p style="margin: 5px 0;"><strong>🏊‍♂️ Actividad:</strong> ${act.nombre}</p>
-            <p style="margin: 5px 0;"><strong>🗓️ Días:</strong> ${op.dias}</p>
-            <p style="margin: 5px 0;"><strong>⏰ Horario:</strong> ${op.horario}</p>
-            <p style="margin: 5px 0;"><strong>📊 Estado:</strong> ${esEspera ? 'LISTA DE ESPERA' : 'INSCRITO'}</p>
-          </div>
+try {
+    await updateDoc(alumnoRef, { 
+      ...datosComunes,
+      estado: estadoFinalReal,
+      grupo: grupoFormateado, 
+      horario: op.horario,
+      actividad: act.nombre,
+      actividadId: idLimpio, // Usamos el ID que el Admin entiende
+      dias: op.dias,         // Guardamos 'Lunes y Miércoles' tal cual lo busca el Admin
+      revisadoAdmin: true,
+      validadoAdmin: true,
+      fechaInscripcion: new Date().toISOString()
+    });
 
-          ${esEspera 
-            ? `<p style="color: #b45309; font-weight: bold;">Actualmente no hay plazas libres para este grupo. Te avisaremos en cuanto quede una vacante libre por orden de llegada.</p>`
-            : `<p>Recuerda traer todo el equipo necesario (gorro, gafas, bañador, chanclas y toalla). ¡Te esperamos!</p>`
-          }
-        </div>
-      `
+    // 🚩 5. ACTUALIZAR EL MAPA DE CONTEO
+    if (estadoFinalReal === 'inscrito') {
+        try {
+            // Generamos el ID del grupo EXACTO que tienes en la colección 'clases'
+            // Si el contador no baja, revisa en Firestore si el documento se llama así:
+            const idGrupoParaConteo = `${idLimpio}_${op.dias.replace(/ /g, '_')}`; 
+            
+            await updateDoc(doc(db, 'clases', idGrupoParaConteo), {
+                cupo: increment(-1) 
+            });
+        } catch (e) {
+            console.warn("Fallo en el contador. Revisa el ID:", idLimpio);
+        }
     }
-  });
+
+    // 6. FINALIZACIÓN
+    await refresh(user.uid); 
+    close();
+
+    setTimeout(() => {
+      alert(estadoFinalReal === 'lista_espera' 
+          ? "✅ Te has apuntado a la lista de espera correctamente. Revisa tu email." 
+          : "✅ ¡Inscripción realizada con éxito! Revisa tu email."
+      );
+    }, 100);
+
+} catch (error) {
+    console.error("Error en el guardado final:", error);
+    alert("Hubo un error al guardar los datos.");
 }
-
-// 6. FINALIZACIÓN
-await refresh(user.uid); 
-close();
-
-setTimeout(() => {
-  alert(estadoFinalReal === 'lista_espera' 
-      ? "✅ Te has apuntado a la lista de espera correctamente. Revisa tu email." 
-      : "✅ ¡Inscripción realizada con éxito! Revisa tu email."
-  );
-}, 100);
 };
 
 return (
@@ -3371,36 +3508,45 @@ const PantallaPruebaNivel = ({ alumno, close, onSuccess, user }) => {
       setLoading(false);
     }
 };
-  // 🚀 ATAJO PARA ANTIGUOS ALUMNOS (PASE VIP)
-  // Comprobamos si marcó 'si' en natacionPasado (o esAntiguoAlumno, según tu variable)
-  if (alumno.natacionPasado === 'si' || alumno.esAntiguoAlumno === true) {
-    return (
-      <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-[999] backdrop-blur-sm">
-        <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-8 text-center animate-in zoom-in">
-          <div className="w-20 h-20 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-4 text-4xl">
-            ✅
-          </div>
-          <h3 className="text-2xl font-black text-blue-900 mb-2">¡Pase Directo!</h3>
-          <p className="text-gray-600 mb-6 font-medium">
-            Como <strong>{alumno.nombre}</strong> ya estuvo en la extraescolar de natación el curso pasado, no necesita realizar la prueba de nivel.
-          </p>
-          <button 
-            onClick={async () => {
-              // Marcamos como exento en la base de datos por si acaso
-              await updateDoc(doc(db, 'students', alumno.id), {
-                citaNivel: 'EXENTO - ANTIGUO ALUMNO'
-              });
-              if (onSuccess) onSuccess(); // Esto abre el modal de inscripción automáticamente
-              close();
-            }}
-            className="w-full bg-green-600 text-white p-4 rounded-2xl font-black shadow-lg hover:bg-green-700 transition transform active:scale-95"
-          >
-            ELEGIR GRUPO Y HORARIO
-          </button>
+// 🚀 ATAJO PARA ANTIGUOS ALUMNOS (PASE VIP) - CORREGIDO
+if (alumno.natacionPasado === 'si' || alumno.esAntiguoAlumno === true) {
+  return (
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-[999] backdrop-blur-sm">
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-8 text-center animate-in zoom-in">
+        <div className="w-20 h-20 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-4 text-4xl">
+          ✅
         </div>
+        <h3 className="text-2xl font-black text-blue-900 mb-2">¡Pase Directo!</h3>
+        <p className="text-gray-600 mb-6 font-medium">
+          Como <strong>{alumno.nombre}</strong> ya estuvo el curso pasado, puede elegir grupo directamente.
+        </p>
+        <button 
+  onClick={async () => {
+    try {
+      // 1. Antes de pasar al siguiente paso, desbloqueamos al alumno en la sombra
+      const alumnoRef = doc(db, 'students', alumno.id);
+      await updateDoc(alumnoRef, {
+        estado: 'inscrito',     // Lo marcamos como oficial ya mismo
+        revisadoAdmin: true,    // Para que no salga como "pendiente"
+        validadoAdmin: true,
+        citaNivel: 'EXENTO - ANTIGUO ALUMNO' 
+      });
+
+      // 2. Ahora sí, le dejamos elegir el grupo
+      if (onSuccess) onSuccess(); 
+      close();
+    } catch (err) {
+      console.error("Error al activar pase VIP:", err);
+    }
+  }}
+  className="w-full bg-green-600 text-white p-4 rounded-2xl font-black shadow-lg hover:bg-green-700 transition transform active:scale-95"
+>
+  ELEGIR GRUPO Y HORARIO
+</button>
       </div>
-    );
-  }
+    </div>
+  );
+}
 
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-[999] backdrop-blur-sm">
