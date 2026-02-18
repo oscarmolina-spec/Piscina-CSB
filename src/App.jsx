@@ -2850,8 +2850,16 @@ if (hijo.estado === 'inscrito') {
               <div className="flex justify-between items-start mb-2 pl-3">
                 <div className="flex-1">
                   <h3 className="font-bold text-xl text-gray-800 flex items-center gap-2">
-                    {hijo.nombre} <button onClick={() => setAlumnoEditar(hijo)} className="text-gray-400 hover:text-blue-600 bg-gray-50 p-1.5 rounded-full">✏️</button>
-                  </h3>
+                  {hijo.nombre} 
+{(!hijo.actividad && hijo.estado === 'sin_inscripcion') && (
+  <button 
+    onClick={() => setAlumnoEditar(hijo)} 
+    className="text-gray-400 hover:text-blue-600 bg-gray-50 p-1.5 rounded-full transition-all"
+    title="Editar datos básicos"
+  >
+    ✏️
+  </button>
+)}                  </h3>
                   <p className="text-gray-500 text-sm font-medium">{hijo.curso} • {hijo.letra}</p>
                 </div>
                 <div className="flex flex-col items-end gap-2"><span className="px-2 py-1 rounded text-[10px] font-extrabold uppercase bg-gray-100 text-gray-500">{estadoTexto}</span></div>
@@ -3061,7 +3069,12 @@ const FormularioHijo = ({ close, user, refresh, alumnoAEditar = null }) => {
   
 
   const validarYGuardarAlumno = async () => {
-    const telefonoLimpio = data?.telefono ? String(data.telefono).trim() : "";
+    // 🚩 BLOQUEO DE SEGURIDAD: Si ya tiene actividad, no se puede editar
+    if (alumnoAEditar && alumnoAEditar.actividad) {
+      alert("⛔ Este alumno ya tiene una actividad vinculada. Para cambios de curso o nombre, contacta con secretaría.");
+      close();
+      return;
+    }    const telefonoLimpio = data?.telefono ? String(data.telefono).trim() : "";
     
     // Validaciones
     if (!data.nombre || data.nombre.trim() === "") return alert("⚠️ El nombre es obligatorio.");
