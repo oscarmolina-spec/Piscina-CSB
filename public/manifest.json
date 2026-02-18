@@ -1,24 +1,16 @@
 {
     "short_name": "PiscinaApp",
     "name": "Gestión de Aforo Piscina",
-    "description": "Panel de control de alumnos y aforos",
     "start_url": "/",
     "display": "standalone",
     "orientation": "portrait",
     "theme_color": "#1e293b",
     "background_color": "#ffffff",
-    "scope": "/",
     "icons": [
       {
-        "src": "https://fonts.gstatic.com/s/i/short-term/release/googlestandardicons/pool/v11/512.png",
-        "sizes": "512x512",
-        "type": "image/png",
-        "purpose": "any"
-      },
-      {
-        "src": "https://fonts.gstatic.com/s/i/short-term/release/googlestandardicons/pool/v11/192.png",
-        "sizes": "192x192",
-        "type": "image/png",
+        "src": "/vite.svg",
+        "sizes": "192x192 512x512",
+        "type": "image/svg+xml",
         "purpose": "any"
       }
     ]
