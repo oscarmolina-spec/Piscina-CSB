@@ -1,26 +1,16 @@
-const CACHE_NAME = 'piscina-app-v1';
+const CACHE_NAME = 'piscina-v1';
 
-// Archivos que queremos que funcionen sin internet (los básicos)
-const ASSETS = [
-  '/',
-  '/index.html',
-  '/manifest.json'
-];
-
-// Instalar el Service Worker
 self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(ASSETS);
-    })
-  );
+  self.skipWaiting(); // Fuerza a que se active ya
 });
 
-// Responder desde la caché si no hay internet
+self.addEventListener('activate', (event) => {
+  event.waitUntil(clients.claim()); // Toma el control de la web de inmediato
+});
+
 self.addEventListener('fetch', (event) => {
+  // Estrategia: Intentar red, si falla, buscar en caché
   event.respondWith(
-    caches.match(event.request).then((response) => {
-      return response || fetch(event.request);
-    })
+    fetch(event.request).catch(() => caches.match(event.request))
   );
 });

@@ -8,9 +8,15 @@
     "background_color": "#ffffff",
     "icons": [
       {
-        "src": "/vite.svg",
-        "sizes": "192x192 512x512",
-        "type": "image/svg+xml",
+        "src": "https://www.gstatic.com/images/branding/product/2x/pwa_192dp.png",
+        "sizes": "192x192",
+        "type": "image/png",
+        "purpose": "any"
+      },
+      {
+        "src": "https://www.gstatic.com/images/branding/product/2x/pwa_512dp.png",
+        "sizes": "512x512",
+        "type": "image/png",
         "purpose": "any"
       }
     ]
