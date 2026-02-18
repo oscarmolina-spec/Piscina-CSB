@@ -3969,14 +3969,6 @@ export default function App() {
   const [userRole, setUserRole] = useState('user'); 
   const [view, setView] = useState('landing');
   const [misHijos, setMisHijos] = useState([]);
-  // 🚩 REGISTRO DE LA APP (PWA) - Pégalo aquí:
-  useEffect(() => {
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js')
-        .then(reg => console.log('🚀 App: Lista para instalar'))
-        .catch(err => console.error('❌ App: Error de registro', err));
-    }
-  }, []); // Solo se ejecuta una vez al cargar la web
 
   useEffect(() => {
     // Escuchamos cambios en la autenticación
@@ -4045,4 +4037,11 @@ export default function App() {
       {view === 'admin' && <AdminDashboard userRole={userRole} userEmail={user?.email} logout={() => signOut(auth)} />}
     </div>
   );
+}
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js')
+      .then(reg => console.log('🚀 Service Worker registrado con éxito'))
+      .catch(err => console.error('❌ Error al registrar el Service Worker', err));
+  });
 }
