@@ -1084,7 +1084,31 @@ const AdminDashboard = ({ userRole, logout, userEmail }) => {
   // ESTADO PARA LA FICHA (ALUMNO SELECCIONADO)
   const [alumnoSeleccionado, setAlumnoSeleccionado] = useState(null);
   const [vistaMes, setVistaMes] = useState('actual');
-  const soySuperAdmin = userRole === 'admin'; 
+  const [radarHueco, setRadarHueco] = useState(null);
+  const soySuperAdmin = userRole === 'admin';
+  // --- 🔔 SISTEMA DE NOTIFICACIONES PUSH (CEREBRO) ---
+  const solicitarPermisoNotificaciones = async () => {
+    if (!("Notification" in window)) {
+      alert("Este navegador no soporta notificaciones de escritorio.");
+      return;
+    }
+    const permiso = await Notification.requestPermission();
+    if (permiso === "granted") {
+      new Notification("🚀 ¡Sistema Activado!", {
+        body: "Ahora recibirás avisos importantes de la piscina en este dispositivo.",
+        icon: "https://cdn-icons-png.flaticon.com/512/5822/5822050.png" 
+      });
+    }
+  };
+
+  const enviarPushLocal = (titulo, mensaje) => {
+    if (Notification.permission === "granted") {
+      new Notification(titulo, {
+        body: mensaje,
+        icon: "https://cdn-icons-png.flaticon.com/512/5822/5822050.png"
+      });
+    }
+  }; 
 // --- 1.5 FUNCIONES DE ACCIÓN ---
 const confirmarInscripcion = async (alumnoId) => {
   try {
@@ -1578,7 +1602,51 @@ const archivarBaja = async (alumno) => {
 
   // --- 4. LISTAS FILTRADAS ---
   const gruposUnicos = [...new Set(alumnos.map(a => a.actividad).filter(g => g))].sort();
-  
+// --- 📈 LÓGICA DE PREVISIÓN + DINERO REAL (ACTUALIZADO) ---
+const hoyD = new Date();
+const proximoMesDate = new Date(hoyD.getFullYear(), hoyD.getMonth() + 1, 1);
+const mesSigNom = proximoMesDate.toLocaleString('es-ES', { month: 'long' });
+
+const añoActual = hoyD.getFullYear();
+const mesSiguiente = String(proximoMesDate.getMonth() + 1).padStart(2, '0');
+const patronMesSig = `${añoActual}-${mesSiguiente}`;
+
+// 1. Limpiamos la base
+const alumnosReales = alumnos.filter(a => a.nombre && a.estado);
+
+// 2. ALTAS: Solo si su fecha de ALTA es el mes que viene
+const previsAltas = alumnosReales.filter(a => 
+  a.fechaAlta && String(a.fechaAlta).startsWith(patronMesSig)
+);
+
+// 3. BAJAS: Salen si su fecha de BAJA es el mes que viene
+const previsBajas = alumnosReales.filter(a => {
+  const coincideFecha = a.fechaBaja && String(a.fechaBaja).startsWith(patronMesSig);
+  const esEstadoBaja = ['baja_pendiente', 'baja_finalizada'].includes(a.estado);
+  return coincideFecha && esEstadoBaja;
+});
+
+// 💰 FUNCIÓN PARA BUSCAR PRECIO REAL EN TU OFERTA_ACTIVIDADES
+const obtenerPrecioReal = (alumno) => {
+  if (alumno.precio) return parseInt(alumno.precio);
+
+  const actividadMatch = OFERTA_ACTIVIDADES.find(act => 
+    act.nombre === alumno.actividad || act.id === alumno.actividadId
+  );
+
+  if (actividadMatch) {
+    const opcionMatch = actividadMatch.opciones?.find(op => op.dias === alumno.dias);
+    if (opcionMatch) return parseInt(opcionMatch.precio);
+    return parseInt(actividadMatch.precioResumen) || 0;
+  }
+  return 0;
+};
+
+// 📊 CÁLCULOS TOTALES
+const ingresosAltas = previsAltas.reduce((total, a) => total + obtenerPrecioReal(a), 0);
+const perdidasBajas = previsBajas.reduce((total, a) => total + obtenerPrecioReal(a), 0);
+const balanceNeto = previsAltas.length - previsBajas.length;
+const balanceEconomico = ingresosAltas - perdidasBajas;
 /// --- 1. LISTADO GLOBAL (CORREGIDO) ---
 const listadoGlobal = alumnos.filter(a => {
   const coincideNombre = (a.nombre || '').toLowerCase().includes(busqueda.toLowerCase());
@@ -1646,6 +1714,18 @@ const listadoBajas = alumnos.filter(a => a.estado === 'baja_pendiente' || a.esta
           Excel
         </button>
       )}
+      {/* 🔔 BOTÓN DE NOTIFICACIONES (NUEVO) */}
+      <button 
+        onClick={solicitarPermisoNotificaciones}
+        className={`p-2 rounded-full transition-all shadow-sm flex items-center justify-center border ${
+          Notification.permission === 'granted' 
+            ? 'bg-emerald-50 text-emerald-600 border-emerald-200' 
+            : 'bg-amber-50 text-amber-600 border-amber-200 animate-bounce'
+        }`}
+        title="Activar avisos en este equipo"
+      >
+        <span className="text-sm">{Notification.permission === 'granted' ? '🔔' : '🔕'}</span>
+      </button>
 
       {/* 🚪 BOTÓN SALIR */}
       <button 
@@ -1657,16 +1737,19 @@ const listadoBajas = alumnos.filter(a => a.estado === 'baja_pendiente' || a.esta
   </div>
 </div>
 
-{/* PESTAÑAS AJUSTADAS (RESPONSIVE) - CON LISTA DE ESPERA */}
+{/* PESTAÑAS AJUSTADAS (RESPONSIVE) - CON PREVISIÓN INTEGRADA */}
 <div className="flex gap-1 mb-6 border-b pb-1 overflow-x-auto scrollbar-hide bg-white sticky top-0 z-10">
-  {['global', 'ocupacion', 'pruebas', 'espera', 'bajas', 'equipo', 'avisos'].map(t => {
-     if ((t === 'equipo' || t === 'bajas') && userRole !== 'admin') return null;
+  {['global', 'ocupacion', 'pruebas', 'espera', 'prevision', 'bajas', 'equipo', 'avisos'].map(t => {
+     // Añadimos 'prevision' a la restricción de admin
+     if ((t === 'equipo' || t === 'bajas' || t === 'prevision') && userRole !== 'admin') return null;
      
      let count = 0; 
      if (t === 'pruebas') count = listadoPruebas.length; 
      if (t === 'bajas') count = listadoBajas.length;
-     // 🚩 Añadimos el contador para la lista de espera
      if (t === 'espera') count = alumnos.filter(a => a.estado === 'lista_espera').length;
+     
+     // 🚩 LÓGICA DEL CONTADOR PARA PREVISIÓN (Usa las variables del Paso 1)
+     if (t === 'prevision') count = previsAltas.length + previsBajas.length;
 
      return (
         <button 
@@ -1677,7 +1760,9 @@ const listadoBajas = alumnos.filter(a => a.estado === 'baja_pendiente' || a.esta
             flex flex-col md:flex-row items-center justify-center gap-1 flex-1 min-w-[90px]
             transition-all duration-200
             ${tab === t 
-              ? (t === 'espera' ? 'text-amber-600 border-b-4 border-amber-600 bg-amber-50/50' : 'text-blue-600 border-b-4 border-blue-600 bg-blue-50/50')
+              ? (t === 'espera' ? 'text-amber-600 border-b-4 border-amber-600 bg-amber-50/50' : 
+                 t === 'prevision' ? 'text-indigo-600 border-b-4 border-indigo-600 bg-indigo-50/50' :
+                 'text-blue-600 border-b-4 border-blue-600 bg-blue-50/50')
               : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'
             }
           `}
@@ -1686,18 +1771,22 @@ const listadoBajas = alumnos.filter(a => a.estado === 'baja_pendiente' || a.esta
               {t === 'global' && '👥'}
               {t === 'ocupacion' && '📊'}
               {t === 'pruebas' && '🎯'}
-              {t === 'espera' && '⏳'} {/* 🚩 Icono para espera */}
+              {t === 'espera' && '⏳'}
+              {t === 'prevision' && '📈'} {/* 🚩 Icono de Previsión */}
               {t === 'bajas' && '📉'}
               {t === 'equipo' && '🛡️'}
               {t === 'avisos' && '📢'}
             </span>
             
             <span>
-              {t === 'ocupacion' ? 'PLAZAS' : t === 'espera' ? 'ESPERA' : t.toUpperCase()}
+              {t === 'ocupacion' ? 'PLAZAS' : t === 'espera' ? 'ESPERA' : t === 'prevision' ? 'PREVISIÓN' : t.toUpperCase()}
             </span>
 
             {count > 0 && (
-              <span className={`${t === 'espera' ? 'bg-amber-500' : 'bg-red-500'} text-white text-[9px] px-1.5 py-0.5 rounded-full shadow-sm`}>
+              <span className={`
+                text-white text-[9px] px-1.5 py-0.5 rounded-full shadow-sm
+                ${t === 'espera' ? 'bg-amber-500' : t === 'prevision' ? 'bg-indigo-600' : 'bg-red-500'}
+              `}>
                 {count}
               </span>
             )}
@@ -1938,7 +2027,124 @@ return (
     )}
   </div>
 )}
+{/* 🚀 TAB: PREVISIÓN (VERSION PRO CON DINERO Y RADAR) */}
+{tab === 'prevision' && (
+  <div className="space-y-6 animate-fade-in pb-20 text-left">
+    <div className="bg-slate-900 p-6 rounded-3xl text-white shadow-xl relative overflow-hidden">
+      <div className="relative z-10">
+        <h2 className="text-2xl font-black uppercase tracking-tighter italic">Previsión: {mesSigNom}</h2>
+        <p className="text-slate-400 text-[10px] font-bold uppercase tracking-widest mt-1">
+          Balance económico y gestión de plazas libres
+        </p>
+      </div>
+      <div className="absolute right-[-10px] top-[-10px] text-8xl opacity-10">📈</div>
+    </div>
 
+    {/* TARJETAS CON DINERO REAL */}
+    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="bg-white p-5 rounded-2xl shadow-sm border-b-4 border-emerald-500">
+        <p className="text-gray-400 text-[10px] font-black uppercase">Altas: +{ingresosAltas}€</p>
+        <div className="flex items-center justify-between mt-1">
+          <span className="text-3xl font-black text-slate-800">{previsAltas.length}</span>
+          <span className="text-emerald-500 text-xl font-black">↑</span>
+        </div>
+      </div>
+
+      <div className="bg-white p-5 rounded-2xl shadow-sm border-b-4 border-red-500">
+        <p className="text-gray-400 text-[10px] font-black uppercase">Bajas: -{perdidasBajas}€</p>
+        <div className="flex items-center justify-between mt-1">
+          <span className="text-3xl font-black text-slate-800">{previsBajas.length}</span>
+          <span className="text-red-500 text-xl font-black">↓</span>
+        </div>
+      </div>
+
+      <div className={`p-5 rounded-2xl shadow-sm border-b-4 ${balanceEconomico >= 0 ? 'border-indigo-500 bg-indigo-50' : 'border-orange-500 bg-orange-50'}`}>
+        <p className="text-gray-400 text-[10px] font-black uppercase">Balance Neto</p>
+        <div className="flex items-center justify-between mt-1">
+          <span className={`text-2xl font-black ${balanceEconomico >= 0 ? 'text-indigo-700' : 'text-orange-700'}`}>
+            {balanceEconomico > 0 ? `+${balanceEconomico}` : balanceEconomico}€
+          </span>
+          <span className="text-[10px] font-bold text-gray-500 uppercase italic">Caja</span>
+        </div>
+      </div>
+
+      <div className="bg-amber-500 p-5 rounded-2xl shadow-sm border-b-4 border-amber-700 text-white">
+        <p className="text-amber-100 text-[10px] font-black uppercase">Radar de Huecos</p>
+        <div className="flex items-center justify-between mt-1">
+          <span className="text-3xl font-black">{previsBajas.length}</span>
+          <span className="text-xs font-bold uppercase opacity-80 italic">Libres</span>
+        </div>
+      </div>
+    </div>
+
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+  {/* COLUMNA ENTRADAS (ALTAS) */}
+  <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
+    <div className="bg-emerald-500 p-4 text-white font-black text-[10px] uppercase tracking-[0.2em] text-center">
+      📥 Altas Confirmadas
+    </div>
+    <div className="divide-y divide-gray-50 max-h-[450px] overflow-y-auto">
+      {previsAltas.map(a => (
+        <div key={a.id} onClick={() => abrirFicha(a)} className="p-4 flex justify-between items-center hover:bg-gray-50 cursor-pointer group transition-colors text-left">
+          <div>
+            <p className="font-bold text-slate-800 text-sm">{a.nombre}</p>
+            {/* 🚩 CORRECCIÓN: Mostramos Actividad + Días */}
+            <p className="text-[10px] text-blue-600 font-black uppercase tracking-tight">
+              {a.actividad} <span className="text-gray-400 mx-1">•</span> {a.dias || 'Día no asignado'}
+            </p>
+          </div>
+          <div className="text-right">
+            <p className="text-emerald-600 font-bold text-xs">+{obtenerPrecioReal(a)}€</p>
+            <span className="bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded text-[8px] font-black uppercase">Nuevo</span>
+          </div>
+        </div>
+      ))}
+      {previsAltas.length === 0 && <p className="p-10 text-center text-gray-400 text-xs italic">No hay altas para este mes</p>}
+    </div>
+  </div>
+
+  {/* COLUMNA SALIDAS (BAJAS) */}
+  <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
+    <div className="bg-red-500 p-4 text-white font-black text-[10px] uppercase tracking-[0.2em] text-center">
+      📤 Huecos que se liberan
+    </div>
+    <div className="divide-y divide-gray-50 max-h-[450px] overflow-y-auto">
+      {previsBajas.map(a => {
+        const candidatos = alumnos.filter(esp => esp.estado === 'lista_espera' && esp.actividad === a.actividad);
+        
+        return (
+          <div key={a.id} className="p-4 flex flex-col gap-3 hover:bg-red-50/20 transition-all group text-left">
+            <div className="flex justify-between items-center" onClick={() => abrirFicha(a)}>
+              <div>
+                <p className="font-bold text-slate-800 text-sm">{a.nombre}</p>
+                {/* 🚩 CORRECCIÓN: Mostramos Actividad + Días */}
+                <p className="text-[10px] text-red-600 font-black uppercase tracking-tight">
+                  {a.actividad} <span className="text-gray-400 mx-1">•</span> {a.dias || 'Día no indicado'}
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="text-red-500 font-bold text-xs">-{obtenerPrecioReal(a)}€</p>
+                <span className="bg-red-50 text-red-600 px-2 py-0.5 rounded text-[8px] font-black uppercase italic text-center">Salida</span>
+              </div>
+            </div>
+
+            {/* BOTÓN INTELIGENTE: RADAR DE HUECOS (Mantenemos la funcionalidad que ya te gustaba) */}
+            {candidatos.length > 0 && (
+              <button 
+                onClick={() => setRadarHueco(a)}
+                className="bg-amber-100 hover:bg-amber-200 text-amber-700 text-[9px] font-black py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 border border-amber-200 shadow-sm transition-all active:scale-95"
+              >
+                🎯 HAY {candidatos.length} CANDIDATOS PARA ESTE HUECO
+              </button>
+            )}
+          </div>
+        );
+      })}
+      {previsBajas.length === 0 && <p className="p-10 text-center text-gray-400 text-xs italic">No hay bajas tramitadas</p>}
+    </div>
+  </div>
+</div>  </div>
+)}
     {/* TAB: GLOBAL (ACTUALIZADO CON LISTA DE ESPERA) */}
 {tab === 'global' && (
     <div className="bg-white rounded shadow overflow-hidden">
@@ -2232,10 +2438,62 @@ return (
         <FichaAlumno 
             alumno={alumnoSeleccionado} 
             cerrar={() => setAlumnoSeleccionado(null)}
-            userRole={userRole}  // 👈 ¡IMPORTANTE! AÑADE ESTA LÍNEA
+            userRole={userRole}
         />
       )}
-    </div>
+
+      {/* 🎯 PASO 2: PEGA EL RADAR AQUÍ ABAJO */}
+      {radarHueco && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white w-full max-w-md rounded-[32px] overflow-hidden shadow-2xl border border-white/20">
+            <div className="bg-amber-500 p-6 text-white text-left">
+              <div className="flex justify-between items-start">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.2em] opacity-80">Sustitución Inteligente</p>
+                  <h3 className="text-xl font-black uppercase mt-1 leading-tight">Cubrir hueco de:</h3>
+                  <p className="font-bold text-amber-900 bg-white/30 inline-block px-2 py-0.5 rounded mt-2">{radarHueco.actividad}</p>
+                </div>
+                <button onClick={() => setRadarHueco(null)} className="bg-white/20 hover:bg-white/40 p-2 rounded-full text-xl transition">✕</button>
+              </div>
+            </div>
+
+            <div className="p-6">
+              <p className="text-gray-500 text-xs font-medium mb-4 text-left">Candidatos en espera para este grupo:</p>
+              <div className="space-y-3 max-h-[300px] overflow-y-auto pr-2 scrollbar-hide">
+                {alumnos
+                  .filter(esp => esp.estado === 'lista_espera' && esp.actividad === radarHueco.actividad)
+                  .map((cand, idx) => (
+                    <div key={cand.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100 hover:border-amber-400 transition-all group">
+                      <div className="text-left">
+                        <p className="font-bold text-slate-800 text-sm">{cand.nombre}</p>
+                        <p className="text-[9px] text-gray-400 font-bold uppercase">{cand.curso}</p>
+                      </div>
+                      <button 
+                        onClick={() => { abrirFicha(cand); setRadarHueco(null); }}
+                        className="bg-white text-amber-600 border border-amber-200 hover:bg-amber-500 hover:text-white px-3 py-1.5 rounded-xl text-[10px] font-black uppercase transition-all shadow-sm"
+                      >
+                        Asignar
+                      </button>
+                    </div>
+                  ))}
+                {alumnos.filter(esp => esp.estado === 'lista_espera' && esp.actividad === radarHueco.actividad).length === 0 && (
+                  <div className="text-center py-10">
+                    <span className="text-3xl block mb-2">🏖️</span>
+                    <p className="text-gray-400 text-xs italic">No hay nadie en espera para este horario.</p>
+                  </div>
+                )}
+              </div>
+              <button 
+                onClick={() => setRadarHueco(null)} 
+                className="w-full mt-6 py-2 text-gray-400 font-bold text-[10px] uppercase tracking-widest hover:text-gray-600 transition-colors"
+              >
+                Cerrar Radar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div> // <--- Este es el cierre del AdminDashboard
   );
 };
 
@@ -2252,7 +2510,8 @@ function FichaAlumno({ alumno, cerrar, userRole }) {
       const nuevaFecha = e.target.value ? new Date(e.target.value).getTime() : null;
       try {
           await updateDoc(doc(db, 'students', alumno.id), { [campo]: nuevaFecha });
-      } catch (error) {
+          enviarPushLocal("💾 Cambio Guardado", `Has actualizado la fecha de ${alumno.nombre}`);
+        } catch (error) {
           console.error("Error:", error);
       }
   };
