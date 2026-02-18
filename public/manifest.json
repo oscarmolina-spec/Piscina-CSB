@@ -1,23 +1,17 @@
 {
-    "short_name": "PiscinaApp",
-    "name": "Gestión de Aforo Piscina",
+    "short_name": "Piscina CSB",
+    "name": "Natación Colegio San Buenaventura",
     "start_url": "/",
     "display": "standalone",
     "orientation": "portrait",
-    "theme_color": "#1e293b",
+    "theme_color": "#2563eb",
     "background_color": "#ffffff",
     "icons": [
       {
-        "src": "https://www.gstatic.com/images/branding/product/2x/pwa_192dp.png",
-        "sizes": "192x192",
+        "src": "/icon.png",
+        "sizes": "192x192 512x512",
         "type": "image/png",
-        "purpose": "any"
-      },
-      {
-        "src": "https://www.gstatic.com/images/branding/product/2x/pwa_512dp.png",
-        "sizes": "512x512",
-        "type": "image/png",
-        "purpose": "any"
+        "purpose": "any maskable"
       }
     ]
   }
