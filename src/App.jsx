@@ -378,16 +378,16 @@ const LandingPage = ({ setView }) => {
         <div className="max-w-6xl mx-auto px-6">
 
           
-         {/* VISTA ACTIVIDADES (CORREGIDA) */}
+{/* VISTA ACTIVIDADES (CORREGIDA) */}
 {tab === 'actividades' && (
   <div className="flex flex-col animate-fade-in w-full">
     
-    {/* 1. TÍTULO (Fuera del grid) */}
+    {/* 1. TÍTULO */}
     <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mb-6 text-center">
       Navegación Rápida
     </p>
 
-    {/* 2. FILTRO (Fuera del grid) */}
+    {/* 2. FILTRO */}
     <div className="flex flex-wrap justify-center gap-3 mb-10">
       {[
         { id: 'todos', label: '🌟 Todas', color: 'bg-slate-800' },
@@ -409,7 +409,7 @@ const LandingPage = ({ setView }) => {
       ))}
     </div>
 
-    {/* 3. GRID DE TARJETAS (Solo las tarjetas aquí) */}
+    {/* 3. GRID DE TARJETAS */}
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
       {OFERTA_ACTIVIDADES
         .filter(act => {
@@ -421,42 +421,59 @@ const LandingPage = ({ setView }) => {
           return true;
         })
         .map((act) => (
-          /* TARJETA CON EFECTO CRISTAL */
-          <div key={act.id} className="bg-white/70 backdrop-blur-md rounded-2xl shadow-lg overflow-hidden border border-white/40 flex flex-col hover:shadow-2xl hover:bg-white/90 transition-all duration-500 group">
+          <div 
+            key={act.id} 
+            onClick={() => {
+              // 1. Guardamos la actividad
+              setForm(prev => ({ ...prev, actividad: act.nombre }));
             
-            {/* Encabezado Azul con degradado cristalino */}
+              // 2. Cambiamos la vista principal a login
+              setView('login'); 
+
+              // 3. 🚩 EL TRUCO: Quitamos el foco de la pestaña 'actividades' 
+              // para que el login tenga prioridad de renderizado
+              setTab('inicio'); 
+            
+              // 4. Subimos arriba
+              window.scrollTo(0, 0);
+            }}
+            className="bg-white/70 backdrop-blur-md rounded-2xl shadow-lg overflow-hidden border border-white/40 flex flex-col hover:shadow-2xl hover:bg-white/90 transition-all duration-500 group cursor-pointer hover:-translate-y-2 active:scale-[0.98]"
+          >
+            {/* Encabezado Azul */}
             <div className="bg-gradient-to-br from-blue-600/90 to-blue-700/90 p-4 relative">
+              <div className="absolute top-4 right-4 bg-white/20 backdrop-blur-md border border-white/30 text-white text-[9px] font-black px-2 py-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity uppercase tracking-widest">
+                Inscribirse →
+              </div>
               <h3 className="text-white font-black text-lg pr-8 text-left uppercase tracking-tight">{act.nombre}</h3>
               <div className="flex flex-wrap gap-2 mt-2">
                 <span className="bg-blue-900/30 backdrop-blur-sm text-white text-[10px] px-2 py-1 rounded border border-white/10 font-mono">
                   📅 {act.diasResumen}
                 </span>
                 <span className="bg-white/20 text-white text-[10px] px-2 py-1 rounded font-bold border border-white/10">
-                  👥 Máx. {act.alumnosMax} Alumnos
+                  👥 Máx. {act.alumnosMax}
                 </span>
                 {act.requierePrueba && (
-                  <span className="bg-red-500 text-white text-[10px] px-2 py-1 rounded font-bold shadow-sm animate-pulse whitespace-nowrap">
-                    ❗ Requiere Prueba de Nivel
+                  <span className="bg-red-500 text-white text-[10px] px-2 py-1 rounded font-bold shadow-sm animate-pulse">
+                    ❗ Prueba Nivel
                   </span>
                 )}
               </div>
             </div>
-      
+
+            {/* Contenido */}
             <div className="p-5 flex-1 flex flex-col">
               <p className="text-slate-600 text-sm mb-4 flex-1 whitespace-pre-line leading-relaxed text-left font-medium">
                 {act.descripcion}
               </p>
               
-              {/* Aviso en cristal amarillo */}
               <div className="bg-amber-400/10 border border-amber-200/50 p-3 rounded-xl text-xs text-amber-900 mb-4 font-semibold flex gap-2 text-left backdrop-blur-sm">
                 <span>⚠️</span>
                 <span>{act.aviso}</span>
               </div>
-      
-              {/* Footer con precios destacados */}
+
               <div className="border-t border-slate-100 pt-3 mt-auto flex justify-between items-center">
                  <div className="text-left">
-                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter">Mínimo para grupo:</p>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter">Mínimo grupo:</p>
                     <p className="text-xs font-black text-blue-800">{act.minAlumnos} alumnos</p>
                  </div>
                  <div className="flex flex-col items-end">
@@ -465,6 +482,11 @@ const LandingPage = ({ setView }) => {
                       {act.precioResumen}
                     </p>
                  </div>
+              </div>
+
+              {/* Botón visual */}
+              <div className="mt-4 py-2 bg-blue-50 text-blue-600 rounded-xl text-[10px] font-black uppercase tracking-widest group-hover:bg-blue-600 group-hover:text-white transition-all text-center border border-blue-100">
+                Seleccionar y continuar
               </div>
             </div>
           </div>
@@ -2376,48 +2398,70 @@ return (
     </div>
 )}
 
-{/* --- TAB: LISTA DE ESPERA (CORREGIDO) --- */}
+{/* --- TAB: LISTA DE ESPERA (ORDEN CRONOLÓGICO ESTRICTO) --- */}
 {tab === 'espera' && (
     <div className="bg-white rounded shadow overflow-hidden border-t-4 border-amber-500">
         <table className="w-full text-sm text-left">
-            <thead className="bg-amber-50 uppercase text-xs text-amber-800">
+            <thead className="bg-amber-50 uppercase text-[10px] font-black text-amber-800">
                 <tr>
+                    <th className="p-3 w-16 text-center">Puesto</th>
                     <th className="p-3">Alumno</th>
                     <th className="p-3">Actividad Solicitada</th>
                     <th className="p-3 text-right">Acción</th>
                 </tr>
             </thead>
             <tbody>
-                {alumnos.filter(a => a.estado === 'lista_espera').map(a => (
-                    <tr 
-                      key={a.id} 
-                      onClick={() => abrirFicha(a)} 
-                      className="border-b cursor-pointer hover:bg-amber-50 transition"
-                    >
-                        <td className="p-3">
-                            <div className="font-bold text-gray-900">{a.nombre}</div>
-                            <div className="text-xs text-blue-600 font-bold">{a.curso}</div>
-                        </td>
-                        <td className="p-3">
-                            <div className="font-medium text-gray-800">{a.actividad}</div>
-                            <div className="text-[10px] text-gray-500">📅 {a.dias} | ⏰ {a.horario}</div>
-                        </td>
-                        <td className="p-3 text-right">
-                            {/* 🚩 CAMBIO AQUÍ: Añadimos e.stopPropagation y la función */}
-                            <button 
-                                onClick={(e) => {
-                                    e.stopPropagation(); // Evita que se abra la ficha al validar
-                                    validarPlazaDirecto(a);
-                                }}
-                                className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded font-black text-xs shadow transition-all active:scale-95"
-                            >
-                                Validar Plaza
-                            </button>
-                        </td>
-                    </tr>
-                ))}
+                {alumnos
+                    .filter(a => a.estado === 'lista_espera')
+                    .sort((a, b) => {
+                        // 🚩 PRIORIDAD ÚNICA: Fecha de inscripción (Antigüedad)
+                        const fechaA = a.fechaInscripcion?.seconds || a.fechaInscripcion || 0;
+                        const fechaB = b.fechaInscripcion?.seconds || b.fechaInscripcion || 0;
+                        return fechaA - fechaB;
+                    })
+                    .map((a, index) => (
+                        <tr 
+                          key={a.id} 
+                          onClick={() => abrirFicha(a)} 
+                          className="border-b cursor-pointer hover:bg-amber-50 transition"
+                        >
+                            {/* PUESTO POR ORDEN DE LLEGADA */}
+                            <td className="p-3 text-center">
+                                <span className={`inline-block w-6 h-6 leading-6 rounded-full text-[10px] font-black ${index === 0 ? 'bg-amber-600 text-white shadow-md' : 'bg-slate-100 text-slate-500'}`}>
+                                    {index + 1}
+                                </span>
+                            </td>
+
+                            {/* ALUMNO */}
+                            <td className="p-3">
+                                <div className="font-bold text-gray-900">{a.nombre}</div>
+                                <div className="text-xs text-blue-600 font-bold">{a.curso}</div>
+                            </td>
+
+                            {/* ACTIVIDAD */}
+                            <td className="p-3">
+                                <div className="font-medium text-gray-800 uppercase text-xs">{a.actividad}</div>
+                                <div className="text-[10px] text-gray-500">📅 {a.dias} | ⏰ {a.horario}</div>
+                            </td>
+
+                            {/* ACCIÓN */}
+                            <td className="p-3 text-right">
+                                <button 
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        validarPlazaDirecto(a);
+                                        registrarLog("VALIDAR_PLAZA", `Validada plaza para ${a.nombre} (Puesto #${index + 1})`);
+                                    }}
+                                    className="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded font-black text-[10px] uppercase shadow transition-all active:scale-95"
+                                >
+                                    Validar Plaza
+                                </button>
+                            </td>
+                        </tr>
+                    ))}
+                
                 {alumnos.filter(a => a.estado === 'lista_espera').length === 0 && (
-                    <tr><td colSpan="3" className="p-4 text-center text-gray-400 italic">La lista de espera está vacía.</td></tr>
+                    <tr><td colSpan="4" className="p-8 text-center text-gray-400 italic">La lista de espera está vacía.</td></tr>
                 )}
             </tbody>
         </table>
