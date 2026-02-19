@@ -2503,15 +2503,34 @@ return (
 function FichaAlumno({ alumno, cerrar, userRole }) {
   if (!alumno) return null;
   const p = alumno.datosPadre || {}; 
-
+// 📜 FUNCIÓN INTERNA PARA REGISTRAR MOVIMIENTOS
+const registrarLog = async (accion, detalles) => {
+  try {
+    await addDoc(collection(db, 'logs'), {
+      fecha: new Date().getTime(),
+      alumnoId: alumno.id,
+      alumnoNombre: alumno.nombre,
+      accion: accion, 
+      detalles: detalles,
+      adminEmail: user?.email || 'Sistema'
+    });
+  } catch (error) {
+    console.error("Error al registrar log:", error);
+  }
+};
   // Función para guardar cambios de fecha al instante
   const cambiarFecha = async (campo, e) => {
       if (userRole !== 'admin') return;
+      const valorOriginal = e.target.defaultValue; // Para saber qué había antes
       const nuevaFecha = e.target.value ? new Date(e.target.value).getTime() : null;
       try {
           await updateDoc(doc(db, 'students', alumno.id), { [campo]: nuevaFecha });
+          
+          // 🚩 REGISTRO EN EL HISTORIAL
+          registrarLog("EDICIÓN FECHA", `Cambio en ${campo}: de ${valorOriginal} a ${e.target.value}`);
+          
           enviarPushLocal("💾 Cambio Guardado", `Has actualizado la fecha de ${alumno.nombre}`);
-        } catch (error) {
+      } catch (error) {
           console.error("Error:", error);
       }
   };
@@ -2583,6 +2602,42 @@ function FichaAlumno({ alumno, cerrar, userRole }) {
         )}
     </div>
 </div>
+{/* 📜 HISTORIAL DE MOVIMIENTOS (AÑADIR JUSTO AQUÍ) */}
+{userRole === 'admin' && (
+  <div className="mt-8 border-t border-slate-200 pt-6 text-left">
+    <div className="flex items-center justify-between mb-4">
+      <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2">
+        <span className="text-sm">🕒</span> Historial de la ficha
+      </h3>
+      <span className="bg-slate-100 text-slate-500 text-[8px] font-black px-2 py-0.5 rounded-full uppercase">
+        Audit Log Activo
+      </span>
+    </div>
+    
+    <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100 shadow-inner">
+      <div className="flex flex-col items-center justify-center py-6 text-center">
+        <div className="w-10 h-10 bg-slate-200 rounded-full flex items-center justify-center mb-3">
+          <span className="text-lg">📋</span>
+        </div>
+        <p className="text-[10px] text-slate-500 font-bold uppercase italic">
+          Registro de auditoría vinculado
+        </p>
+        <p className="text-[9px] text-slate-400 mt-1 max-w-[250px] leading-relaxed">
+          Cualquier cambio manual en fechas o estados quedará guardado con el email del administrador responsable.
+        </p>
+      </div>
+      
+      {/* Botón de acceso rápido a la base de datos de logs */}
+      <button 
+        onClick={() => window.open(`https://console.firebase.google.com/project/${db._databaseId.projectId}/firestore/data/~2Flogs`, '_blank')}
+        className="w-full mt-4 py-3 bg-white border border-slate-200 rounded-xl text-[9px] font-black text-slate-500 uppercase hover:bg-slate-100 hover:text-slate-800 transition-all flex items-center justify-center gap-2"
+      >
+        <span>Consultar registros maestros</span>
+        <span className="text-[12px]">↗</span>
+      </button>
+    </div>
+  </div>
+)}
 
           {/* 2. EL TELÉFONO (CUADRO VERDE - BUSCA EN TODAS PARTES) */}
           <div className="bg-green-600 p-4 rounded-lg shadow-md flex justify-between items-center text-white">
