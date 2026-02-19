@@ -383,8 +383,8 @@ const LandingPage = ({ setView }) => {
   <div className="flex flex-col animate-fade-in w-full">
     
     {/* 1. TÍTULO */}
-    <p className="text-[12px] font-black text-red-600 uppercase tracking-[0.3em] mb-6 text-center">
-      ⚡️ PROBANDO ACTUALIZACIÓN ⚡️
+    <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mb-6 text-center">
+      Navegación Rápida
     </p>
 
     {/* 2. FILTRO */}
