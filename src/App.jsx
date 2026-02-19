@@ -378,63 +378,92 @@ const LandingPage = ({ setView }) => {
         <div className="max-w-6xl mx-auto px-6">
 
           
-{/* VISTA ACTIVIDADES (LIMPIA Y FORZADA) */}
+{/* VISTA ACTIVIDADES (CORREGIDA) */}
 {tab === 'actividades' && (
-  <div key="grid-actividades-force" className="flex flex-col animate-fade-in w-full">
+  <div className="flex flex-col animate-fade-in w-full">
     
+    {/* 1. TÍTULO */}
     <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mb-6 text-center">
       Navegación Rápida
     </p>
 
+    {/* 2. FILTRO */}
     <div className="flex flex-wrap justify-center gap-3 mb-10">
-      {['todos', 'infantil', 'primaria', 'secundaria', 'adultos'].map((id) => (
+      {[
+        { id: 'todos', label: '🌟 Todas', color: 'bg-slate-800' },
+        { id: 'infantil', label: '👶 Infantil', color: 'bg-pink-500' },
+        { id: 'primaria', label: '👦 Primaria', color: 'bg-blue-500' },
+        { id: 'secundaria', label: '🎓 ESO/Bach', color: 'bg-purple-600' },
+        { id: 'adultos', label: '👨‍👩‍👧 Adultos', color: 'bg-emerald-600' }
+      ].map((boton) => (
         <button
-          key={id}
-          onClick={() => setFiltroEtapa(id)}
-          className={`px-5 py-2 rounded-full font-black text-xs uppercase tracking-widest transition-all ${
-            filtroEtapa === id ? 'bg-blue-600 text-white shadow-lg' : 'bg-white text-slate-400 border border-slate-100'
-          }`}
+          key={boton.id}
+          onClick={() => setFiltroEtapa(boton.id)}
+          className={`px-5 py-2 rounded-full font-black text-xs uppercase tracking-widest transition-all duration-300 transform hover:scale-105 shadow-sm
+            ${filtroEtapa === boton.id 
+              ? `${boton.color} text-white shadow-lg ring-4 ring-offset-2 ring-opacity-50` 
+              : 'bg-white text-slate-400 hover:bg-slate-50 border border-slate-100'}`}
         >
-          {id}
+          {boton.label}
         </button>
       ))}
     </div>
 
+    {/* 3. GRID DE TARJETAS */}
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-      {OFERTA_ACTIVIDADES
+    {OFERTA_ACTIVIDADES
         .filter(act => {
           if (filtroEtapa === 'todos') return true;
-          const etapa = filtroEtapa.toUpperCase().substring(0, 3);
-          return act.cursos.some(c => c.includes(etapa)) || (filtroEtapa === 'adultos' && act.cursos.includes('ADULTO'));
+          if (filtroEtapa === 'infantil') return act.cursos.some(c => c.includes('INF'));
+          if (filtroEtapa === 'primaria') return act.cursos.some(c => c.includes('PRI'));
+          if (filtroEtapa === 'secundaria') return act.cursos.some(c => c.includes('ESO') || c.includes('BACH'));
+          if (filtroEtapa === 'adultos') return act.cursos.includes('ADULTO');
+          return true;
         })
         .map((act) => (
-          <div 
-            key={act.id} 
-            onClick={() => {
-              // Sincronización de estados
-              setForm(prev => ({ ...prev, actividad: act.nombre }));
-              setView('login'); 
-              setTab('inicio'); 
-              window.scrollTo(0, 0);
-            }}
-            className="bg-white rounded-2xl shadow-lg overflow-hidden border border-slate-200 flex flex-col hover:shadow-2xl transition-all cursor-pointer group hover:-translate-y-1"
-          >
-            {/* Header simplificado para evitar errores de gradiente */}
-            <div className="bg-blue-600 p-4 text-left">
-              <h3 className="text-white font-black text-lg uppercase">{act.nombre}</h3>
-              <p className="text-blue-100 text-[10px] font-bold">PULSA PARA INSCRIBIRTE</p>
+          /* TARJETA CON EFECTO CRISTAL */
+          <div key={act.id} className="bg-white/70 backdrop-blur-md rounded-2xl shadow-lg overflow-hidden border border-white/40 flex flex-col hover:shadow-2xl hover:bg-white/90 transition-all duration-500 group">
+            
+            {/* Encabezado Azul con degradado cristalino */}
+            <div className="bg-gradient-to-br from-blue-600/90 to-blue-700/90 p-4 relative">
+              <h3 className="text-white font-black text-lg pr-8 text-left uppercase tracking-tight">{act.nombre}</h3>
+              <div className="flex flex-wrap gap-2 mt-2">
+                <span className="bg-blue-900/30 backdrop-blur-sm text-white text-[10px] px-2 py-1 rounded border border-white/10 font-mono">
+                  📅 {act.diasResumen}
+                </span>
+                <span className="bg-white/20 text-white text-[10px] px-2 py-1 rounded font-bold border border-white/10">
+                  👥 Máx. {act.alumnosMax} Alumnos
+                </span>
+                {act.requierePrueba && (
+                  <span className="bg-red-500 text-white text-[10px] px-2 py-1 rounded font-bold shadow-sm animate-pulse whitespace-nowrap">
+                    ❗ Requiere Prueba de Nivel
+                  </span>
+                )}
+              </div>
             </div>
-
-            <div className="p-5 flex-1 flex flex-col text-left">
-              <p className="text-slate-600 text-sm mb-4 flex-1">{act.descripcion}</p>
+      
+            <div className="p-5 flex-1 flex flex-col">
+              <p className="text-slate-600 text-sm mb-4 flex-1 whitespace-pre-line leading-relaxed text-left font-medium">
+                {act.descripcion}
+              </p>
               
-              <div className="border-t pt-3 mt-auto flex justify-between items-center">
-                 <div>
-                    <p className="text-[10px] text-slate-400 font-bold uppercase">Precio</p>
-                    <p className="text-xl font-black text-blue-600">{act.precioResumen}</p>
+              {/* Aviso en cristal amarillo */}
+              <div className="bg-amber-400/10 border border-amber-200/50 p-3 rounded-xl text-xs text-amber-900 mb-4 font-semibold flex gap-2 text-left backdrop-blur-sm">
+                <span>⚠️</span>
+                <span>{act.aviso}</span>
+              </div>
+      
+              {/* Footer con precios destacados */}
+              <div className="border-t border-slate-100 pt-3 mt-auto flex justify-between items-center">
+                 <div className="text-left">
+                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter">Mínimo para grupo:</p>
+                    <p className="text-xs font-black text-blue-800">{act.minAlumnos} alumnos</p>
                  </div>
-                 <div className="bg-blue-50 text-blue-600 px-4 py-2 rounded-xl text-[10px] font-black uppercase group-hover:bg-blue-600 group-hover:text-white transition-colors">
-                    Seleccionar
+                 <div className="flex flex-col items-end">
+                    <span className="text-[10px] text-slate-400 font-bold uppercase">Precio</span>
+                    <p className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-blue-400">
+                      {act.precioResumen}
+                    </p>
                  </div>
               </div>
             </div>
