@@ -2541,16 +2541,40 @@ const registrarLog = async (accion, detalles) => {
     <div className="fixed inset-0 bg-black/70 z-[60] flex justify-center items-center p-4 backdrop-blur-sm">
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto border border-gray-200">
         
-        {/* CABECERA */}
+        {/* CABECERA: CURSO+LETRA JUNTOS, ACTIVIDAD Y DÍAS */}
         <div className="bg-blue-900 p-5 text-white flex justify-between items-start sticky top-0 z-10">
           <div>
             <h2 className="text-2xl font-bold">{alumno.nombre}</h2>
-            <div className="mt-2 flex items-center gap-3">
-              <span className="bg-blue-700 px-3 py-1 rounded text-sm font-bold">{alumno.curso}</span>
-              <span className="bg-yellow-400 text-yellow-900 px-3 py-1 rounded text-sm font-bold shadow-sm">Letra: {alumno.letra || '?'}</span>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              
+              {/* CURSO Y LETRA (UNIFICADOS) */}
+              <div className="flex items-center overflow-hidden rounded shadow-sm border border-blue-600 font-black text-[11px] uppercase tracking-wider">
+                <span className="bg-blue-700 px-3 py-1 border-r border-blue-600/50">
+                  {alumno.curso}
+                </span>
+                <span className="bg-yellow-400 text-yellow-900 px-3 py-1">
+                  {alumno.letra || '?'}
+                </span>
+              </div>
+
+              {/* ACTIVIDAD */}
+              <span className="bg-emerald-500 text-white px-3 py-1 rounded text-[11px] font-black uppercase tracking-widest shadow-sm border border-emerald-400">
+                {alumno.actividad || 'Sin Actividad'}
+              </span>
+
+              {/* DÍAS DE LA ACTIVIDAD */}
+              <span className="bg-slate-800/50 text-slate-200 px-3 py-1 rounded text-[11px] font-black uppercase tracking-widest border border-white/10 backdrop-blur-sm">
+                🗓️ {alumno.dias || 'Días no definidos'}
+              </span>
+
             </div>
           </div>
-          <button onClick={cerrar} className="bg-white/10 hover:bg-white/20 rounded-full p-2 text-white transition">✕</button>
+          <button 
+            onClick={cerrar} 
+            className="bg-white/10 hover:bg-white/20 rounded-full p-2 text-white transition-all active:scale-90"
+          >
+            ✕
+          </button>
         </div>
 
 
