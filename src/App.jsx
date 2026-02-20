@@ -21,6 +21,38 @@ import {
   updatePassword,        // <--- Añade esta
   sendPasswordResetEmail
 } from 'firebase/auth';
+// ==========================================
+// 🌐 ESTADO GLOBAL (CONTEXTO DE AUTENTICACIÓN)
+// ==========================================
+const AuthContext = React.createContext();
+
+export function AuthProvider({ children }) {
+  const [user, setUser] = useState(null);
+  const [userRole, setUserRole] = useState('user');
+  const [view, setView] = useState('landing');
+  const [loading, setLoading] = useState(true);
+
+  // El "value" contiene todo lo que queremos que sea accesible desde cualquier sitio
+  const value = {
+    user, setUser,
+    userRole, setUserRole,
+    view, setView,
+    isAdmin: userRole === 'admin'
+  };
+
+  return (
+    <AuthContext.Provider value={value}>
+      {children}
+    </AuthContext.Provider>
+  );
+}
+
+// Este es el Hook personalizado para usar el estado global
+export const useAuth = () => {
+  const context = React.useContext(AuthContext);
+  if (!context) throw new Error("useAuth debe usarse dentro de un AuthProvider");
+  return context;
+};
 
 // ==========================================
 // ⚙️ CONFIGURACIÓN GENERAL DEL SISTEMA
@@ -3535,9 +3567,7 @@ try {
             // Si el contador no baja, revisa en Firestore si el documento se llama así:
             const idGrupoParaConteo = `${idLimpio}_${op.dias.replace(/ /g, '_')}`; 
             
-            await updateDoc(doc(db, 'clases', idGrupoParaConteo), {
-                cupo: increment(-1) 
-            });
+  
         } catch (e) {
             console.warn("Fallo en el contador. Revisa el ID:", idLimpio);
         }
@@ -4337,10 +4367,11 @@ const Login = ({ setView }) => {
 // ==========================================
 // 🚀 COMPONENTE PRINCIPAL (ROUTER)
 // ==========================================
-export default function App() {
-  const [user, setUser] = useState(null);
-  const [userRole, setUserRole] = useState('user'); 
-  const [view, setView] = useState('landing');
+function AppContent() {
+  // 🚩 SUSTITUIMOS LOS 3 useState POR ESTO:
+  const { user, setUser, userRole, setUserRole, view, setView } = useAuth();
+  
+  // Este se queda porque es solo para esta pantalla
   const [misHijos, setMisHijos] = useState([]);
 
   useEffect(() => {
@@ -4394,7 +4425,7 @@ export default function App() {
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [setUser, setUserRole, setView]); // 🚩 Añadimos las funciones del Contexto aquí
 
   const cargarHijos = async (uid) => {
     const q = query(collection(db, 'students'), where('parentId', '==', uid));
@@ -4409,6 +4440,16 @@ export default function App() {
       {view === 'dashboard' && <Dashboard user={user} misHijos={misHijos} logout={() => signOut(auth)} refresh={cargarHijos} />}
       {view === 'admin' && <AdminDashboard userRole={userRole} userEmail={user?.email} logout={() => signOut(auth)} />}
     </div>
+  );
+}
+// ==========================================
+// 🚀 PUNTO DE ENTRADA ÚNICO
+// ==========================================
+export default function App() {
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
   );
 }
 if ('serviceWorker' in navigator) {
