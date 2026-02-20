@@ -3574,6 +3574,18 @@ try {
     }
 
     // 6. FINALIZACIÓN
+    // 📧 <--- AÑADE ESTO AQUÍ PARA DISPARAR EL EMAIL
+    if (user && user.email) {
+      const detalleCita = estadoFinalReal === 'lista_espera' 
+          ? "LISTA DE ESPERA (Pendiente de vacante)" 
+          : `${act.nombre} (${op.dias} - ${op.horario})`;
+          
+      await enviarEmailConfirmacion(user.email, d.nombre, detalleCita);
+      console.log("🚀 Email enviado a la cola de Firebase para:", user.email);
+  }
+
+  await refresh(user.uid); 
+  close();
     await refresh(user.uid); 
     close();
 
