@@ -1247,47 +1247,63 @@ const confirmarInscripcion = async (alumnoId) => {
     try {
       const alumnoRef = doc(db, 'students', alumno.id);
       
-      // 1. Actualizamos al alumno para que desaparezca de la lista
+      // 1. Actualizamos al alumno
       await updateDoc(alumnoRef, {
         estado: 'inscrito',
         grupo: grupoDestino,
         fechaValidacion: new Date().toISOString(),
         revisadoAdmin: true,
-        validadoAdmin: true // 🚩 Esto es vital para el filtro que vimos antes
+        validadoAdmin: true 
       });
 
-      // 2. ACTUALIZAMOS EL AFORO (Suponiendo que tu colección se llama 'clases' o 'grupos')
-      // Buscamos el documento del grupo que coincide con alumno.actividad
-      // Si tu colección tiene otro nombre, cámbialo aquí:
+      // 2. ACTUALIZAMOS EL AFORO
       const grupoRef = doc(db, 'clases', grupoDestino); 
-      
       try {
-        await updateDoc(grupoRef, {
-          // Restamos 1 a las plazas disponibles (si usas un campo llamado 'plazas' o 'cupo')
-          // increment(-1) es la forma segura de Firebase para restar
-          cupo: increment(-1) 
-        });
-        console.log("Plaza descontada del aforo correctamente");
+        await updateDoc(grupoRef, { cupo: increment(-1) });
       } catch (errAforo) {
-        console.warn("No se pudo descontar la plaza automáticamente. Verifica el nombre de la colección.");
+        console.warn("No se pudo descontar la plaza automáticamente.");
       }
-      // 🚩 AÑADE ESTO AQUÍ:
+
+      // 📧 3. ENVÍO DE EMAIL (LO QUE FALTABA)
+      const padreId = alumno.parentId || alumno.user;
+      const emailPadre = padres[padreId]?.email || alumno.email;
+
+      if (emailPadre) {
+        await addDoc(collection(db, 'mail'), {
+          to: emailPadre,
+          message: {
+            subject: `✅ Plaza Confirmada: ${alumno.nombre}`,
+            html: `
+              <div style="font-family: sans-serif; color: #333; padding: 20px; border: 1px solid #eee; border-radius: 10px;">
+                <h2 style="color: #059669;">¡Prueba de nivel superada!</h2>
+                <p>Hola, te informamos de que <strong>${alumno.nombre}</strong> ha sido admitido correctamente.</p>
+                <div style="background: #f9fafb; padding: 15px; border-radius: 10px; border-left: 5px solid #059669; margin: 20px 0;">
+                  <p><strong>🏊‍♂️ Actividad:</strong> ${alumno.actividad}</p>
+                  <p><strong>🗓️ Horario:</strong> ${alumno.horario} (${alumno.dias})</p>
+                </div>
+                <p>Podéis consultar todos los detalles accediendo a vuestro panel de familia.</p>
+              </div>`
+          }
+        });
+      }
+
+      // 🚩 4. REGISTRO EN EL HISTORIAL (AUDITORÍA)
       await addDoc(collection(db, 'logs'), {
         fecha: new Date().getTime(),
         alumnoId: alumno.id,
         alumnoNombre: alumno.nombre,
         accion: "ACEPTAR_PRUEBA",
-        detalles: `Alumno aceptado en ${grupoDestino} tras prueba de nivel`,
+        detalles: `Alumno aceptado en ${grupoDestino} tras prueba de nivel. Email enviado a ${emailPadre}`,
         adminEmail: user?.email || ADMIN_EMAIL
-    });
+      });
 
-      alert(`✅ ${alumno.nombre} aceptado en ${grupoDestino} y aforo actualizado.`);
+      alert(`✅ ${alumno.nombre} aceptado y email de confirmación enviado.`);
       
     } catch (error) {
       console.error("Error al aceptar:", error);
       alert("No se pudo procesar la inscripción.");
     }
-  };
+};
   
   // Abrir Ficha: Combina datos del alumno con los del padre
   const abrirFicha = (alumno) => {
