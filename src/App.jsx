@@ -3939,18 +3939,32 @@ const PantallaPruebaNivel = ({ alumno, close, onSuccess, user }) => {
     );
   }
 
-  // 1. FUNCIÓN PARA VALIDAR SI ES LUNES
+  // 1. FUNCIÓN PARA VALIDAR FECHAS (Septiembre especial + Lunes resto de año)
   const validarSiEsLunes = (e) => {
-    const seleccionada = new Date(e.target.value);
-    const diaSemana = seleccionada.getUTCDay(); // 1 es Lunes
+    const valor = e.target.value; // Formato yyyy-mm-dd
+    const seleccionada = new Date(valor);
+    const diaSemana = seleccionada.getUTCDay(); // 1 es Lunes, 2 es Martes
 
-    if (diaSemana !== 1) {
-      alert("📅 Las pruebas de nivel solo se realizan los LUNES. Por favor, selecciona otro día.");
+    // Listado de fechas permitidas en Septiembre 2026 (14, 15, 21, 22, 28, 29)
+    const fechasEspecialesSept = [
+      '2026-09-14', '2026-09-15', 
+      '2026-09-21', '2026-09-22', 
+      '2026-09-28', '2026-09-29'
+    ];
+
+    const esFechaEspecial = fechasEspecialesSept.includes(valor);
+    const esLunes = diaSemana === 1;
+
+    // Lógica: Permitir si es una fecha especial de Septiembre 
+    // O si es Lunes y estamos fuera de ese rango (o simplemente es Lunes)
+    if (esFechaEspecial || esLunes) {
+      setFecha(valor);
+      setHora(null);
+    } else {
+      alert("📅 Selecciona uno de los días permitidos en Septiembre (14, 15, 21, 22, 28, 29) o un LUNES para el resto de fechas.");
       setFecha('');
       return;
     }
-    setFecha(e.target.value);
-    setHora(null);
   };
 
   // 2. GENERAR TURNOS DE 5 MINUTOS
@@ -3983,7 +3997,8 @@ const PantallaPruebaNivel = ({ alumno, close, onSuccess, user }) => {
   }, [fecha]);
 
   const confirmarReserva = async () => {
-    if (!fecha || !hora) return alert("⚠️ Selecciona un lunes y una hora.");
+    // Cambiamos el mensaje para no confundir al usuario
+    if (!fecha || !hora) return alert("⚠️ Selecciona una fecha y una hora.");
     setLoading(true);
     try {
       const citaTexto = `${fecha} a las ${hora}`;
@@ -4073,62 +4088,73 @@ if (alumno.natacionPasado === 'si' || alumno.esAntiguoAlumno === true) {
   );
 }
 
-  return (
-    <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-[999] backdrop-blur-sm">
-      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
-        
-        <div className="bg-blue-600 p-5 text-white flex justify-between items-center shadow-lg">
+return (
+  <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-[999] backdrop-blur-sm">
+    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
+      
+      <div className="bg-blue-600 p-5 text-white flex justify-between items-center shadow-lg">
+        <div>
+          {/* 🚩 TEXTO ACTUALIZADO: Quitamos "LUNES" del título */}
+          <h3 className="font-black text-xl flex items-center gap-2">🏊 Cita para Prueba de Nivel</h3>
+          <p className="text-blue-100 text-xs font-medium uppercase">{alumno.nombre}</p>
+        </div>
+      </div>
+      
+      <div className="p-6 overflow-y-auto flex-1">
+        {/* 🚩 TEXTO ACTUALIZADO: Aclaramos lo de septiembre */}
+        <div className="mb-6 bg-orange-50 border border-orange-200 p-4 rounded-2xl flex items-start gap-3">
+           <span className="text-xl">ℹ️</span>
+           <p className="text-orange-900 text-sm">
+             En septiembre disponemos de fechas especiales (Lunes y Martes). 
+             A partir de octubre, las pruebas volverán a ser exclusivamente los <strong>lunes</strong>. 
+             Recuerda traer bañador, gorro y chanclas.
+           </p>
+        </div>
+
+        <div className="space-y-6">
           <div>
-            <h3 className="font-black text-xl flex items-center gap-2">🏊 Prueba de Nivel: LUNES</h3>
-            <p className="text-blue-100 text-xs font-medium uppercase">{alumno.nombre}</p>
-          </div>
-        </div>
-        
-        <div className="p-6 overflow-y-auto flex-1">
-          <div className="mb-6 bg-orange-50 border border-orange-200 p-4 rounded-2xl flex items-start gap-3">
-             <span className="text-xl">ℹ️</span>
-             <p className="text-orange-900 text-sm">Las pruebas son exclusivas para los <strong>lunes</strong> por la tarde. Recuerda traer el equipo de natación.</p>
+            {/* 🚩 TEXTO ACTUALIZADO: Más genérico */}
+            <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">1. Selecciona el día</label>
+            <input 
+              type="date" 
+              className="w-full p-4 border-2 border-gray-100 rounded-2xl bg-gray-50 font-bold"
+              // Forzamos el inicio en la primera fecha de septiembre que me pediste
+              min="2026-09-14"
+              value={fecha}
+              onChange={validarSiEsLunes}
+            />
           </div>
 
-          <div className="space-y-6">
-            <div>
-              <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">1. Selecciona un Lunes</label>
-              <input 
-                type="date" 
-                className="w-full p-4 border-2 border-gray-100 rounded-2xl bg-gray-50 font-bold"
-                min={new Date().toISOString().split('T')[0]}
-                value={fecha}
-                onChange={validarSiEsLunes}
-              />
-            </div>
-
-            {fecha && (
-              <div className="animate-in fade-in slide-in-from-bottom-4">
-                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">2. Turnos de 5 min (Aforo máx. 2)</label>
-                <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
-                  {franjas.map(f => {
-                    const ocupados = ocupacion[f] || 0;
-                    const estaLleno = ocupados >= 2;
-                    return (
-                      <button
-                        key={f}
-                        disabled={estaLleno}
-                        onClick={() => setHora(f)}
-                        className={`p-2 rounded-xl text-xs font-bold border-2 transition-all ${
-                          estaLleno ? 'bg-gray-100 text-gray-300 border-gray-100' : 
-                          hora === f ? 'bg-blue-600 text-white border-blue-600 scale-105' : 
-                          'bg-white text-blue-600 border-blue-50 hover:border-blue-500'
-                        }`}
-                      >
-                        {f}
-                      </button>
-                    );
-                  })}
-                </div>
+          {fecha && (
+            <div className="animate-in fade-in slide-in-from-bottom-4">
+              <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">
+                2. Turnos de 5 min (Aforo máx. 2)
+              </label>
+              <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
+                {franjas.map(f => {
+                  const ocupados = ocupacion[f] || 0;
+                  const estaLleno = ocupados >= 2;
+                  return (
+                    <button
+                      key={f}
+                      disabled={estaLleno}
+                      onClick={() => setHora(f)}
+                      className={`p-2 rounded-xl text-xs font-bold border-2 transition-all ${
+                        estaLleno ? 'bg-gray-100 text-gray-300 border-gray-100' : 
+                        hora === f ? 'bg-blue-600 text-white border-blue-600 scale-105' : 
+                        'bg-white text-blue-600 border-blue-50 hover:border-blue-500'
+                      }`}
+                    >
+                      {f}
+                    </button>
+                  );
+                })}
               </div>
-            )}
-          </div>
+            </div>
+          )}
         </div>
+      </div>
+      {/* Aquí vendría el botón de confirmar que ya tienes abajo */}
 
 {/* PIE DEL MODAL BLINDADO (Sustituye tu bloque anterior por este) */}
         <div className="p-4 bg-gray-50 border-t flex flex-col items-center gap-3">
