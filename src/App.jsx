@@ -348,7 +348,7 @@ const enviarEmailConfirmacion = async (email, alumno, detalle, tipo = 'cita') =>
             </div>
 
             ${esAlta 
-              ? `<p>Ya podéis consultar vuestro panel de usuario para ver los próximos recibos y detalles del grupo.</p>`
+              ? `<p>🎒 <strong>Recordad traer:</strong> Bañador, gorro, toalla, gafas y chanclas.</p>`
               : `<p>🎒 <strong>Recordad traer:</strong> Bañador, gorro, toalla, gafas y chanclas.</p>`
             }
 
@@ -3991,12 +3991,16 @@ const PantallaPruebaNivel = ({ alumno, close, onSuccess, user }) => {
         fechaSolicitud: new Date().toISOString()
       });
 
-      // 📧 2. Email (Seguro)
-      try {
-        if (user && user.email) {
-          await enviarEmailConfirmacion(user.email, alumno.nombre, citaTexto, cita);
-        }
-      } catch (e) { console.error("Error email:", e); }
+   // 📧 2. Email (Seguro)
+   try {
+    if (user && user.email) {
+      // Cambiamos el cuarto parámetro por el texto fijo 'cita'
+      await enviarEmailConfirmacion(user.email, alumno.nombre, citaTexto, 'cita');
+      console.log("🚀 Email de cita enviado correctamente a:", user.email);
+    }
+  } catch (e) { 
+    console.error("Error al enviar el email de cita:", e); 
+  }
 
       // 3. Finalización
       if (typeof refresh === 'function') {
