@@ -1280,16 +1280,22 @@ const confirmarInscripcion = async (alumnoId) => {
         console.warn("No se pudo descontar la plaza automáticamente.");
       }
 
-      // 📧 3. ENVÍO DE EMAIL (ACTUALIZADO CON EL MODO 'ALTA')
+      // 📧 3. ENVÍO DE EMAIL (CORREGIDO: DÍAS Y HORARIO SIN REPETICIONES)
       const padreId = alumno.parentId || alumno.user;
       const emailPadre = padres[padreId]?.email || alumno.email;
 
       if (emailPadre) {
-        // Añadimos 'alta' como cuarto parámetro para que el título y el color cambien a verde
+        // Combinamos los días y el horario en un solo texto claro
+        // Usamos los campos que vienen del objeto 'alumno'
+        const diasInscrito = alumno.dias || "Días seleccionados";
+        const horarioInscrito = alumno.horario || "Horario seleccionado";
+        
+        const detalleFinal = `${diasInscrito} a las ${horarioInscrito}`;
+
         await enviarEmailConfirmacion(
           emailPadre, 
           alumno.nombre, 
-          `${grupoDestino} (${alumno.horario})`,
+          detalleFinal, // Enviará: "Lunes y Miércoles a las 17:00"
           'alta' 
         );
       }
@@ -3993,10 +3999,14 @@ const PantallaPruebaNivel = ({ alumno, close, onSuccess, user }) => {
 
    // 📧 2. Email (Seguro)
    try {
-    if (user && user.email) {
-      // Cambiamos el cuarto parámetro por el texto fijo 'cita'
-      await enviarEmailConfirmacion(user.email, alumno.nombre, citaTexto, 'cita');
-      console.log("🚀 Email de cita enviado correctamente a:", user.email);
+    // Buscamos el email en cualquier sitio donde pueda estar el objeto user
+    const emailDestino = user?.email || (user?.auth && user.auth.email);
+
+    if (emailDestino) {
+      await enviarEmailConfirmacion(emailDestino, alumno.nombre, citaTexto, 'cita');
+      console.log("🚀 Intentando enviar cita a:", emailDestino);
+    } else {
+      console.warn("⚠️ No se pudo enviar el email: No se encontró la dirección del usuario.");
     }
   } catch (e) { 
     console.error("Error al enviar el email de cita:", e); 
