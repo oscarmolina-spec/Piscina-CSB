@@ -348,11 +348,11 @@ const enviarEmailConfirmacion = async (email, alumno, detalle, tipo = 'cita') =>
             </div>
 
             ${esAlta 
-              ? `<p>🎒 <strong>Recordad traer:</strong> Bañador, gorro, toalla, gafas y chanclas.</p>`
+              ? `<p>Ya podéis consultar vuestro panel de usuario para ver los próximos recibos y detalles del grupo.</p>`
               : `<p>🎒 <strong>Recordad traer:</strong> Bañador, gorro, toalla, gafas y chanclas.</p>`
             }
 
-            <p style="margin-top: 25px;">Saludos,<br><strong>Coordinación de Extraescolares CSB</strong></p>
+            <p style="margin-top: 25px;">Saludos,<br><strong>Coordinación de Natación CSB</strong></p>
             <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;" />
             <p style="font-size: 11px; color: #999;">Este es un mensaje automático generado por el sistema de gestión de piscina.</p>
           </div>
@@ -1280,22 +1280,16 @@ const confirmarInscripcion = async (alumnoId) => {
         console.warn("No se pudo descontar la plaza automáticamente.");
       }
 
-      // 📧 3. ENVÍO DE EMAIL (CORREGIDO: DÍAS Y HORARIO SIN REPETICIONES)
+      // 📧 3. ENVÍO DE EMAIL (ACTUALIZADO CON EL MODO 'ALTA')
       const padreId = alumno.parentId || alumno.user;
       const emailPadre = padres[padreId]?.email || alumno.email;
 
       if (emailPadre) {
-        // Combinamos los días y el horario en un solo texto claro
-        // Usamos los campos que vienen del objeto 'alumno'
-        const diasInscrito = alumno.dias || "Días seleccionados";
-        const horarioInscrito = alumno.horario || "Horario seleccionado";
-        
-        const detalleFinal = `${diasInscrito} a las ${horarioInscrito}`;
-
+        // Añadimos 'alta' como cuarto parámetro para que el título y el color cambien a verde
         await enviarEmailConfirmacion(
           emailPadre, 
           alumno.nombre, 
-          detalleFinal, // Enviará: "Lunes y Miércoles a las 17:00"
+          `${grupoDestino} (${alumno.horario})`,
           'alta' 
         );
       }
@@ -2907,6 +2901,14 @@ const handleUpdatePassword = async () => {
     );
     return () => unsub();
   }, []);
+  // 🚩 PEGA ESTO AQUÍ ABAJO:
+  useEffect(() => {
+    if (modoModal === null && user?.uid && typeof refresh === 'function') {
+      console.log("🔄 Actualizando datos al cerrar modal...");
+      refresh(user.uid);
+    }
+  }, [modoModal, user?.uid]); 
+  // 🚩 FIN DEL BLOQUE NUEVO
 
   const alTerminarPrueba = () => {
     // 1. Cerramos el modal de la prueba
@@ -3141,72 +3143,65 @@ if (hijo.estado === 'inscrito') {
   </div>
 )}
               
-{/* DATOS DE PRUEBA: Solo entramos si el estado es prueba_reservada */}
+{/* DATOS DE PRUEBA */}
 {hijo.estado === 'prueba_reservada' && (
-  <>
-    {hijo.citaNivel ? (
-      /* CASO A: Tiene estado Y tiene hora (Todo perfecto) */
-      <div className="ml-3 mt-4 bg-orange-50 p-3 rounded-lg border border-orange-200 text-sm">
-        <div className="mb-3 pb-3 border-b border-orange-200">
-            <p className="text-[10px] font-bold text-orange-800 uppercase tracking-wider mb-1">🎯 Grupo Pre-seleccionado:</p>
-            {hijo.actividad && hijo.dias ? (
-                <div>
-                  <p className="text-lg font-black text-orange-900 leading-tight">{hijo.actividad}</p>
-                  <div className="flex gap-3 text-orange-800 text-xs mt-1 font-bold">
-                      <span>📅 {hijo.dias}</span>
-                      <span>⏰ {hijo.horario || 'Horario pendiente'}</span>
-                  </div>
-                </div>
-            ) : (
-                <button 
-                  onClick={() => { setAlumnoSeleccionado(hijo); setModoModal('inscripcion'); }} 
-                  className="w-full bg-white border border-orange-300 text-orange-700 py-1.5 rounded text-xs font-bold hover:bg-orange-100 transition"
-                >
-                    👉 Elegir Grupo y Horario
-                </button>
-            )}
-        </div>
+  <div className="ml-3 mt-4 bg-orange-50 p-3 rounded-lg border border-orange-200 text-sm">
+    <div className="mb-3 pb-3 border-b border-orange-200">
+        <p className="text-[10px] font-bold text-orange-800 uppercase tracking-wider mb-1">🎯 Grupo Pre-seleccionado:</p>
         
-        <div className="flex items-center gap-2 mt-2">
-          <span className="text-2xl">🗓️</span>
-          <div className="flex-1">
-            <p className="font-bold text-orange-900 text-[10px] uppercase tracking-tighter">Día y Hora de la Prueba:</p>
-            <div className="mt-1 bg-white/80 p-2 rounded-lg border border-green-200 shadow-sm">
-              <p className="text-blue-900 font-black leading-tight text-sm">
-                {hijo.citaNivel} 
-              </p>
-              <div className="flex items-center gap-1 mt-1">
-                <span className="text-green-600 animate-pulse text-[10px]">●</span>
-                <span className="text-[9px] text-green-700 font-black uppercase tracking-widest">
-                  Cita Confirmada
-                </span>
+        {/* MODIFICACIÓN: Si ya tiene actividad Y días, mostramos la info. Si no, el botón. */}
+        {hijo.actividad && hijo.dias ? (
+            <div>
+              <p className="text-lg font-black text-orange-900 leading-tight">{hijo.actividad}</p>
+              <div className="flex gap-3 text-orange-800 text-xs mt-1 font-bold">
+                  <span>📅 {hijo.dias}</span>
+                  <span>⏰ {hijo.horario || 'Horario pendiente'}</span>
               </div>
             </div>
-          </div>
-        </div>
-        <p className="text-[10px] text-orange-600 mt-2 italic">
-          ⚠️ Recordad traer bañador, gorro, chanclas, gafas de agua y toalla.
+        ) : (
+            <button 
+              onClick={() => { setAlumnoSeleccionado(hijo); setModoModal('inscripcion'); }} 
+              className="w-full bg-white border border-orange-300 text-orange-700 py-1.5 rounded text-xs font-bold hover:bg-orange-100 transition"
+            >
+                👉 Elegir Grupo y Horario
+            </button>
+        )}
+    </div>
+    
+{/* SECCIÓN DE LA CITA DE NIVEL - VERSIÓN FINAL SEGURA */}
+<div className="flex items-center gap-2">
+  <span className="text-2xl">🗓️</span>
+  <div>
+    <p className="font-bold text-orange-900 text-[10px] uppercase">Cita para Prueba</p>
+    
+    {/* 🚩 LA LLAVE MAESTRA:
+        Si el estado es 'prueba_reservada', el botón rojo DESAPARECE.
+        Mostramos el texto de la cita si existe, y si no, un mensaje de carga. */}
+    {hijo.estado === 'prueba_reservada' || hijo.citaNivel ? (
+      <div className="mt-1 bg-white/80 p-2 rounded-lg border border-green-200 shadow-sm">
+        <p className="text-indigo-950 font-black leading-tight text-xs">
+          {hijo.citaNivel || "Cita confirmada"} 
         </p>
+        <div className="flex items-center gap-1 mt-1">
+          <span className="text-green-600 text-[10px]">●</span>
+          <span className="text-[9px] text-green-700 font-black uppercase tracking-widest">
+            Cita Confirmada
+          </span>
+        </div>
       </div>
     ) : (
-      /* CASO B: Tiene el estado pero NO tiene la hora (Se cerró la pestaña a medias) */
-      <div className="ml-3 mt-4 bg-red-50 p-4 rounded-xl border-2 border-red-200 shadow-inner">
-        <div className="flex items-center gap-3">
-          <span className="text-2xl animate-bounce">⚠️</span>
-          <div>
-            <p className="text-red-800 font-black text-xs uppercase">Reserva Incompleta</p>
-            <p className="text-red-600 text-[10px] mb-2 font-medium">Cerraste la ventana antes de elegir la hora del lunes.</p>
-          </div>
-        </div>
-        <button 
-          onClick={() => { setAlumnoSeleccionado(hijo); setModoModal('prueba'); }}
-          className="w-full bg-red-600 text-white py-3 rounded-lg font-black text-xs uppercase tracking-widest hover:bg-red-700 transition shadow-lg"
-        >
-          ¡ASIGNAR HORA DE PRUEBA AHORA!
-        </button>
-      </div>
+      /* El botón rojo solo sale si el estado NO es reserva Y NO hay citaNivel */
+      <button 
+        type="button"
+        onClick={() => { setAlumnoSeleccionado(hijo); setModoModal('prueba'); }} 
+        className="mt-1 text-red-600 font-black underline animate-pulse text-sm block cursor-pointer"
+      >
+        ⚠️ ¡RESERVAR HORA AHORA!
+      </button>
     )}
-  </>
+  </div>
+</div>
+  </div>
 )}
 
               {/* AVISO BAJA FINALIZADA */}
@@ -3946,32 +3941,18 @@ const PantallaPruebaNivel = ({ alumno, close, onSuccess, user }) => {
     );
   }
 
-  // 1. FUNCIÓN PARA VALIDAR FECHAS (Septiembre especial + Lunes resto de año)
+  // 1. FUNCIÓN PARA VALIDAR SI ES LUNES
   const validarSiEsLunes = (e) => {
-    const valor = e.target.value; // Formato yyyy-mm-dd
-    const seleccionada = new Date(valor);
-    const diaSemana = seleccionada.getUTCDay(); // 1 es Lunes, 2 es Martes
+    const seleccionada = new Date(e.target.value);
+    const diaSemana = seleccionada.getUTCDay(); // 1 es Lunes
 
-    // Listado de fechas permitidas en Septiembre 2026 (14, 15, 21, 22, 28, 29)
-    const fechasEspecialesSept = [
-      '2026-09-14', '2026-09-15', 
-      '2026-09-21', '2026-09-22', 
-      '2026-09-28', '2026-09-29'
-    ];
-
-    const esFechaEspecial = fechasEspecialesSept.includes(valor);
-    const esLunes = diaSemana === 1;
-
-    // Lógica: Permitir si es una fecha especial de Septiembre 
-    // O si es Lunes y estamos fuera de ese rango (o simplemente es Lunes)
-    if (esFechaEspecial || esLunes) {
-      setFecha(valor);
-      setHora(null);
-    } else {
-      alert("📅 Selecciona uno de los días permitidos en Septiembre (14, 15, 21, 22, 28, 29) o un LUNES para el resto de fechas.");
+    if (diaSemana !== 1) {
+      alert("📅 Las pruebas de nivel solo se realizan los LUNES. Por favor, selecciona otro día.");
       setFecha('');
       return;
     }
+    setFecha(e.target.value);
+    setHora(null);
   };
 
   // 2. GENERAR TURNOS DE 5 MINUTOS
@@ -4004,8 +3985,7 @@ const PantallaPruebaNivel = ({ alumno, close, onSuccess, user }) => {
   }, [fecha]);
 
   const confirmarReserva = async () => {
-    // Cambiamos el mensaje para no confundir al usuario
-    if (!fecha || !hora) return alert("⚠️ Selecciona una fecha y una hora.");
+    if (!fecha || !hora) return alert("⚠️ Selecciona un lunes y una hora.");
     setLoading(true);
     try {
       const citaTexto = `${fecha} a las ${hora}`;
@@ -4019,20 +3999,12 @@ const PantallaPruebaNivel = ({ alumno, close, onSuccess, user }) => {
         fechaSolicitud: new Date().toISOString()
       });
 
-   // 📧 2. Email (Seguro)
-   try {
-    // Buscamos el email en cualquier sitio donde pueda estar el objeto user
-    const emailDestino = user?.email || (user?.auth && user.auth.email);
-
-    if (emailDestino) {
-      await enviarEmailConfirmacion(emailDestino, alumno.nombre, citaTexto, 'cita');
-      console.log("🚀 Intentando enviar cita a:", emailDestino);
-    } else {
-      console.warn("⚠️ No se pudo enviar el email: No se encontró la dirección del usuario.");
-    }
-  } catch (e) { 
-    console.error("Error al enviar el email de cita:", e); 
-  }
+      // 📧 2. Email (Seguro)
+      try {
+        if (user && user.email) {
+          await enviarEmailConfirmacion(user.email, alumno.nombre, citaTexto, cita);
+        }
+      } catch (e) { console.error("Error email:", e); }
 
       // 3. Finalización
       if (typeof refresh === 'function') {
@@ -4095,73 +4067,62 @@ if (alumno.natacionPasado === 'si' || alumno.esAntiguoAlumno === true) {
   );
 }
 
-return (
-  <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-[999] backdrop-blur-sm">
-    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
-      
-      <div className="bg-blue-600 p-5 text-white flex justify-between items-center shadow-lg">
-        <div>
-          {/* 🚩 TEXTO ACTUALIZADO: Quitamos "LUNES" del título */}
-          <h3 className="font-black text-xl flex items-center gap-2">🏊 Cita para Prueba de Nivel</h3>
-          <p className="text-blue-100 text-xs font-medium uppercase">{alumno.nombre}</p>
-        </div>
-      </div>
-      
-      <div className="p-6 overflow-y-auto flex-1">
-        {/* 🚩 TEXTO ACTUALIZADO: Aclaramos lo de septiembre */}
-        <div className="mb-6 bg-orange-50 border border-orange-200 p-4 rounded-2xl flex items-start gap-3">
-           <span className="text-xl">ℹ️</span>
-           <p className="text-orange-900 text-sm">
-             En septiembre disponemos de fechas especiales (Lunes y Martes). 
-             A partir de octubre, las pruebas volverán a ser exclusivamente los <strong>lunes</strong>. 
-             Recuerda traer bañador, gorro y chanclas.
-           </p>
-        </div>
-
-        <div className="space-y-6">
+  return (
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-[999] backdrop-blur-sm">
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
+        
+        <div className="bg-blue-600 p-5 text-white flex justify-between items-center shadow-lg">
           <div>
-            {/* 🚩 TEXTO ACTUALIZADO: Más genérico */}
-            <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">1. Selecciona el día</label>
-            <input 
-              type="date" 
-              className="w-full p-4 border-2 border-gray-100 rounded-2xl bg-gray-50 font-bold"
-              // Forzamos el inicio en la primera fecha de septiembre que me pediste
-              min="2026-09-14"
-              value={fecha}
-              onChange={validarSiEsLunes}
-            />
+            <h3 className="font-black text-xl flex items-center gap-2">🏊 Prueba de Nivel: LUNES</h3>
+            <p className="text-blue-100 text-xs font-medium uppercase">{alumno.nombre}</p>
+          </div>
+        </div>
+        
+        <div className="p-6 overflow-y-auto flex-1">
+          <div className="mb-6 bg-orange-50 border border-orange-200 p-4 rounded-2xl flex items-start gap-3">
+             <span className="text-xl">ℹ️</span>
+             <p className="text-orange-900 text-sm">Las pruebas son exclusivas para los <strong>lunes</strong> por la tarde. Recuerda traer el equipo de natación.</p>
           </div>
 
-          {fecha && (
-            <div className="animate-in fade-in slide-in-from-bottom-4">
-              <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">
-                2. Turnos de 5 min (Aforo máx. 2)
-              </label>
-              <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
-                {franjas.map(f => {
-                  const ocupados = ocupacion[f] || 0;
-                  const estaLleno = ocupados >= 2;
-                  return (
-                    <button
-                      key={f}
-                      disabled={estaLleno}
-                      onClick={() => setHora(f)}
-                      className={`p-2 rounded-xl text-xs font-bold border-2 transition-all ${
-                        estaLleno ? 'bg-gray-100 text-gray-300 border-gray-100' : 
-                        hora === f ? 'bg-blue-600 text-white border-blue-600 scale-105' : 
-                        'bg-white text-blue-600 border-blue-50 hover:border-blue-500'
-                      }`}
-                    >
-                      {f}
-                    </button>
-                  );
-                })}
-              </div>
+          <div className="space-y-6">
+            <div>
+              <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">1. Selecciona un Lunes</label>
+              <input 
+                type="date" 
+                className="w-full p-4 border-2 border-gray-100 rounded-2xl bg-gray-50 font-bold"
+                min={new Date().toISOString().split('T')[0]}
+                value={fecha}
+                onChange={validarSiEsLunes}
+              />
             </div>
-          )}
+
+            {fecha && (
+              <div className="animate-in fade-in slide-in-from-bottom-4">
+                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">2. Turnos de 5 min (Aforo máx. 2)</label>
+                <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
+                  {franjas.map(f => {
+                    const ocupados = ocupacion[f] || 0;
+                    const estaLleno = ocupados >= 2;
+                    return (
+                      <button
+                        key={f}
+                        disabled={estaLleno}
+                        onClick={() => setHora(f)}
+                        className={`p-2 rounded-xl text-xs font-bold border-2 transition-all ${
+                          estaLleno ? 'bg-gray-100 text-gray-300 border-gray-100' : 
+                          hora === f ? 'bg-blue-600 text-white border-blue-600 scale-105' : 
+                          'bg-white text-blue-600 border-blue-50 hover:border-blue-500'
+                        }`}
+                      >
+                        {f}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
-      </div>
-      {/* Aquí vendría el botón de confirmar que ya tienes abajo */}
 
 {/* PIE DEL MODAL BLINDADO (Sustituye tu bloque anterior por este) */}
         <div className="p-4 bg-gray-50 border-t flex flex-col items-center gap-3">
