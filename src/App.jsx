@@ -3583,13 +3583,19 @@ const inscribir = async (act, op) => {
     }
 
 // CASO B: INSCRIPCIÓN DIRECTA (VIP, INFANTIL O EXENTO)
-    // 🚩 3. DETERMINAR ESTADO Y VERIFICAR AFORO
+    // 🚩 3. DETERMINAR ESTADO Y VERIFICAR AFORO (CORREGIDO)
     const infoPlaza = obtenerEstadoPlaza(act.id, op.dias, d.curso);
     
-    // Forzamos el estado a 'inscrito' si es VIP, Infantil o ya tiene nivel
-    let estadoFinalReal = (tienePaseVIP || esInfantil || d.citaNivel || d.esAntiguoAlumno) ? 'inscrito' : (estadoFinal || 'inscrito');
-    let mensajeConfirmacion = `¿Confirmar inscripción definitiva en ${act.nombre}?`;
+    let estadoFinalReal;
+    if (tienePaseVIP || esInfantil || d.esAntiguoAlumno) {
+        estadoFinalReal = 'inscrito';
+    } else if (act.requierePrueba) {
+        estadoFinalReal = 'prueba_reservada'; 
+    } else {
+        estadoFinalReal = 'inscrito';
+    }
 
+    let mensajeConfirmacion = `¿Confirmar inscripción en ${act.nombre}?`;
     if (infoPlaza.lleno) {
         mensajeConfirmacion = `⚠️ Este grupo está completo actualmente.\n\n¿Quieres apuntarte a la LISTA DE ESPERA para ${op.dias}? Te avisaremos si queda una vacante.`;
         estadoFinalReal = 'lista_espera';
@@ -3597,69 +3603,50 @@ const inscribir = async (act, op) => {
 
     if (!confirm(mensajeConfirmacion)) return;
     
-// 4. GUARDADO FINAL (SINCRO TOTAL CON PANEL ADMIN)
-const grupoFormateado = `${op.dias} ${op.horario}`;
+    // 4. GUARDADO FINAL
+    const grupoFormateado = `${op.dias} ${op.horario}`;
+    let idLimpio = act.id;
+    if (act.nombre.toLowerCase().includes('16:15')) idLimpio = 'primaria_1615';
     
-// 🚩 IMPORTANTE: Forzamos el actividadId para que coincida con tu lógica de Admin
-let idLimpio = act.id;
-if (act.nombre.toLowerCase().includes('16:15')) idLimpio = 'primaria_1615';
-// ... podrías añadir más si ves que otros fallan
+    try {
+        await updateDoc(alumnoRef, { 
+          ...datosComunes,
+          estado: estadoFinalReal,
+          grupo: grupoFormateado, 
+          horario: op.horario,
+          actividad: act.nombre,
+          actividadId: idLimpio,
+          dias: op.dias,
+          revisadoAdmin: (estadoFinalReal === 'inscrito'),
+          validadoAdmin: (estadoFinalReal === 'inscrito'),
+          fechaInscripcion: new Date().toISOString()
+        });
 
-try {
-    await updateDoc(alumnoRef, { 
-      ...datosComunes,
-      estado: estadoFinalReal,
-      grupo: grupoFormateado, 
-      horario: op.horario,
-      actividad: act.nombre,
-      actividadId: idLimpio, // Usamos el ID que el Admin entiende
-      dias: op.dias,         // Guardamos 'Lunes y Miércoles' tal cual lo busca el Admin
-      revisadoAdmin: true,
-      validadoAdmin: true,
-      fechaInscripcion: new Date().toISOString()
-    });
-
-    // 🚩 5. ACTUALIZAR EL MAPA DE CONTEO
-    if (estadoFinalReal === 'inscrito') {
-        try {
-            // Generamos el ID del grupo EXACTO que tienes en la colección 'clases'
-            // Si el contador no baja, revisa en Firestore si el documento se llama así:
-            const idGrupoParaConteo = `${idLimpio}_${op.dias.replace(/ /g, '_')}`; 
-            
-  
-        } catch (e) {
-            console.warn("Fallo en el contador. Revisa el ID:", idLimpio);
+        // 5. EMAIL DE CONFIRMACIÓN
+        if (user && user.email) {
+          let detalleParaEmail = estadoFinalReal === 'lista_espera' 
+              ? "LISTA DE ESPERA (Pendiente de vacante)" 
+              : `${act.nombre} (${op.dias} - ${op.horario})`;
+              
+          await enviarEmailConfirmacion(user.email, d.nombre, detalleParaEmail);
         }
+
+        // 6. FINALIZACIÓN Y LIMPIEZA
+        await refresh(user.uid); 
+        close();
+
+        setTimeout(() => {
+          let msg = "✅ ¡Inscripción realizada con éxito!";
+          if (estadoFinalReal === 'lista_espera') msg = "✅ Te has apuntado a la lista de espera.";
+          if (estadoFinalReal === 'prueba_reservada') msg = "✅ Solicitud enviada. Recuerda acudir a la prueba de nivel el día seleccionado.";
+          alert(msg);
+        }, 100);
+
+    } catch (error) {
+        console.error("Error en el guardado final:", error);
+        alert("Hubo un error al guardar los datos.");
     }
-
-    // 6. FINALIZACIÓN
-    // 📧 <--- AÑADE ESTO AQUÍ PARA DISPARAR EL EMAIL
-    if (user && user.email) {
-      const detalleCita = estadoFinalReal === 'lista_espera' 
-          ? "LISTA DE ESPERA (Pendiente de vacante)" 
-          : `${act.nombre} (${op.dias} - ${op.horario})`;
-          
-      await enviarEmailConfirmacion(user.email, d.nombre, detalleCita);
-      console.log("🚀 Email enviado a la cola de Firebase para:", user.email);
-  }
-
-  await refresh(user.uid); 
-  close();
-    await refresh(user.uid); 
-    close();
-
-    setTimeout(() => {
-      alert(estadoFinalReal === 'lista_espera' 
-          ? "✅ Te has apuntado a la lista de espera correctamente. Revisa tu email." 
-          : "✅ ¡Inscripción realizada con éxito! Revisa tu email."
-      );
-    }, 100);
-
-} catch (error) {
-    console.error("Error en el guardado final:", error);
-    alert("Hubo un error al guardar los datos.");
-}
-};
+}; // <--- ESTE CIERRA LA FUNCIÓN "inscribir"
 
 return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
