@@ -1216,6 +1216,15 @@ const confirmarInscripcion = async (alumnoId) => {
           }
         });
       }
+      // 🚩 AÑADE ESTO JUSTO AQUÍ (Antes del alert)
+      await addDoc(collection(db, 'logs'), {
+        fecha: new Date().getTime(),
+        alumnoId: alumno.id,
+        alumnoNombre: alumno.nombre,
+        accion: "VALIDAR_ESPERA",
+        detalles: `Plaza validada desde lista de espera por el administrador`,
+        adminEmail: user?.email || ADMIN_EMAIL
+    });
 
       alert("✅ Plaza validada y email enviado.");
     } catch (error) {
@@ -1262,6 +1271,15 @@ const confirmarInscripcion = async (alumnoId) => {
       } catch (errAforo) {
         console.warn("No se pudo descontar la plaza automáticamente. Verifica el nombre de la colección.");
       }
+      // 🚩 AÑADE ESTO AQUÍ:
+      await addDoc(collection(db, 'logs'), {
+        fecha: new Date().getTime(),
+        alumnoId: alumno.id,
+        alumnoNombre: alumno.nombre,
+        accion: "ACEPTAR_PRUEBA",
+        detalles: `Alumno aceptado en ${grupoDestino} tras prueba de nivel`,
+        adminEmail: user?.email || ADMIN_EMAIL
+    });
 
       alert(`✅ ${alumno.nombre} aceptado en ${grupoDestino} y aforo actualizado.`);
       
@@ -1452,6 +1470,15 @@ const validarPlaza = async (alumno) => {
             }
           });
         }
+        // 🚩 AÑADE ESTO AQUÍ PARA EL HISTORIAL:
+        await addDoc(collection(db, 'logs'), {
+          fecha: new Date().getTime(),
+          alumnoId: alumno.id,
+          alumnoNombre: alumno.nombre,
+          accion: "CONFIRMACIÓN_GLOBAL",
+          detalles: `Alta confirmada manualmente. Inicio previsto: ${fechaInicioParaEmail}. Fecha técnica: ${fechaTecnica}`,
+          adminEmail: user?.email || ADMIN_EMAIL
+      });
 
         alert(`✅ ¡Hecho! Grabado con fecha técnica: ${fechaTecnica}`);
     } catch (error) {
