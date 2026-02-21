@@ -1679,16 +1679,32 @@ const ingresosAltas = previsAltas.reduce((total, a) => total + obtenerPrecioReal
 const perdidasBajas = previsBajas.reduce((total, a) => total + obtenerPrecioReal(a), 0);
 const balanceNeto = previsAltas.length - previsBajas.length;
 const balanceEconomico = ingresosAltas - perdidasBajas;
-/// --- 1. LISTADO GLOBAL (CORREGIDO) ---
+// --- 1. LISTADO GLOBAL (VITAMINADO CON BUSCADOR DE PADRES) ---
 const listadoGlobal = alumnos.filter(a => {
-  const coincideNombre = (a.nombre || '').toLowerCase().includes(busqueda.toLowerCase());
+  // 1. Obtenemos los datos del padre usando el parentId del alumno
+  const p = padres[a.parentId] || {};
+  
+  const busq = busqueda.toLowerCase();
+  
+  // 2. ¿Coincide el nombre del niño?
+  const coincideNombreNiño = (a.nombre || '').toLowerCase().includes(busq);
+  
+  // 3. ¿Coincide algún dato del responsable? (Nombre, Contacto o Pagador)
+  // 🚩 Incluimos 'personaContacto' que es lo que añadimos ayer para registros internos
+  const coincideResponsable = 
+    (p.nombre || '').toLowerCase().includes(busq) || 
+    (p.personaContacto || '').toLowerCase().includes(busq) ||
+    (p.nombrePagador || '').toLowerCase().includes(busq);
+
+  // 4. Filtro de grupo y estados
   const coincideGrupo = filtroGrupo ? a.actividad === filtroGrupo : true;
   
-  // 🚩 QUITAMOS 'lista_espera' de aquí para que no se mezclen con los inscritos
+  // Mantenemos tus estados activos (sin lista de espera como querías)
   const estadosActivos = ['inscrito', 'requiere_prueba', 'prueba_reservada', 'baja_pendiente']; 
   const esAlumnoReal = estadosActivos.includes(a.estado);
 
-  return coincideNombre && coincideGrupo && esAlumnoReal;
+  // RESULTADO: Si coincide el niño O el padre, y el grupo/estado es correcto, se muestra
+  return (coincideNombreNiño || coincideResponsable) && coincideGrupo && esAlumnoReal;
 });
 
 // --- 2. LISTADO PRUEBAS (FILTRO BLINDADO) ---
@@ -2178,19 +2194,29 @@ return (
 </div>  </div>
 )}
     {/* TAB: GLOBAL (ACTUALIZADO CON LISTA DE ESPERA) */}
-{tab === 'global' && (
+    {tab === 'global' && (
     <div className="bg-white rounded shadow overflow-hidden">
+        {/* CABECERA CON BUSCADOR MEJORADO */}
         <div className="p-4 border-b bg-gray-50 flex flex-col md:flex-row gap-4">
-            <input className="flex-1 border p-2 rounded" placeholder="🔍 Buscar..." value={busqueda} onChange={e => setBusqueda(e.target.value)} />
-            <select className="border p-2 rounded md:w-1/3" value={filtroGrupo} onChange={e => setFiltroGrupo(e.target.value)}>
+            <div className="relative flex-1">
+                <span className="absolute left-3 top-2.5 text-gray-400">🔍</span>
+                <input 
+                    className="w-full border p-2 pl-10 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" 
+                    placeholder="Buscar por niño o responsable..." 
+                    value={busqueda} 
+                    onChange={e => setBusqueda(e.target.value)} 
+                />
+            </div>
+            <select className="border p-2 rounded md:w-1/3 font-bold text-gray-600 bg-white" value={filtroGrupo} onChange={e => setFiltroGrupo(e.target.value)}>
                 <option value="">📂 Todos los Grupos</option>
                 {gruposUnicos.map(g => (<option key={g} value={g}>{g}</option>))}
             </select>
         </div>
+
         <table className="w-full text-sm text-left">
             <thead className="bg-gray-100 uppercase text-xs">
                 <tr>
-                    <th className="p-3">Alumno</th>
+                    <th className="p-3">Alumno / Responsable</th>
                     <th className="p-3">Actividad / Alta</th>
                     <th className="p-3 text-right">Acciones</th>
                 </tr>
@@ -2202,22 +2228,26 @@ return (
                       onClick={() => abrirFicha(a)} 
                       className={`border-b cursor-pointer transition ${
                           a.estado === 'baja_pendiente' ? 'bg-red-50' : 
-                          a.estado === 'lista_espera' ? 'bg-amber-50 hover:bg-amber-100' : // 🚩 Fila Ámbar
+                          a.estado === 'lista_espera' ? 'bg-amber-50 hover:bg-amber-100' : 
                           'hover:bg-blue-50'
                       }`}
                     >
                         <td className="p-3">
-                          <span className="font-bold text-gray-900 block">
+                          <span className="font-bold text-gray-900 block leading-tight">
                             {a.estado === 'lista_espera' && '⏳ '}{a.nombre}
                           </span>
                           
-                          {/* BADGES DINÁMICOS */}
+                          {/* 👤 NOMBRE DEL PADRE/CONTACTO VISIBLE SIEMPRE */}
+                          <div className="text-[10px] text-gray-500 font-bold uppercase tracking-tight mt-1">
+                             👤 {padres[a.parentId]?.nombre || padres[a.parentId]?.personaContacto || padres[a.parentId]?.nombrePagador || 'Cargando tutor...'}
+                          </div>
+                          
                           <div className="flex gap-1 mt-1">
                             {a.estado === 'baja_pendiente' && <span className="text-[10px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded font-black uppercase">BAJA PENDIENTE</span>}
                             {a.estado === 'lista_espera' && <span className="text-[10px] bg-amber-500 text-white px-1.5 py-0.5 rounded font-black uppercase animate-pulse">EN ESPERA</span>}
                           </div>
                           
-                          <div className="text-blue-600 font-bold text-xs mt-1 bg-blue-50 w-fit px-2 py-0.5 rounded">
+                          <div className="text-blue-600 font-bold text-[10px] mt-1 bg-blue-50 w-fit px-2 py-0.5 rounded border border-blue-100">
                               {a.curso} - {a.letra}
                           </div>
                         </td>
@@ -2225,33 +2255,29 @@ return (
                           <div className="font-bold text-gray-800">{a.actividad || '-'}</div>
                           {a.dias && <div className="text-[10px] text-gray-500 mt-1 font-medium">📅 {a.dias} | ⏰ {a.horario}</div>}
                           
-{/* FECHA ADAPTADA (BLINDADA CONTRA CRASHES) */}
-<div className="text-[10px] mt-1">
-  {(() => {
-    // 🚩 Intentamos obtener una fecha limpia sin romper el código
-    let fechaLimpia = '---';
-    try {
-      const f = a.fechaAlta || a.fechaInscripcion;
-      if (f) {
-        // Si es texto (ISO), cortamos la T. Si es objeto, convertimos a ISO y cortamos.
-        const iso = typeof f === 'string' ? f : (f.toDate ? f.toDate() : new Date(f)).toISOString();
-        fechaLimpia = iso.split('T')[0].split('-').reverse().join('/');
-      }
-    } catch (e) { fechaLimpia = 'Error fecha'; }
+                          <div className="text-[10px] mt-1">
+                            {(() => {
+                              let fechaLimpia = '---';
+                              try {
+                                const f = a.fechaAlta || a.fechaInscripcion;
+                                if (f) {
+                                  const iso = typeof f === 'string' ? f : (f.toDate ? f.toDate() : new Date(f)).toISOString();
+                                  fechaLimpia = iso.split('T')[0].split('-').reverse().join('/');
+                                }
+                              } catch (e) { fechaLimpia = 'Error fecha'; }
 
-    if (a.estado === 'lista_espera') {
-      return <span className="text-amber-600 font-bold italic">Solicitud: {fechaLimpia}</span>;
-    } else if (a.fechaAlta || a.fechaInscripcion) {
-      return <span className="text-green-600 font-bold italic">Alta: {fechaLimpia}</span>;
-    } else {
-      return <span className="text-gray-400">Sin fecha de alta</span>;
-    }
-  })()}
-</div>                        </td>
+                              if (a.estado === 'lista_espera') {
+                                return <span className="text-amber-600 font-bold italic">Solicitud: {fechaLimpia}</span>;
+                              } else if (a.fechaAlta || a.fechaInscripcion) {
+                                return <span className="text-green-600 font-bold italic">Alta: {fechaLimpia}</span>;
+                              } else {
+                                return <span className="text-gray-400">Sin fecha de alta</span>;
+                              }
+                            })()}
+                          </div>
+                        </td>
                         <td className="p-3 text-right">
                           <div className="flex items-center justify-end gap-2" onClick={(e) => e.stopPropagation()}>
-                            
-                            {/* BOTÓN DE ACCIÓN INTELIGENTE */}
                             <button 
                                 onClick={() => a.estado === 'lista_espera' ? abrirFicha(a) : confirmarInscripcion(a.id)}
                                 className={`px-2 py-1 rounded text-[10px] font-black uppercase shadow-sm border transition ${
