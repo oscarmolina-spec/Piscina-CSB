@@ -3973,34 +3973,29 @@ const PantallaPruebaNivel = ({ alumno, close, onSuccess, user }) => {
         fechaSolicitud: new Date().toISOString()
       });
 
-      // 📧 2. Intentar enviar Email (Si falla, el proceso sigue)
+      // 📧 2. Email (Seguro)
       try {
         if (user && user.email) {
           await enviarEmailConfirmacion(user.email, alumno.nombre, citaTexto);
-          console.log("🚀 Email de cita encolado para:", user.email);
         }
-      } catch (emailErr) {
-        console.error("Error al disparar email, pero reserva guardada:", emailErr);
-      }
+      } catch (e) { console.error("Error email:", e); }
 
-      // 3. Finalización y Cierre
-      // Usamos el refresh que viene por props para actualizar el panel
+      // 3. Finalización
       if (typeof refresh === 'function') {
         await refresh(user.uid);
       }
 
-      // Cerramos el modal actual
-      close(); 
-
-      // Ejecutamos el éxito (esto avisará al Dashboard para limpiar estados)
-      if (onSuccess) onSuccess();
+      // 🚩 EL CAMBIO CLAVE:
+      // NO ejecutamos onSuccess() aquí. 
+      // Al no ejecutarlo, el Dashboard no abrirá la selección de actividad.
+      
+      close(); // Simplemente cerramos este modal
 
       setTimeout(() => {
-        alert("✅ ¡Cita confirmada correctamente! Recibirás un correo con los detalles.");
+        alert("✅ Cita reservada correctamente. Te esperamos el lunes para la prueba.");
       }, 300);
 
     } catch (e) {
-      console.error("Error crítico en reserva:", e);
       alert("Error: " + e.message);
     } finally {
       setLoading(false);
