@@ -3166,19 +3166,19 @@ if (hijo.estado === 'inscrito') {
         )}
     </div>
     
-    {/* SECCIÓN DE LA CITA DE NIVEL */}
+    {/* SECCIÓN DE LA CITA DE NIVEL - ACTUALIZADA CON DÍA Y HORA */}
     <div className="flex items-center gap-2 mt-2">
       <span className="text-2xl">🗓️</span>
       <div className="flex-1">
-        <p className="font-bold text-orange-900 text-[10px] uppercase">Cita para Prueba de Nivel</p>
+        <p className="font-bold text-orange-900 text-[10px] uppercase tracking-tighter">Día y Hora de la Prueba:</p>
         
-        {/* Mostramos la cita guardada */}
+        {/* Mostramos el valor real de la cita guardada */}
         <div className="mt-1 bg-white/80 p-2 rounded-lg border border-green-200 shadow-sm">
-          <p className="text-indigo-950 font-black leading-tight text-xs">
-            {hijo.citaNivel || "Cita confirmada (Ver email)"} 
+          <p className="text-blue-900 font-black leading-tight text-sm">
+            {hijo.citaNivel || "Cita confirmada"} 
           </p>
           <div className="flex items-center gap-1 mt-1">
-            <span className="text-green-600 text-[10px]">●</span>
+            <span className="text-green-600 animate-pulse text-[10px]">●</span>
             <span className="text-[9px] text-green-700 font-black uppercase tracking-widest">
               Cita Confirmada
             </span>
