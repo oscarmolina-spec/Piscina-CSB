@@ -1279,12 +1279,13 @@ if (emailPadre) {
 
 // 🚩 4. LOG DE AUDITORÍA
 await addDoc(collection(db, 'logs'), {
-    fecha: new Date().getTime(),
-    alumnoId: alumno.id,
-    alumnoNombre: alumno.nombre,
-    accion: "ACEPTAR_PRUEBA",
-    detalles: `Prueba superada. Grupo: ${grupoDestino}. Email enviado a ${emailPadre}`,
-    adminEmail: user?.email || 'Admin'
+  fecha: new Date().getTime(),
+  alumnoId: alumno.id,
+  alumnoNombre: alumno.nombre,
+  accion: "ACEPTAR_PRUEBA",
+  detalles: `Prueba superada. Grupo: ${grupoDestino}. Email enviado a ${emailPadre}`,
+  // 🎯 CAMBIO AQUÍ: Cambiamos 'user?.email' por 'userEmail'
+  adminEmail: userEmail || ADMIN_EMAIL 
 });
 
       alert(`✅ ${alumno.nombre} aceptado y email de confirmación enviado.`);
