@@ -3141,56 +3141,72 @@ if (hijo.estado === 'inscrito') {
   </div>
 )}
               
-{/* DATOS DE PRUEBA */}
+{/* DATOS DE PRUEBA: Solo entramos si el estado es prueba_reservada */}
 {hijo.estado === 'prueba_reservada' && (
-  <div className="ml-3 mt-4 bg-orange-50 p-3 rounded-lg border border-orange-200 text-sm">
-    <div className="mb-3 pb-3 border-b border-orange-200">
-        <p className="text-[10px] font-bold text-orange-800 uppercase tracking-wider mb-1">🎯 Grupo Pre-seleccionado:</p>
+  <>
+    {hijo.citaNivel ? (
+      /* CASO A: Tiene estado Y tiene hora (Todo perfecto) */
+      <div className="ml-3 mt-4 bg-orange-50 p-3 rounded-lg border border-orange-200 text-sm">
+        <div className="mb-3 pb-3 border-b border-orange-200">
+            <p className="text-[10px] font-bold text-orange-800 uppercase tracking-wider mb-1">🎯 Grupo Pre-seleccionado:</p>
+            {hijo.actividad && hijo.dias ? (
+                <div>
+                  <p className="text-lg font-black text-orange-900 leading-tight">{hijo.actividad}</p>
+                  <div className="flex gap-3 text-orange-800 text-xs mt-1 font-bold">
+                      <span>📅 {hijo.dias}</span>
+                      <span>⏰ {hijo.horario || 'Horario pendiente'}</span>
+                  </div>
+                </div>
+            ) : (
+                <button 
+                  onClick={() => { setAlumnoSeleccionado(hijo); setModoModal('inscripcion'); }} 
+                  className="w-full bg-white border border-orange-300 text-orange-700 py-1.5 rounded text-xs font-bold hover:bg-orange-100 transition"
+                >
+                    👉 Elegir Grupo y Horario
+                </button>
+            )}
+        </div>
         
-        {/* Mantenemos tu lógica original de Grupo/Botón Elegir */}
-        {hijo.actividad && hijo.dias ? (
-            <div>
-              <p className="text-lg font-black text-orange-900 leading-tight">{hijo.actividad}</p>
-              <div className="flex gap-3 text-orange-800 text-xs mt-1 font-bold">
-                  <span>📅 {hijo.dias}</span>
-                  <span>⏰ {hijo.horario || 'Horario pendiente'}</span>
+        <div className="flex items-center gap-2 mt-2">
+          <span className="text-2xl">🗓️</span>
+          <div className="flex-1">
+            <p className="font-bold text-orange-900 text-[10px] uppercase tracking-tighter">Día y Hora de la Prueba:</p>
+            <div className="mt-1 bg-white/80 p-2 rounded-lg border border-green-200 shadow-sm">
+              <p className="text-blue-900 font-black leading-tight text-sm">
+                {hijo.citaNivel} 
+              </p>
+              <div className="flex items-center gap-1 mt-1">
+                <span className="text-green-600 animate-pulse text-[10px]">●</span>
+                <span className="text-[9px] text-green-700 font-black uppercase tracking-widest">
+                  Cita Confirmada
+                </span>
               </div>
             </div>
-        ) : (
-            <button 
-              onClick={() => { setAlumnoSeleccionado(hijo); setModoModal('inscripcion'); }} 
-              className="w-full bg-white border border-orange-300 text-orange-700 py-1.5 rounded text-xs font-bold hover:bg-orange-100 transition"
-            >
-                👉 Elegir Grupo y Horario
-            </button>
-        )}
-    </div>
-    
-    {/* SECCIÓN DE LA CITA DE NIVEL - ACTUALIZADA CON DÍA Y HORA */}
-    <div className="flex items-center gap-2 mt-2">
-      <span className="text-2xl">🗓️</span>
-      <div className="flex-1">
-        <p className="font-bold text-orange-900 text-[10px] uppercase tracking-tighter">Día y Hora de la Prueba:</p>
-        
-        {/* Mostramos el valor real de la cita guardada */}
-        <div className="mt-1 bg-white/80 p-2 rounded-lg border border-green-200 shadow-sm">
-          <p className="text-blue-900 font-black leading-tight text-sm">
-            {hijo.citaNivel || "Cita confirmada"} 
-          </p>
-          <div className="flex items-center gap-1 mt-1">
-            <span className="text-green-600 animate-pulse text-[10px]">●</span>
-            <span className="text-[9px] text-green-700 font-black uppercase tracking-widest">
-              Cita Confirmada
-            </span>
           </div>
         </div>
+        <p className="text-[10px] text-orange-600 mt-2 italic">
+          ⚠️ Recordad traer bañador, gorro, chanclas, gafas de agua y toalla.
+        </p>
       </div>
-    </div>
-
-    <p className="text-[10px] text-orange-600 mt-2 italic flex items-center gap-1">
-      ⚠️ Recordad traer bañador, gorro, chanclas, gafas de agua y toalla.
-    </p>
-  </div>
+    ) : (
+      /* CASO B: Tiene el estado pero NO tiene la hora (Se cerró la pestaña a medias) */
+      <div className="ml-3 mt-4 bg-red-50 p-4 rounded-xl border-2 border-red-200 shadow-inner">
+        <div className="flex items-center gap-3">
+          <span className="text-2xl animate-bounce">⚠️</span>
+          <div>
+            <p className="text-red-800 font-black text-xs uppercase">Reserva Incompleta</p>
+            <p className="text-red-600 text-[10px] mb-2 font-medium">Cerraste la ventana antes de elegir la hora del lunes.</p>
+          </div>
+        </div>
+        <button 
+          onClick={() => { setAlumnoSeleccionado(hijo); setModoModal('prueba'); }}
+          className="w-full bg-red-600 text-white py-3 rounded-lg font-black text-xs uppercase tracking-widest hover:bg-red-700 transition shadow-lg"
+        >
+          ¡ASIGNAR HORA DE PRUEBA AHORA!
+        </button>
+      </div>
+    )}
+  </>
 )}
 
               {/* AVISO BAJA FINALIZADA */}
