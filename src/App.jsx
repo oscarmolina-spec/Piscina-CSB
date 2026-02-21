@@ -352,7 +352,7 @@ const enviarEmailConfirmacion = async (email, alumno, detalle, tipo = 'cita') =>
               : `<p>🎒 <strong>Recordad traer:</strong> Bañador, gorro, toalla, gafas y chanclas.</p>`
             }
 
-            <p style="margin-top: 25px;">Saludos,<br><strong>Coordinación de Natación CSB</strong></p>
+            <p style="margin-top: 25px;">Saludos,<br><strong>Coordinación de Extraescolares CSB</strong></p>
             <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;" />
             <p style="font-size: 11px; color: #999;">Este es un mensaje automático generado por el sistema de gestión de piscina.</p>
           </div>
@@ -3147,7 +3147,7 @@ if (hijo.estado === 'inscrito') {
     <div className="mb-3 pb-3 border-b border-orange-200">
         <p className="text-[10px] font-bold text-orange-800 uppercase tracking-wider mb-1">🎯 Grupo Pre-seleccionado:</p>
         
-        {/* MODIFICACIÓN: Si ya tiene actividad Y días, mostramos la info. Si no, el botón. */}
+        {/* Mantenemos tu lógica original de Grupo/Botón Elegir */}
         {hijo.actividad && hijo.dias ? (
             <div>
               <p className="text-lg font-black text-orange-900 leading-tight">{hijo.actividad}</p>
@@ -3166,39 +3166,30 @@ if (hijo.estado === 'inscrito') {
         )}
     </div>
     
-{/* SECCIÓN DE LA CITA DE NIVEL - VERSIÓN FINAL SEGURA */}
-<div className="flex items-center gap-2">
-  <span className="text-2xl">🗓️</span>
-  <div>
-    <p className="font-bold text-orange-900 text-[10px] uppercase">Cita para Prueba</p>
-    
-    {/* 🚩 LA LLAVE MAESTRA:
-        Si el estado es 'prueba_reservada', el botón rojo DESAPARECE.
-        Mostramos el texto de la cita si existe, y si no, un mensaje de carga. */}
-    {hijo.estado === 'prueba_reservada' || hijo.citaNivel ? (
-      <div className="mt-1 bg-white/80 p-2 rounded-lg border border-green-200 shadow-sm">
-        <p className="text-indigo-950 font-black leading-tight text-xs">
-          {hijo.citaNivel || "Cita confirmada"} 
-        </p>
-        <div className="flex items-center gap-1 mt-1">
-          <span className="text-green-600 text-[10px]">●</span>
-          <span className="text-[9px] text-green-700 font-black uppercase tracking-widest">
-            Cita Confirmada
-          </span>
+    {/* SECCIÓN DE LA CITA DE NIVEL */}
+    <div className="flex items-center gap-2 mt-2">
+      <span className="text-2xl">🗓️</span>
+      <div className="flex-1">
+        <p className="font-bold text-orange-900 text-[10px] uppercase">Cita para Prueba de Nivel</p>
+        
+        {/* Mostramos la cita guardada */}
+        <div className="mt-1 bg-white/80 p-2 rounded-lg border border-green-200 shadow-sm">
+          <p className="text-indigo-950 font-black leading-tight text-xs">
+            {hijo.citaNivel || "Cita confirmada (Ver email)"} 
+          </p>
+          <div className="flex items-center gap-1 mt-1">
+            <span className="text-green-600 text-[10px]">●</span>
+            <span className="text-[9px] text-green-700 font-black uppercase tracking-widest">
+              Cita Confirmada
+            </span>
+          </div>
         </div>
       </div>
-    ) : (
-      /* El botón rojo solo sale si el estado NO es reserva Y NO hay citaNivel */
-      <button 
-        type="button"
-        onClick={() => { setAlumnoSeleccionado(hijo); setModoModal('prueba'); }} 
-        className="mt-1 text-red-600 font-black underline animate-pulse text-sm block cursor-pointer"
-      >
-        ⚠️ ¡RESERVAR HORA AHORA!
-      </button>
-    )}
-  </div>
-</div>
+    </div>
+
+    <p className="text-[10px] text-orange-600 mt-2 italic flex items-center gap-1">
+      ⚠️ Recordad traer bañador, gorro, chanclas, gafas de agua y toalla.
+    </p>
   </div>
 )}
 
