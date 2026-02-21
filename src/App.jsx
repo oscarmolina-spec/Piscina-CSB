@@ -318,32 +318,48 @@ const getHumanDate = (d) => {
 };
 
 // Sistema de envío de Emails (simulado con extensión Firebase Trigger Email)
-const enviarEmailConfirmacion = async (email, alumno, cita) => {
+const enviarEmailConfirmacion = async (email, alumno, detalle, tipo = 'cita') => {
   try {
     const nombreAlumno = String(alumno).trim();
-    // Guardamos el email en la colección 'mail'
+    const esAlta = tipo === 'alta'; // ¿Es una validación final?
+
     await addDoc(collection(db, 'mail'), {
       to: [email],
       message: {
-        subject: `Reserva Confirmada: ${nombreAlumno}`,
-        text: `Hola familia de ${nombreAlumno}. Confirmamos la cita para el ${cita}.`,
+        // Título dinámico
+        subject: esAlta ? `✅ Plaza Confirmada: ${nombreAlumno}` : `Reserva Confirmada: ${nombreAlumno}`,
         html: `
-          <div style="font-family: sans-serif; padding: 20px; color: #333; border: 1px solid #ddd; border-radius: 10px;">
-            <h2 style="color: #2563EB;">🏊 Piscina San Buenaventura</h2>
+          <div style="font-family: sans-serif; padding: 20px; color: #333; border: 1px solid #ddd; border-radius: 15px; max-width: 600px;">
+            <h2 style="color: ${esAlta ? '#059669' : '#2563EB'}; border-bottom: 2px solid ${esAlta ? '#059669' : '#2563EB'}; padding-bottom: 10px;">
+               ${esAlta ? '🏊 Plaza Validada Correctamente' : '🏊 Reserva Prueba de Nivel'}
+            </h2>
             <p>Hola familia de <strong>${nombreAlumno}</strong>,</p>
-            <p>Os confirmamos que la prueba de nivel ha sido reservada correctamente. Acuda con tiempo suficiente para estar listo a esa hora.</p>
-            <div style="background: #EFF6FF; padding: 15px; border-radius: 10px; margin: 20px 0;">
-              <p style="margin: 0;">📅 <strong>Fecha:</strong> ${cita}</p>
-              <p style="margin: 10px 0 0 0;">📍 <strong>Lugar:</strong> Piscina Colegio San Buenaventura (Acceso por portón azul).</p>
+            
+            ${esAlta 
+              ? `<p>¡Buenas noticias! La inscripción ha sido revisada y validada por la coordinación. El alumno ya tiene su plaza definitiva confirmada.</p>`
+              : `<p>Os confirmamos que la prueba de nivel ha sido reservada correctamente. Rogamos acudan con tiempo suficiente para estar listos a la hora indicada.</p>`
+            }
+
+            <div style="background: ${esAlta ? '#ECFDF5' : '#EFF6FF'}; padding: 15px; border-radius: 10px; margin: 20px 0; border: 1px solid ${esAlta ? '#10B981' : '#BFDBFE'};">
+              <p style="margin: 0; color: ${esAlta ? '#065F46' : '#1E40AF'}; font-weight: bold;">
+                ${esAlta ? '📍 Detalles de la Inscripción:' : '📅 Detalles de la Cita:'}
+              </p>
+              <p style="margin: 10px 0 0 0; font-size: 16px;">${detalle}</p>
             </div>
-            <p>🎒 <strong>Recordad traer:</strong> Bañador, gorro, toalla, gafas y chanclas.</p>
+
+            ${esAlta 
+              ? `<p>Ya podéis consultar vuestro panel de usuario para ver los próximos recibos y detalles del grupo.</p>`
+              : `<p>🎒 <strong>Recordad traer:</strong> Bañador, gorro, toalla, gafas y chanclas.</p>`
+            }
+
+            <p style="margin-top: 25px;">Saludos,<br><strong>Coordinación de Natación CSB</strong></p>
             <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;" />
-            <p style="font-size: 12px; color: #888;">Este es un mensaje automático.</p>
+            <p style="font-size: 11px; color: #999;">Este es un mensaje automático generado por el sistema de gestión de piscina.</p>
           </div>
         `,
       },
     });
-    console.log("Email encolado para:", email);
+    console.log(`🚀 Email de ${tipo} encolado para:`, email);
   } catch (e) {
     console.error("Error al encolar email:", e);
   }
@@ -1264,18 +1280,19 @@ const confirmarInscripcion = async (alumnoId) => {
         console.warn("No se pudo descontar la plaza automáticamente.");
       }
 
-      // 📧 3. ENVÍO DE EMAIL (USANDO TU UTILIDAD)
-const padreId = alumno.parentId || alumno.user;
-const emailPadre = padres[padreId]?.email || alumno.email;
+      // 📧 3. ENVÍO DE EMAIL (ACTUALIZADO CON EL MODO 'ALTA')
+      const padreId = alumno.parentId || alumno.user;
+      const emailPadre = padres[padreId]?.email || alumno.email;
 
-if (emailPadre) {
-  // Pasamos los 3 parámetros que pide tu función: email, nombre, detalle
-  await enviarEmailConfirmacion(
-    emailPadre, 
-    alumno.nombre, 
-    `${grupoDestino} (${alumno.horario})`
-  );
-}
+      if (emailPadre) {
+        // Añadimos 'alta' como cuarto parámetro para que el título y el color cambien a verde
+        await enviarEmailConfirmacion(
+          emailPadre, 
+          alumno.nombre, 
+          `${grupoDestino} (${alumno.horario})`,
+          'alta' 
+        );
+      }
 
 // 🚩 4. LOG DE AUDITORÍA
 await addDoc(collection(db, 'logs'), {
@@ -3977,7 +3994,7 @@ const PantallaPruebaNivel = ({ alumno, close, onSuccess, user }) => {
       // 📧 2. Email (Seguro)
       try {
         if (user && user.email) {
-          await enviarEmailConfirmacion(user.email, alumno.nombre, citaTexto);
+          await enviarEmailConfirmacion(user.email, alumno.nombre, citaTexto, cita);
         }
       } catch (e) { console.error("Error email:", e); }
 
