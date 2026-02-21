@@ -1264,38 +1264,28 @@ const confirmarInscripcion = async (alumnoId) => {
         console.warn("No se pudo descontar la plaza automáticamente.");
       }
 
-      // 📧 3. ENVÍO DE EMAIL (LO QUE FALTABA)
-      const padreId = alumno.parentId || alumno.user;
-      const emailPadre = padres[padreId]?.email || alumno.email;
+      // 📧 3. ENVÍO DE EMAIL (USANDO TU UTILIDAD)
+const padreId = alumno.parentId || alumno.user;
+const emailPadre = padres[padreId]?.email || alumno.email;
 
-      if (emailPadre) {
-        await addDoc(collection(db, 'mail'), {
-          to: emailPadre,
-          message: {
-            subject: `✅ Plaza Confirmada: ${alumno.nombre}`,
-            html: `
-              <div style="font-family: sans-serif; color: #333; padding: 20px; border: 1px solid #eee; border-radius: 10px;">
-                <h2 style="color: #059669;">¡Prueba de nivel superada!</h2>
-                <p>Hola, te informamos de que <strong>${alumno.nombre}</strong> ha sido admitido correctamente.</p>
-                <div style="background: #f9fafb; padding: 15px; border-radius: 10px; border-left: 5px solid #059669; margin: 20px 0;">
-                  <p><strong>🏊‍♂️ Actividad:</strong> ${alumno.actividad}</p>
-                  <p><strong>🗓️ Horario:</strong> ${alumno.horario} (${alumno.dias})</p>
-                </div>
-                <p>Podéis consultar todos los detalles accediendo a vuestro panel de familia.</p>
-              </div>`
-          }
-        });
-      }
+if (emailPadre) {
+  // Pasamos los 3 parámetros que pide tu función: email, nombre, detalle
+  await enviarEmailConfirmacion(
+    emailPadre, 
+    alumno.nombre, 
+    `${grupoDestino} (${alumno.horario})`
+  );
+}
 
-      // 🚩 4. REGISTRO EN EL HISTORIAL (AUDITORÍA)
-      await addDoc(collection(db, 'logs'), {
-        fecha: new Date().getTime(),
-        alumnoId: alumno.id,
-        alumnoNombre: alumno.nombre,
-        accion: "ACEPTAR_PRUEBA",
-        detalles: `Alumno aceptado en ${grupoDestino} tras prueba de nivel. Email enviado a ${emailPadre}`,
-        adminEmail: user?.email || ADMIN_EMAIL
-      });
+// 🚩 4. LOG DE AUDITORÍA
+await addDoc(collection(db, 'logs'), {
+    fecha: new Date().getTime(),
+    alumnoId: alumno.id,
+    alumnoNombre: alumno.nombre,
+    accion: "ACEPTAR_PRUEBA",
+    detalles: `Prueba superada. Grupo: ${grupoDestino}. Email enviado a ${emailPadre}`,
+    adminEmail: user?.email || 'Admin'
+});
 
       alert(`✅ ${alumno.nombre} aceptado y email de confirmación enviado.`);
       
@@ -3987,6 +3977,7 @@ const PantallaPruebaNivel = ({ alumno, close, onSuccess, user }) => {
     try {
       const citaTexto = `${fecha} a las ${hora}`;
       
+      // 1. Guardar en Base de Datos
       await updateDoc(doc(db, 'students', alumno.id), {
         estado: 'prueba_reservada',
         citaNivel: citaTexto,
@@ -3995,30 +3986,34 @@ const PantallaPruebaNivel = ({ alumno, close, onSuccess, user }) => {
         fechaSolicitud: new Date().toISOString()
       });
 
-      // 🚩 EL CAMBIO CLAVE AQUÍ:
-      // Primero: Cerramos el modal de la cita
-      close(); 
-
-      // Segundo: Forzamos al Panel Familiar a olvidar que había un alumno seleccionado
-      // Esto cerrará automáticamente cualquier flujo de inscripción que estuviera por debajo
-      if (typeof setAlumnoSeleccionado === 'function') {
-        setAlumnoSeleccionado(null);
-      }
-      
-      // Tercero: Limpiamos el modo del modal para volver a la vista base del panel
-      if (typeof setModoModal === 'function') {
-        setModoModal(null);
+      // 📧 2. Intentar enviar Email (Si falla, el proceso sigue)
+      try {
+        if (user && user.email) {
+          await enviarEmailConfirmacion(user.email, alumno.nombre, citaTexto);
+          console.log("🚀 Email de cita encolado para:", user.email);
+        }
+      } catch (emailErr) {
+        console.error("Error al disparar email, pero reserva guardada:", emailErr);
       }
 
-      // Cuarto: Refrescamos los datos para que el botón se ponga verde
+      // 3. Finalización y Cierre
+      // Usamos el refresh que viene por props para actualizar el panel
       if (typeof refresh === 'function') {
         await refresh(user.uid);
       }
+
+      // Cerramos el modal actual
+      close(); 
+
+      // Ejecutamos el éxito (esto avisará al Dashboard para limpiar estados)
+      if (onSuccess) onSuccess();
+
       setTimeout(() => {
-        alert("✅ ¡Cita confirmada correctamente!");
+        alert("✅ ¡Cita confirmada correctamente! Recibirás un correo con los detalles.");
       }, 300);
 
     } catch (e) {
+      console.error("Error crítico en reserva:", e);
       alert("Error: " + e.message);
     } finally {
       setLoading(false);
