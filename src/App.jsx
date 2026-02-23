@@ -3990,7 +3990,8 @@ const PantallaPruebaNivel = ({ alumno, close, onSuccess, user }) => {
     try {
       const citaTexto = `${fecha} a las ${hora}`;
       
-      // 1. Guardar en Base de Datos
+      // 1. ACTUALIZACIÓN ATÓMICA (Estado + Hora en un solo paso)
+      // Guardamos todo junto para que sea imposible que se quede "reservado pero sin hora"
       await updateDoc(doc(db, 'students', alumno.id), {
         estado: 'prueba_reservada',
         citaNivel: citaTexto,
@@ -3999,30 +4000,30 @@ const PantallaPruebaNivel = ({ alumno, close, onSuccess, user }) => {
         fechaSolicitud: new Date().toISOString()
       });
 
-      // 📧 2. Email (Seguro)
+      // 2. EMAIL (Opcional, no bloquea la UI)
       try {
-        if (user && user.email) {
+        if (user?.email) {
           await enviarEmailConfirmacion(user.email, alumno.nombre, citaTexto, cita);
         }
       } catch (e) { console.error("Error email:", e); }
 
-      // 3. Finalización
+      // 3. ACTUALIZACIÓN INSTANTÁNEA
+      // Forzamos al Dashboard a pedir los nuevos datos de Firebase AHORA
       if (typeof refresh === 'function') {
         await refresh(user.uid);
       }
 
-      // 🚩 EL CAMBIO CLAVE:
-      // NO ejecutamos onSuccess() aquí. 
-      // Al no ejecutarlo, el Dashboard no abrirá la selección de actividad.
-      
-      close(); // Simplemente cerramos este modal
+      // 4. CIERRE LIMPIO
+      close(); 
 
+      // Pequeño delay para el alert para no bloquear el renderizado del Dashboard
       setTimeout(() => {
-        alert("✅ Cita reservada correctamente. Te esperamos el lunes para la prueba.");
-      }, 300);
+        alert(`✅ Cita confirmada para ${alumno.nombre}:\n${citaTexto}`);
+      }, 500);
 
     } catch (e) {
-      alert("Error: " + e.message);
+      console.error("Error en reserva:", e);
+      alert("❌ No se pudo guardar la reserva. Inténtalo de nuevo.");
     } finally {
       setLoading(false);
     }
