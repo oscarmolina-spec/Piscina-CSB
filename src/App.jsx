@@ -2911,15 +2911,17 @@ const handleUpdatePassword = async () => {
   // 🚩 FIN DEL BLOQUE NUEVO
 
   // Localiza esto en tu Dashboard y cámbialo:
-const alTerminarPrueba = (datosExtras) => {
-  // 1. Guardamos en el alumno lo que eligió en la pantalla anterior
-  setAlumnoSeleccionado(prev => ({
-    ...prev,
-    ...datosExtras
-  }));
-  // 2. Abrimos el calendario
-  setModoModal('prueba'); 
-};
+  const alTerminarPrueba = (datosExtras) => {
+    // Actualizamos el alumno metiendo la actividad en su "mochila"
+    setAlumnoSeleccionado(prev => {
+      const alumnoConActividad = { ...prev, ...datosExtras };
+      
+      // 🚩 LA CLAVE: Abrimos el calendario SOLO cuando ya tenemos el objeto listo
+      setModoModal('prueba'); 
+      
+      return alumnoConActividad;
+    });
+  };
 
   // 👇 1. FUNCIÓN NUEVA: CANCELAR SOLICITUD (Borrado rápido)
   const cancelarSolicitud = async (hijo) => {
@@ -3259,17 +3261,39 @@ if (hijo.estado === 'inscrito') {
       
       <button onClick={() => setShowForm(true)} className="w-full py-5 border-2 border-dashed border-blue-200 text-blue-400 rounded-xl font-bold hover:bg-blue-50 transition flex items-center justify-center gap-2 mb-10"><span className="text-2xl">+</span> Añadir Otro Alumno</button>
       
-      {/* MODALES Y FORMULARIOS */}
-      {showForm && (<FormularioHijo close={() => setShowForm(false)} user={user} refresh={refresh} />)}
+{/* MODALES Y FORMULARIOS */}
+{showForm && (<FormularioHijo close={() => setShowForm(false)} user={user} refresh={refresh} />)}
+      
       {alumnoEditar && (
-  <FormularioHijo 
-    alumnoAEditar={alumnoEditar} 
-    close={() => setAlumnoEditar(null)} 
-    user={user} 
-    refresh={refresh} 
-  />
-)}      {modoModal === 'prueba' && alumnoEnVivo && (<PantallaPruebaNivel alumno={alumnoEnVivo} close={() => setModoModal(null)} onSuccess={alTerminarPrueba} user={user} refresh={refresh} />)}
-      {modoModal === 'inscripcion' && alumnoEnVivo && (<PantallaInscripcion alumno={alumnoEnVivo} close={() => setModoModal(null)} onRequirePrueba={() => setModoModal('prueba')} user={user} refresh={refresh} />)}
+        <FormularioHijo 
+          alumnoAEditar={alumnoEditar} 
+          close={() => setAlumnoEditar(null)} 
+          user={user} 
+          refresh={refresh} 
+        />
+      )}
+
+      {/* 1. Cambiamos alumnoEnVivo por alumnoSeleccionado para que lea la actividad de la memoria */}
+      {modoModal === 'prueba' && alumnoSeleccionado && (
+        <PantallaPruebaNivel 
+          alumno={alumnoSeleccionado} 
+          close={() => setModoModal(null)} 
+          onSuccess={alTerminarPrueba} 
+          user={user} 
+          refresh={refresh} 
+        />
+      )}
+
+      {/* 2. Cambiamos la función anónima por alTerminarPrueba para que reciba los datos del grupo */}
+      {modoModal === 'inscripcion' && alumnoEnVivo && (
+        <PantallaInscripcion 
+          alumno={alumnoEnVivo} 
+          close={() => setModoModal(null)} 
+          onRequirePrueba={alTerminarPrueba} 
+          user={user} 
+          refresh={refresh} 
+        />
+      )}
     </div>
   );
 };
