@@ -348,7 +348,7 @@ const enviarEmailConfirmacion = async (email, alumno, detalle, tipo = 'cita') =>
             </div>
 
             ${esAlta 
-              ? `<p>Ya podéis consultar vuestro panel de usuario para ver los próximos recibos y detalles del grupo.</p>`
+              ? `<p>🎒 <strong>Recordad traer:</strong> Bañador, gorro, toalla, gafas y chanclas.</p>`
               : `<p>🎒 <strong>Recordad traer:</strong> Bañador, gorro, toalla, gafas y chanclas.</p>`
             }
 
@@ -4044,30 +4044,32 @@ const PantallaPruebaNivel = ({ alumno, close, onSuccess, user }) => {
         grupo: (alumno.dias && alumno.horario) ? `${alumno.dias} ${alumno.horario}` : ''
       });
 
-      // 📧 3. Email (No bloqueante)
+// 📧 3. Email (No bloqueante)
 if (user?.email) {
-  // 🚩 Creamos un texto que combine la cita de nivel y los días de la actividad
-  const infoDetallada = `${citaTexto}. Grupo: ${alumno.actividad} (${alumno.dias} a las ${alumno.horario})`;
+  // 🚩 Construimos el mensaje combinando la prueba y los días del grupo
+  // Usamos alumno.dias para que aparezca por fin el texto de "Lunes y Miércoles" (o lo que corresponda)
+  const mensajeEmail = `${citaTexto}. Grupo elegido: ${alumno.actividad} (${alumno.dias} a las ${alumno.horario})`;
 
   enviarEmailConfirmacion(
     user.email, 
     alumno.nombre, 
-    infoDetallada, 
+    mensajeEmail, 
     'cita'
   ).catch(e => console.error(e));
 }
 
-      // 🔄 4. REFRESH OBLIGATORIO
-      if (typeof refresh === 'function') {
-        await refresh(user.uid);
-      }
+// 🔄 4. REFRESH OBLIGATORIO
+if (typeof refresh === 'function') {
+  await refresh(user.uid);
+}
 
-      // 5. Cierre
-      close(); 
+// 5. Cierre
+close(); 
 
-      setTimeout(() => {
-        alert(`✅ Cita confirmada correctamente para el ${citaTexto}`);
-      }, 300);
+setTimeout(() => {
+  // Aquí también lo ponemos bonito para el mensaje en pantalla
+  alert(`✅ Cita confirmada.\nPrueba: ${citaTexto}\nGrupo: ${alumno.actividad} (${alumno.dias})`);
+}, 300);
 
     } catch (e) {
       console.error("Error crítico en reserva:", e);
