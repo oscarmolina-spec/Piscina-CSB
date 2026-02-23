@@ -3985,45 +3985,56 @@ const PantallaPruebaNivel = ({ alumno, close, onSuccess, user }) => {
   }, [fecha]);
 
   const confirmarReserva = async () => {
+    // 1. Validación estricta: Si no hay fecha/hora, no seguimos
     if (!fecha || !hora) return alert("⚠️ Selecciona un lunes y una hora.");
+    
     setLoading(true);
     try {
+      // Creamos el texto AQUÍ para asegurar que no vaya vacío
       const citaTexto = `${fecha} a las ${hora}`;
       
-      // 1. ACTUALIZACIÓN ATÓMICA (Estado + Hora en un solo paso)
-      // Guardamos todo junto para que sea imposible que se quede "reservado pero sin hora"
-      await updateDoc(doc(db, 'students', alumno.id), {
+      // 2. REFERENCIA AL ALUMNO
+      const alumnoRef = doc(db, 'students', alumno.id);
+
+      // 3. ACTUALIZACIÓN DEL ALUMNO (Todo en un solo bloque)
+      await updateDoc(alumnoRef, {
         estado: 'prueba_reservada',
-        citaNivel: citaTexto,
+        citaNivel: citaTexto, // Esto es lo que lee el Dashboard Familiar
         citaFecha: fecha,
         citaHora: hora,
+        citaId: cita?.id || null, // Guardamos el ID de la cita para el Admin
         fechaSolicitud: new Date().toISOString()
       });
 
-      // 2. EMAIL (Opcional, no bloquea la UI)
-      try {
-        if (user?.email) {
-          await enviarEmailConfirmacion(user.email, alumno.nombre, citaTexto, cita);
-        }
-      } catch (e) { console.error("Error email:", e); }
+      // 4. ACTUALIZACIÓN DE LA CITA (Para que el Admin la vea ocupada)
+      if (cita?.id) {
+        await updateDoc(doc(db, 'citas', cita.id), {
+          ocupada: true,
+          alumnoId: alumno.id,
+          nombreAlumno: alumno.nombre
+        });
+      }
 
-      // 3. ACTUALIZACIÓN INSTANTÁNEA
-      // Forzamos al Dashboard a pedir los nuevos datos de Firebase AHORA
+      // 📧 5. Email (Sin esperar a que termine para no retrasar la UI)
+      if (user?.email) {
+        enviarEmailConfirmacion(user.email, alumno.nombre, citaTexto, cita).catch(console.error);
+      }
+
+      // 🔄 6. REFRESH INMEDIATO
       if (typeof refresh === 'function') {
         await refresh(user.uid);
       }
 
-      // 4. CIERRE LIMPIO
+      // 7. CIERRE Y AVISO
       close(); 
-
-      // Pequeño delay para el alert para no bloquear el renderizado del Dashboard
+      
       setTimeout(() => {
-        alert(`✅ Cita confirmada para ${alumno.nombre}:\n${citaTexto}`);
-      }, 500);
+        alert(`✅ Cita confirmada:\n${citaTexto}`);
+      }, 400);
 
     } catch (e) {
-      console.error("Error en reserva:", e);
-      alert("❌ No se pudo guardar la reserva. Inténtalo de nuevo.");
+      console.error("Error crítico en reserva:", e);
+      alert("❌ Error al guardar: " + e.message);
     } finally {
       setLoading(false);
     }
