@@ -3686,15 +3686,17 @@ const inscribir = async (act, op) => {
           fechaInscripcion: new Date().toISOString()
         });
 
-        // 5. EMAIL DE CONFIRMACIÓN
-        if (user && user.email) {
-          let detalleParaEmail = estadoFinalReal === 'lista_espera' 
-              ? "LISTA DE ESPERA (Pendiente de vacante)" 
-              : `${act.nombre} (${op.dias} - ${op.horario})`;
-              
-          await enviarEmailConfirmacion(user.email, d.nombre, detalleParaEmail);
-        }
-
+        // 5. EMAIL DE CONFIRMACIÓN (ACTUALIZADO)
+if (user && user.email) {
+  // 🚩 CAMBIO: Construimos el detalle con Actividad, Días y Horario
+  // Usamos una estructura clara para evitar que la hora se mezcle o se duplique
+  let detalleParaEmail = estadoFinalReal === 'lista_espera' 
+      ? `LISTA DE ESPERA para ${act.nombre} (${op.dias})` 
+      : `${act.nombre} — ${op.dias} a las ${op.horario}`; 
+      
+  // Añadimos 'alta' como cuarto parámetro para que el email sea VERDE
+  await enviarEmailConfirmacion(user.email, d.nombre, detalleParaEmail, 'alta');
+}
         // 6. FINALIZACIÓN Y LIMPIEZA
         await refresh(user.uid); 
         close();
@@ -4052,13 +4054,13 @@ const PantallaPruebaNivel = ({ alumno, close, onSuccess, user }) => {
 // 📧 Email de Prueba de Nivel (Limpio, solo con la cita)
 // 📧 3. Email de Reserva de Prueba
 if (user?.email) {
-  // Construimos el detalle para que incluya los días pero NO la hora de clase (evita duplicados)
-  const detalleConDias = `${citaTexto}. Grupo: ${alumno.actividad} (${alumno.dias})`;
+  // 🚩 CAMBIO: Eliminamos "Grupo" y "alumno.dias". Solo dejamos la cita.
+  const detalleSoloCita = citaTexto; 
 
   enviarEmailConfirmacion(
     user.email, 
     alumno.nombre, 
-    detalleConDias, // <--- Ahora pasamos este texto que incluye los días
+    detalleSoloCita, // Solo enviará "Día X a las Hora Y"
     'cita'
   ).catch(e => console.error(e));
 }
