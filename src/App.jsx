@@ -1774,8 +1774,8 @@ const listadoPruebas = alumnos.filter(a => {
       act.includes('WATERPOLO')) return false;
 
   // REGLA 4: Solo entran los que están esperando prueba
-  // Forzamos que el estado sea 'prueba_reservada' para que no entren fichas viejas
-  return a.estado === 'prueba_reservada';
+  // 🚩 CAMBIO: Añadimos check de citaNivel para evitar registros incompletos
+  return a.estado === 'prueba_reservada' && a.citaNivel;
 });
 
 // 2. CORRECCIÓN BAJAS: Añadimos 'baja_finalizada' para que no desaparezcan
@@ -3594,19 +3594,20 @@ const inscribir = async (act, op) => {
     const tienePaseVIP = d.natacionPasado === 'si' || d.esAntiguoAlumno === true || d.esAntiguoAlumno === 'true' || d.antiguo === 'si';
 
     // CASO A: REVISADO Y ASEGURADO (PRUEBA DE NIVEL)
-    if (act.requierePrueba && !esInfantil && !tienePaseVIP && !d.citaNivel && d.estado !== 'prueba_reservada') {
-      if(!confirm(`⚠️ Esta actividad requiere PRUEBA DE NIVEL.\n\n¿Continuar para elegir hora?`)) return;
-      try {
-          await updateDoc(alumnoRef, { 
-              ...datosComunes,
-              estado: 'prueba_reservada' 
-          });
-          await refresh(user.uid);
-          close(); 
-          setTimeout(() => { onRequirePrueba(); }, 400); 
-      } catch (error) { console.error("Error:", error); }
-      return; 
-    }
+if (act.requierePrueba && !esInfantil && !tienePaseVIP && !d.citaNivel && d.estado !== 'prueba_reservada') {
+  if(!confirm(`⚠️ Esta actividad requiere PRUEBA DE NIVEL.\n\n¿Continuar para elegir hora?`)) return;
+  
+  // 🚩 CAMBIO CLAVE: NO ejecutamos updateDoc aquí.
+  // No tocamos la base de datos todavía para evitar citas vacías si se salen.
+  
+  close(); // Cerramos selección de grupo
+  
+  setTimeout(() => { 
+    onRequirePrueba(); // Abrimos calendario de citas
+  }, 400); 
+  
+  return; 
+}
 
 // CASO B: INSCRIPCIÓN DIRECTA (VIP, INFANTIL O EXENTO)
     // 🚩 3. DETERMINAR ESTADO Y VERIFICAR AFORO (CORREGIDO)
@@ -3985,56 +3986,46 @@ const PantallaPruebaNivel = ({ alumno, close, onSuccess, user }) => {
   }, [fecha]);
 
   const confirmarReserva = async () => {
-    // 1. Validación estricta: Si no hay fecha/hora, no seguimos
+    // 1. Validación de seguridad extra
     if (!fecha || !hora) return alert("⚠️ Selecciona un lunes y una hora.");
     
+    // Creamos el texto AQUÍ para asegurar que Firebase nunca reciba un vacío
+    const citaTexto = `${fecha} a las ${hora}`;
+    if (citaTexto.includes('undefined') || !citaTexto) return alert("⚠️ Error al generar la cita.");
+
     setLoading(true);
     try {
-      // Creamos el texto AQUÍ para asegurar que no vaya vacío
-      const citaTexto = `${fecha} a las ${hora}`;
-      
-      // 2. REFERENCIA AL ALUMNO
       const alumnoRef = doc(db, 'students', alumno.id);
 
-      // 3. ACTUALIZACIÓN DEL ALUMNO (Todo en un solo bloque)
+      // 2. ACTUALIZACIÓN ATÓMICA: Guardamos todo de un solo golpe
       await updateDoc(alumnoRef, {
         estado: 'prueba_reservada',
-        citaNivel: citaTexto, // Esto es lo que lee el Dashboard Familiar
+        citaNivel: citaTexto, 
         citaFecha: fecha,
         citaHora: hora,
-        citaId: cita?.id || null, // Guardamos el ID de la cita para el Admin
         fechaSolicitud: new Date().toISOString()
       });
 
-      // 4. ACTUALIZACIÓN DE LA CITA (Para que el Admin la vea ocupada)
-      if (cita?.id) {
-        await updateDoc(doc(db, 'citas', cita.id), {
-          ocupada: true,
-          alumnoId: alumno.id,
-          nombreAlumno: alumno.nombre
-        });
-      }
-
-      // 📧 5. Email (Sin esperar a que termine para no retrasar la UI)
+      // 📧 3. Email (No bloqueante)
       if (user?.email) {
-        enviarEmailConfirmacion(user.email, alumno.nombre, citaTexto, cita).catch(console.error);
+        enviarEmailConfirmacion(user.email, alumno.nombre, citaTexto, 'cita').catch(e => console.error(e));
       }
 
-      // 🔄 6. REFRESH INMEDIATO
+      // 🔄 4. REFRESH OBLIGATORIO: Forzamos al Dashboard a enterarse AHORA
       if (typeof refresh === 'function') {
         await refresh(user.uid);
       }
 
-      // 7. CIERRE Y AVISO
+      // 5. Cierre
       close(); 
-      
+
       setTimeout(() => {
-        alert(`✅ Cita confirmada:\n${citaTexto}`);
-      }, 400);
+        alert(`✅ Cita confirmada correctamente para el ${citaTexto}`);
+      }, 300);
 
     } catch (e) {
       console.error("Error crítico en reserva:", e);
-      alert("❌ Error al guardar: " + e.message);
+      alert("❌ Hubo un error al guardar. Por favor, inténtalo de nuevo.");
     } finally {
       setLoading(false);
     }
