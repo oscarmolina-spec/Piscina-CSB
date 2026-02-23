@@ -3597,13 +3597,17 @@ const inscribir = async (act, op) => {
 if (act.requierePrueba && !esInfantil && !tienePaseVIP && !d.citaNivel && d.estado !== 'prueba_reservada') {
   if(!confirm(`⚠️ Esta actividad requiere PRUEBA DE NIVEL.\n\n¿Continuar para elegir hora?`)) return;
   
-  // 🚩 CAMBIO CLAVE: NO ejecutamos updateDoc aquí.
-  // No tocamos la base de datos todavía para evitar citas vacías si se salen.
-  
-  close(); // Cerramos selección de grupo
+  close(); 
   
   setTimeout(() => { 
-    onRequirePrueba(); // Abrimos calendario de citas
+    // 🚩 IMPORTANTE: Pasamos los datos elegidos como un objeto dentro de onRequirePrueba
+    onRequirePrueba({
+      actividad: act.nombre,
+      actividadId: act.id,
+      dias: op.dias,
+      horario: op.horario,
+      precio: op.precio
+    }); 
   }, 400); 
   
   return; 
@@ -3986,10 +3990,8 @@ const PantallaPruebaNivel = ({ alumno, close, onSuccess, user }) => {
   }, [fecha]);
 
   const confirmarReserva = async () => {
-    // 1. Validación de seguridad extra
     if (!fecha || !hora) return alert("⚠️ Selecciona un lunes y una hora.");
     
-    // Creamos el texto AQUÍ para asegurar que Firebase nunca reciba un vacío
     const citaTexto = `${fecha} a las ${hora}`;
     if (citaTexto.includes('undefined') || !citaTexto) return alert("⚠️ Error al generar la cita.");
 
@@ -3997,13 +3999,21 @@ const PantallaPruebaNivel = ({ alumno, close, onSuccess, user }) => {
     try {
       const alumnoRef = doc(db, 'students', alumno.id);
 
-      // 2. ACTUALIZACIÓN ATÓMICA: Guardamos todo de un solo golpe
+      // 2. ACTUALIZACIÓN ATÓMICA: Ahora incluimos los datos de la actividad
       await updateDoc(alumnoRef, {
         estado: 'prueba_reservada',
         citaNivel: citaTexto, 
         citaFecha: fecha,
         citaHora: hora,
-        fechaSolicitud: new Date().toISOString()
+        fechaSolicitud: new Date().toISOString(),
+
+        // 🚩 AÑADE ESTO PARA QUE SE VEA EN EL DASHBOARD:
+        // Estos datos deben venir de las 'props' o del estado donde guardaste la elección del paso 1
+        actividad: alumno.actividad, 
+        actividadId: alumno.actividadId,
+        dias: alumno.dias,
+        horario: alumno.horario,
+        grupo: `${alumno.dias} ${alumno.horario}`
       });
 
       // 📧 3. Email (No bloqueante)
@@ -4011,7 +4021,7 @@ const PantallaPruebaNivel = ({ alumno, close, onSuccess, user }) => {
         enviarEmailConfirmacion(user.email, alumno.nombre, citaTexto, 'cita').catch(e => console.error(e));
       }
 
-      // 🔄 4. REFRESH OBLIGATORIO: Forzamos al Dashboard a enterarse AHORA
+      // 🔄 4. REFRESH OBLIGATORIO
       if (typeof refresh === 'function') {
         await refresh(user.uid);
       }
@@ -4025,7 +4035,7 @@ const PantallaPruebaNivel = ({ alumno, close, onSuccess, user }) => {
 
     } catch (e) {
       console.error("Error crítico en reserva:", e);
-      alert("❌ Hubo un error al guardar. Por favor, inténtalo de nuevo.");
+      alert("❌ Hubo un error al guardar.");
     } finally {
       setLoading(false);
     }
