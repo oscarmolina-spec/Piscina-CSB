@@ -352,7 +352,7 @@ const enviarEmailConfirmacion = async (email, alumno, detalle, tipo = 'cita') =>
               : `<p>🎒 <strong>Recordad traer:</strong> Bañador, gorro, toalla, gafas y chanclas.</p>`
             }
 
-            <p style="margin-top: 25px;">Saludos,<br><strong>Coordinación de Natación CSB</strong></p>
+            <p style="margin-top: 25px;">Saludos,<br><strong>Coordinación de Extraescolares CSB</strong></p>
             <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;" />
             <p style="font-size: 11px; color: #999;">Este es un mensaje automático generado por el sistema de gestión de piscina.</p>
           </div>
@@ -4045,9 +4045,17 @@ const PantallaPruebaNivel = ({ alumno, close, onSuccess, user }) => {
       });
 
       // 📧 3. Email (No bloqueante)
-      if (user?.email) {
-        enviarEmailConfirmacion(user.email, alumno.nombre, citaTexto, 'cita').catch(e => console.error(e));
-      }
+if (user?.email) {
+  // 🚩 Creamos un texto que combine la cita de nivel y los días de la actividad
+  const infoDetallada = `${citaTexto}. Grupo: ${alumno.actividad} (${alumno.dias} a las ${alumno.horario})`;
+
+  enviarEmailConfirmacion(
+    user.email, 
+    alumno.nombre, 
+    infoDetallada, 
+    'cita'
+  ).catch(e => console.error(e));
+}
 
       // 🔄 4. REFRESH OBLIGATORIO
       if (typeof refresh === 'function') {
