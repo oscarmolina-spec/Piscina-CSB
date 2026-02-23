@@ -2910,11 +2910,16 @@ const handleUpdatePassword = async () => {
   }, [modoModal, user?.uid]); 
   // 🚩 FIN DEL BLOQUE NUEVO
 
-  const alTerminarPrueba = () => {
-    // 1. Cerramos el modal de la prueba
-    // 2. Abrimos inmediatamente el modal de inscripción (selección de grupo)
-    setModoModal('inscripcion'); 
-  };
+  // Localiza esto en tu Dashboard y cámbialo:
+const alTerminarPrueba = (datosExtras) => {
+  // 1. Guardamos en el alumno lo que eligió en la pantalla anterior
+  setAlumnoSeleccionado(prev => ({
+    ...prev,
+    ...datosExtras
+  }));
+  // 2. Abrimos el calendario
+  setModoModal('prueba'); 
+};
 
   // 👇 1. FUNCIÓN NUEVA: CANCELAR SOLICITUD (Borrado rápido)
   const cancelarSolicitud = async (hijo) => {
@@ -3594,24 +3599,24 @@ const inscribir = async (act, op) => {
     const tienePaseVIP = d.natacionPasado === 'si' || d.esAntiguoAlumno === true || d.esAntiguoAlumno === 'true' || d.antiguo === 'si';
 
     // CASO A: REVISADO Y ASEGURADO (PRUEBA DE NIVEL)
-if (act.requierePrueba && !esInfantil && !tienePaseVIP && !d.citaNivel && d.estado !== 'prueba_reservada') {
-  if(!confirm(`⚠️ Esta actividad requiere PRUEBA DE NIVEL.\n\n¿Continuar para elegir hora?`)) return;
-  
-  close(); 
-  
-  setTimeout(() => { 
-    // 🚩 IMPORTANTE: Pasamos los datos elegidos como un objeto dentro de onRequirePrueba
-    onRequirePrueba({
-      actividad: act.nombre,
-      actividadId: act.id,
-      dias: op.dias,
-      horario: op.horario,
-      precio: op.precio
-    }); 
-  }, 400); 
-  
-  return; 
-}
+    if (act.requierePrueba && !esInfantil && !tienePaseVIP && !d.citaNivel && d.estado !== 'prueba_reservada') {
+      if(!confirm(`⚠️ Esta actividad requiere PRUEBA DE NIVEL.\n\n¿Continuar para elegir hora?`)) return;
+      
+      close(); 
+      
+      setTimeout(() => { 
+        // 🚩 PASAMOS LOS DATOS AQUÍ PARA QUE NO SE PIERDAN
+        onRequirePrueba({
+          actividad: act.nombre,
+          actividadId: act.id,
+          dias: op.dias,
+          horario: op.horario,
+          precio: op.precio
+        }); 
+      }, 400); 
+      
+      return; 
+    }
 
 // CASO B: INSCRIPCIÓN DIRECTA (VIP, INFANTIL O EXENTO)
     // 🚩 3. DETERMINAR ESTADO Y VERIFICAR AFORO (CORREGIDO)
@@ -4006,14 +4011,13 @@ const PantallaPruebaNivel = ({ alumno, close, onSuccess, user }) => {
         citaFecha: fecha,
         citaHora: hora,
         fechaSolicitud: new Date().toISOString(),
-
-        // 🚩 AÑADE ESTO PARA QUE SE VEA EN EL DASHBOARD:
-        // Estos datos deben venir de las 'props' o del estado donde guardaste la elección del paso 1
-        actividad: alumno.actividad, 
-        actividadId: alumno.actividadId,
-        dias: alumno.dias,
-        horario: alumno.horario,
-        grupo: `${alumno.dias} ${alumno.horario}`
+      
+        // 🚩 USAMOS OPERADORES "|| ''" PARA QUE NUNCA SEA UNDEFINED
+        actividad: alumno.actividad || '', 
+        actividadId: alumno.actividadId || '',
+        dias: alumno.dias || '',
+        horario: alumno.horario || '',
+        grupo: (alumno.dias && alumno.horario) ? `${alumno.dias} ${alumno.horario}` : ''
       });
 
       // 📧 3. Email (No bloqueante)
