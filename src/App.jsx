@@ -1280,19 +1280,23 @@ const confirmarInscripcion = async (alumnoId) => {
         console.warn("No se pudo descontar la plaza automáticamente.");
       }
 
-      // 📧 3. ENVÍO DE EMAIL (ACTUALIZADO CON EL MODO 'ALTA')
-      const padreId = alumno.parentId || alumno.user;
-      const emailPadre = padres[padreId]?.email || alumno.email;
+      // BUSCA ESTO EN: AdminDashboard -> función aceptarAlumnoDirecto
+// 📧 3. ENVÍO DE EMAIL (CONFIGURACIÓN FINAL)
+const padreId = alumno.parentId || alumno.user;
+const emailPadre = padres[padreId]?.email || alumno.email;
 
-      if (emailPadre) {
-        // Añadimos 'alta' como cuarto parámetro para que el título y el color cambien a verde
-        await enviarEmailConfirmacion(
-          emailPadre, 
-          alumno.nombre, 
-          `${grupoDestino} (${alumno.horario})`,
-          'alta' 
-        );
-      }
+if (emailPadre) {
+  // Aquí montamos los 3 datos: Actividad + Días + Horario
+  // Resultado: "🏅 Natación Primaria (16:15-17:15) — [PACK 2 DÍAS] Lunes y Miércoles a las 16:15-17:15"
+  const detalleGrupoCompleto = `${alumno.actividad} — ${alumno.dias} a las ${alumno.horario}`;
+
+  await enviarEmailConfirmacion(
+    emailPadre, 
+    alumno.nombre, 
+    detalleGrupoCompleto,
+    'alta' // 'alta' activa el color verde y el título "Plaza Validada"
+  );
+}
 
 // 🚩 4. LOG DE AUDITORÍA
 await addDoc(collection(db, 'logs'), {
@@ -4045,15 +4049,16 @@ const PantallaPruebaNivel = ({ alumno, close, onSuccess, user }) => {
       });
 
 // 📧 3. Email (No bloqueante)
+// 📧 Email de Prueba de Nivel (Limpio, solo con la cita)
+// 📧 3. Email de Reserva de Prueba
 if (user?.email) {
-  // 🚩 Construimos el mensaje combinando la prueba y los días del grupo
-  // Usamos alumno.dias para que aparezca por fin el texto de "Lunes y Miércoles" (o lo que corresponda)
-  const mensajeEmail = `${citaTexto}. Grupo elegido: ${alumno.actividad} (${alumno.dias} a las ${alumno.horario})`;
+  // Construimos el detalle para que incluya los días pero NO la hora de clase (evita duplicados)
+  const detalleConDias = `${citaTexto}. Grupo: ${alumno.actividad} (${alumno.dias})`;
 
   enviarEmailConfirmacion(
     user.email, 
     alumno.nombre, 
-    mensajeEmail, 
+    detalleConDias, // <--- Ahora pasamos este texto que incluye los días
     'cita'
   ).catch(e => console.error(e));
 }
