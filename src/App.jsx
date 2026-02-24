@@ -1437,22 +1437,15 @@ const validarPlaza = async (alumno) => {
       else if (actText.includes('aquagym')) actId = 'aquagym';
   }
 
-  // 2. 📅 LÓGICA DE FECHAS (Regla del día 20)
+  // 2. 📅 LÓGICA DE FECHAS
   const infoFechas = obtenerInfoAlta();
   let fechaInicioParaEmail = "";
-  let fechaTecnica = "";
-
   if (infoFechas.diaCortePasado) {
     fechaInicioParaEmail = infoFechas.fechaInicioSiguiente;
-    fechaTecnica = infoFechas.tecnicaProximoMes; 
   } else {
-    if (alumno.inicioDeseado === 'inmediato') {
-      fechaInicioParaEmail = `Inmediato (Mes de ${infoFechas.mesActual})`;
-      fechaTecnica = infoFechas.tecnicaHoy;
-    } else {
-      fechaInicioParaEmail = infoFechas.fechaInicioSiguiente;
-      fechaTecnica = infoFechas.tecnicaProximoMes;
-    }
+    fechaInicioParaEmail = (alumno.inicioDeseado === 'inmediato') 
+      ? `Inmediato (Mes de ${infoFechas.mesActual})` 
+      : infoFechas.fechaInicioSiguiente;
   }
 
   // 3. ❓ CONFIRMACIÓN
@@ -1461,51 +1454,56 @@ const validarPlaza = async (alumno) => {
         const padreId = alumno.parentId || alumno.user;
         const emailPadre = padres[padreId]?.email;
         
-        // 🚩 REFUERZO RADICAL: Recalculamos aquí mismo para asegurar el dato
+        // 🚩 REFUERZO RADICAL: Calculamos la fecha técnica exacta para la DB
         const info = obtenerInfoAlta();
-        const fechaFinal = info.diaCortePasado ? info.tecnicaProximoMes : (alumno.inicioDeseado === 'inmediato' ? info.tecnicaHoy : info.tecnicaProximoMes);
+        const fechaParaDB = info.diaCortePasado 
+            ? info.tecnicaProximoMes 
+            : (alumno.inicioDeseado === 'inmediato' ? info.tecnicaHoy : info.tecnicaProximoMes);
 
-        console.log("Dato real enviado a DB:", fechaFinal);
+        console.log("Dato real enviado a DB:", fechaParaDB);
 
-        // 🎯 USAMOS setDoc con merge: true (Más potente que updateDoc)
+        // 🎯 GUARDADO CON SETDOC (MERGE)
         const alumnoRef = doc(db, 'students', alumno.id);
         await setDoc(alumnoRef, { 
           estado: 'inscrito',
           actividadId: actId,
           validadoAdmin: true,
-          fechaAlta: String(fechaFinal), // Forzamos texto plano "2026-03-01"
+          fechaAlta: String(fechaParaDB), // Forzamos texto plano "2026-03-01"
           revisadoAdmin: true,
-          fechaInicioReal: fechaInicioParaEmail 
+          fechaInicioReal: fechaInicioParaEmail,
+          // Añadimos marca de tiempo para obligar a React a refrescar la vista
+          ultimaActualizacion: new Date().getTime()
         }, { merge: true });
 
-        // ✅ CONFIRMACIÓN VISUAL EN EL ALERT
-        alert(`✅ GUARDADO CON ÉXITO\nFecha en DB: ${fechaFinal}\nPróximo mes: ${info.mesSiguiente}`);
-
-        // 📧 4. ENVÍO DE EMAIL AUTOMÁTICO (Tu lógica)
+        // 📧 4. ENVÍO DE EMAIL AUTOMÁTICO
         if (emailPadre) {
-          await addDoc(collection(db, 'mail'), {
-            to: emailPadre,
-            message: {
-              subject: `✅ Alta confirmada - Natación: ${alumno.nombre}`,
-              html: `<div style="font-family: sans-serif; color: #333;">
-                      <h2>¡Hola! Tu alta ya es efectiva.</h2>
-                      <p>Inscripción de <strong>${alumno.nombre}</strong> validada.</p>
-                      <p><strong>📅 Inicio:</strong> ${fechaInicioParaEmail}</p>
-                    </div>`
-            }
-          });
+          try {
+            await addDoc(collection(db, 'mail'), {
+              to: emailPadre,
+              message: {
+                subject: `✅ Alta confirmada - Natación: ${alumno.nombre}`,
+                html: `<div style="font-family: sans-serif; color: #333;">
+                        <h2>¡Hola! Tu alta ya es efectiva.</h2>
+                        <p>Inscripción de <strong>${alumno.nombre}</strong> validada para el <strong>${fechaInicioParaEmail}</strong>.</p>
+                      </div>`
+              }
+            });
+          } catch (eEmail) { console.warn("Error en cola de email, pero el alta se guardó."); }
         }
 
+        // 📜 LOGS (Corregido: usamos la variable fechaParaDB que SÍ existe)
         await addDoc(collection(db, 'logs'), {
           fecha: new Date().getTime(),
           alumnoId: alumno.id,
           alumnoNombre: alumno.nombre,
           accion: "CONFIRMACIÓN_GLOBAL",
-          detalles: `Alta confirmada manualmente. Fecha técnica guardada: ${fechaAEnviar}`,
+          detalles: `Alta confirmada. Fecha técnica guardada: ${fechaParaDB}`,
           adminEmail: userEmail || 'admin'
         });
 
-        alert(`✅ Alumno inscrito.\nFecha guardada: ${fechaAEnviar}`);
+        // ✅ FINAL: Mensaje de éxito con la variable correcta
+        alert(`✅ GUARDADO CON ÉXITO\nFecha técnica: ${fechaParaDB}\nInicio: ${fechaInicioParaEmail}`);
+
     } catch (error) {
         console.error("Error al validar:", error);
         alert("❌ Error: " + error.message);
