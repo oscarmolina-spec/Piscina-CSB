@@ -1504,6 +1504,11 @@ const validarPlaza = async (alumno) => {
         // ✅ FINAL: Mensaje de éxito con la variable correcta
         alert(`✅ GUARDADO CON ÉXITO\nFecha técnica: ${fechaParaDB}\nInicio: ${fechaInicioParaEmail}`);
 
+        // 🚩 AÑADE ESTA LÍNEA AQUÍ:
+        // Esto obliga a la web a recargarse y leer los datos frescos de la nube.
+        // Al recargar, el Radar leerá el "2026-03-01" y se limpiará febrero.
+        window.location.reload(); 
+
     } catch (error) {
         console.error("Error al validar:", error);
         alert("❌ Error: " + error.message);
