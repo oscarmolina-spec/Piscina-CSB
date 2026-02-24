@@ -1461,22 +1461,25 @@ const validarPlaza = async (alumno) => {
         const padreId = alumno.parentId || alumno.user;
         const emailPadre = padres[padreId]?.email;
         
-        // 🚩 REFUERZO DE FECHA: Si por lo que sea llega vacía, forzamos marzo ahora que es día 24
-        const fechaAEnviar = String(fechaTecnica || infoFechas.tecnicaProximoMes);
+        // 🚩 REFUERZO RADICAL: Recalculamos aquí mismo para asegurar el dato
+        const info = obtenerInfoAlta();
+        const fechaFinal = info.diaCortePasado ? info.tecnicaProximoMes : (alumno.inicioDeseado === 'inmediato' ? info.tecnicaHoy : info.tecnicaProximoMes);
 
-        // 🎯 LOG DE CONSOLA (F12) PARA VER QUÉ SE ENVÍA REALMENTE
-        console.log("Enviando a Firestore:", { id: alumno.id, fechaAlta: fechaAEnviar });
+        console.log("Dato real enviado a DB:", fechaFinal);
 
-        // Actualizar Firebase
+        // 🎯 USAMOS setDoc con merge: true (Más potente que updateDoc)
         const alumnoRef = doc(db, 'students', alumno.id);
-        await updateDoc(alumnoRef, { 
+        await setDoc(alumnoRef, { 
           estado: 'inscrito',
           actividadId: actId,
           validadoAdmin: true,
-          fechaAlta: fechaAEnviar, // 👈 Forzado como Texto
+          fechaAlta: String(fechaFinal), // Forzamos texto plano "2026-03-01"
           revisadoAdmin: true,
           fechaInicioReal: fechaInicioParaEmail 
-        });
+        }, { merge: true });
+
+        // ✅ CONFIRMACIÓN VISUAL EN EL ALERT
+        alert(`✅ GUARDADO CON ÉXITO\nFecha en DB: ${fechaFinal}\nPróximo mes: ${info.mesSiguiente}`);
 
         // 📧 4. ENVÍO DE EMAIL AUTOMÁTICO (Tu lógica)
         if (emailPadre) {
