@@ -2651,21 +2651,26 @@ const registrarLog = async (accion, detalles) => {
   }
 };
   // Función para guardar cambios de fecha al instante
+  // 🚩 FUNCIÓN CORREGIDA: Guarda en texto puro para que el Radar lo entienda
   const cambiarFecha = async (campo, e) => {
-      if (userRole !== 'admin') return;
-      const valorOriginal = e.target.defaultValue; // Para saber qué había antes
-      const nuevaFecha = e.target.value ? new Date(e.target.value).getTime() : null;
-      try {
-          await updateDoc(doc(db, 'students', alumno.id), { [campo]: nuevaFecha });
-          
-          // 🚩 REGISTRO EN EL HISTORIAL
-          registrarLog("EDICIÓN FECHA", `Cambio en ${campo}: de ${valorOriginal} a ${e.target.value}`);
-          
-          enviarPushLocal("💾 Cambio Guardado", `Has actualizado la fecha de ${alumno.nombre}`);
-      } catch (error) {
-          console.error("Error:", error);
-      }
-  };
+    if (userRole !== 'admin') return;
+    
+    const valorNuevoTexto = e.target.value; // Cogemos el "2026-03-01" directamente
+    const valorOriginal = e.target.defaultValue;
+
+    try {
+        await updateDoc(doc(db, 'students', alumno.id), { 
+            [campo]: valorNuevoTexto 
+        });
+        
+        // Registro en el historial
+        registrarLog("EDICIÓN FECHA", `Cambio en ${campo}: a ${valorNuevoTexto}`);
+        alert("💾 Fecha guardada correctamente");
+    } catch (error) {
+        console.error("Error al guardar fecha:", error);
+        alert("❌ Error al guardar");
+    }
+};
   const camposAlumno = Object.keys(alumno).join(', ');
   const camposPadre = Object.keys(p).join(', ');
 
@@ -2713,23 +2718,23 @@ const registrarLog = async (accion, detalles) => {
         {/* CONTENIDO */}
         <div className="p-6 space-y-6 text-gray-800">
           
-{/* 1. FECHAS (REPARACIÓN DE EMERGENCIA) */}
+{/* 1. FECHAS (BLOQUE REPARADO Y SIN ENGAÑOS) */}
 <div className="bg-gray-100 p-4 rounded border border-gray-300 grid grid-cols-2 gap-4 shadow-inner">
     <div>
-        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">📅 Fecha de Alta</label>
+        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">📅 Fecha de Alta Real</label>
         <input 
           type="date" 
-          defaultValue={(() => {
-            const f = alumno.fechaAlta || alumno.fechaInscripcion;
-            if (!f) return "";
-            // Si es un objeto de Firebase (Timestamp), usamos .toDate()
-            const dateObj = f.toDate ? f.toDate() : new Date(f);
-            return !isNaN(dateObj) ? dateObj.toISOString().split('T')[0] : "";
-          })()}
+          // 🚩 CLAVE: Mostramos SOLO la fecha de alta. Si está vacía, se verá vacía.
+          defaultValue={alumno.fechaAlta || ""} 
           disabled={userRole !== 'admin'}
           onChange={(e) => cambiarFecha('fechaAlta', e)}
           className={`w-full p-2 rounded border font-bold ${userRole === 'admin' ? 'bg-white border-blue-400' : 'bg-gray-200'}`}
         />
+        {!alumno.fechaAlta && (
+          <p className="text-[9px] text-red-600 font-black mt-1 uppercase">
+            ⚠️ SIN FECHA (Saldrá en febrero)
+          </p>
+        )}
     </div>
     <div>
         <label className="block text-xs font-bold text-gray-500 uppercase mb-1">
@@ -2737,25 +2742,11 @@ const registrarLog = async (accion, detalles) => {
         </label>
         <input 
           type="date" 
-          defaultValue={(() => {
-            const f = alumno.fechaBaja || alumno.fechaBajaEfectiva;
-            if (!f) return "";
-            const dateObj = f.toDate ? f.toDate() : new Date(f);
-            return !isNaN(dateObj) ? dateObj.toISOString().split('T')[0] : "";
-          })()}
+          defaultValue={alumno.fechaBaja || ""}
           disabled={userRole !== 'admin'}
           onChange={(e) => cambiarFecha('fechaBaja', e)}
-          className={`w-full p-2 rounded border font-bold ${
-            alumno.estado === 'baja_pendiente' 
-              ? 'bg-red-50 border-red-500 text-red-700' 
-              : userRole === 'admin' ? 'bg-white border-red-400' : 'bg-gray-200'
-          }`}
+          className={`w-full p-2 rounded border font-bold bg-white`}
         />
-        {alumno.estado === 'baja_pendiente' && (
-          <p className="text-[9px] text-red-600 font-black mt-1 uppercase leading-none">
-            BAJA SOLICITADA POR EL USUARIO
-          </p>
-        )}
     </div>
 </div>
 {/* 📜 HISTORIAL DE MOVIMIENTOS (AÑADIR JUSTO AQUÍ) */}
