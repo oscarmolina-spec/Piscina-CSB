@@ -1440,45 +1440,41 @@ const validarPlaza = async (alumno) => {
   // 2. 📅 LÓGICA DE FECHAS (Regla del día 20)
   const infoFechas = obtenerInfoAlta();
   let fechaInicioParaEmail = "";
+  let fechaTecnica = ""; // La definimos aquí fuera para usarla luego
 
   if (infoFechas.diaCortePasado) {
+    // CASO: Después del día 20 -> Obligatorio Mes Siguiente
     fechaInicioParaEmail = infoFechas.fechaInicioSiguiente;
+    fechaTecnica = infoFechas.tecnicaProximoMes; // Usamos la que ya calculó tu función obtenerInfoAlta
   } else {
-    fechaInicioParaEmail = alumno.inicioDeseado === 'inmediato' 
-      ? `Inmediato (Mes de ${infoFechas.mesActual})` 
-      : infoFechas.fechaInicioSiguiente;
+    // CASO: Antes del día 20 -> Elige el usuario
+    if (alumno.inicioDeseado === 'inmediato') {
+      fechaInicioParaEmail = `Inmediato (Mes de ${infoFechas.mesActual})`;
+      fechaTecnica = infoFechas.tecnicaHoy;
+    } else {
+      fechaInicioParaEmail = infoFechas.fechaInicioSiguiente;
+      fechaTecnica = infoFechas.tecnicaProximoMes;
+    }
   }
 
   // 3. ❓ CONFIRMACIÓN
   if (confirm(`✅ ¿Validar plaza definitiva para ${alumno.nombre}?\n\n📅 INICIO: ${fechaInicioParaEmail}\n📍 GRUPO: ${alumno.actividad}`)) {
     try {
-        // --- 🚩 AQUÍ ESTÁ EL CAMBIO ---
-        let fechaTecnica;
-        
-        // Comprobamos si el texto contiene "inmediato" (que es lo que pusimos arriba)
-        if (fechaInicioParaEmail.toLowerCase().includes('inmediato')) {
-            // Alta HOY mismo
-            fechaTecnica = new Date().toISOString().split('T')[0];
-        } else {
-            // Alta el día 1 del MES QUE VIENE
-            const proximoMes = new Date();
-            proximoMes.setMonth(proximoMes.getMonth() + 1);
-            proximoMes.setDate(1);
-            fechaTecnica = proximoMes.toISOString().split('T')[0];
-        }
-
         const padreId = alumno.parentId || alumno.user;
         const emailPadre = padres[padreId]?.email;
 
         // Actualizar Firebase
         await updateDoc(doc(db, 'students', alumno.id), { 
-            estado: 'inscrito',
-            actividadId: actId,
-            validadoAdmin: true,
-            fechaAlta: fechaTecnica, // 🎯 Guardará "2026-03-01" si no es inmediato
-            revisadoAdmin: true,
-            fechaInicioReal: fechaInicioParaEmail 
-        });
+          estado: 'inscrito',
+          actividadId: actId,
+          validadoAdmin: true,
+          // 🚩 ASEGURAMOS QUE NUNCA VAYA VACÍO:
+          fechaAlta: fechaTecnica || infoFechas.tecnicaProximoMes, 
+          revisadoAdmin: true,
+          fechaInicioReal: fechaInicioParaEmail 
+      });
+        
+        // ... resto de tu código (envío de email, etc.)
 
         // 📧 4. ENVÍO DE EMAIL AUTOMÁTICO
         if (emailPadre) {
