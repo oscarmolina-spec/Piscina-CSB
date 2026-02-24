@@ -1440,14 +1440,12 @@ const validarPlaza = async (alumno) => {
   // 2. 📅 LÓGICA DE FECHAS (Regla del día 20)
   const infoFechas = obtenerInfoAlta();
   let fechaInicioParaEmail = "";
-  let fechaTecnica = ""; // La definimos aquí fuera para usarla luego
+  let fechaTecnica = "";
 
   if (infoFechas.diaCortePasado) {
-    // CASO: Después del día 20 -> Obligatorio Mes Siguiente
     fechaInicioParaEmail = infoFechas.fechaInicioSiguiente;
-    fechaTecnica = infoFechas.tecnicaProximoMes; // Usamos la que ya calculó tu función obtenerInfoAlta
+    fechaTecnica = infoFechas.tecnicaProximoMes; 
   } else {
-    // CASO: Antes del día 20 -> Elige el usuario
     if (alumno.inicioDeseado === 'inmediato') {
       fechaInicioParaEmail = `Inmediato (Mes de ${infoFechas.mesActual})`;
       fechaTecnica = infoFechas.tecnicaHoy;
@@ -1462,52 +1460,52 @@ const validarPlaza = async (alumno) => {
     try {
         const padreId = alumno.parentId || alumno.user;
         const emailPadre = padres[padreId]?.email;
+        
+        // 🚩 REFUERZO DE FECHA: Si por lo que sea llega vacía, forzamos marzo ahora que es día 24
+        const fechaAEnviar = String(fechaTecnica || infoFechas.tecnicaProximoMes);
+
+        // 🎯 LOG DE CONSOLA (F12) PARA VER QUÉ SE ENVÍA REALMENTE
+        console.log("Enviando a Firestore:", { id: alumno.id, fechaAlta: fechaAEnviar });
 
         // Actualizar Firebase
-        await updateDoc(doc(db, 'students', alumno.id), { 
+        const alumnoRef = doc(db, 'students', alumno.id);
+        await updateDoc(alumnoRef, { 
           estado: 'inscrito',
           actividadId: actId,
           validadoAdmin: true,
-          // 🚩 ASEGURAMOS QUE NUNCA VAYA VACÍO:
-          fechaAlta: fechaTecnica || infoFechas.tecnicaProximoMes, 
+          fechaAlta: fechaAEnviar, // 👈 Forzado como Texto
           revisadoAdmin: true,
           fechaInicioReal: fechaInicioParaEmail 
-      });
-        
-        // ... resto de tu código (envío de email, etc.)
+        });
 
-        // 📧 4. ENVÍO DE EMAIL AUTOMÁTICO
+        // 📧 4. ENVÍO DE EMAIL AUTOMÁTICO (Tu lógica)
         if (emailPadre) {
           await addDoc(collection(db, 'mail'), {
             to: emailPadre,
             message: {
               subject: `✅ Alta confirmada - Natación: ${alumno.nombre}`,
-              html: `
-                <div style="font-family: sans-serif; line-height: 1.6; color: #333;">
-                  <h2 style="color: #059669;">¡Hola! Tu alta ya es efectiva.</h2>
-                  <p>La inscripción de <strong>${alumno.nombre}</strong> ha sido validada.</p>
-                  <div style="background: #f3f4f6; padding: 15px; border-radius: 10px; border: 1px solid #e5e7eb;">
-                    <p><strong>📅 Inicio:</strong> ${fechaInicioParaEmail}</p>
-                    <p><strong>🏊‍♂️ Actividad:</strong> ${alumno.actividad}</p>
-                  </div>
-                </div>`
+              html: `<div style="font-family: sans-serif; color: #333;">
+                      <h2>¡Hola! Tu alta ya es efectiva.</h2>
+                      <p>Inscripción de <strong>${alumno.nombre}</strong> validada.</p>
+                      <p><strong>📅 Inicio:</strong> ${fechaInicioParaEmail}</p>
+                    </div>`
             }
           });
         }
-        // 🚩 AÑADE ESTO AQUÍ PARA EL HISTORIAL:
+
         await addDoc(collection(db, 'logs'), {
           fecha: new Date().getTime(),
           alumnoId: alumno.id,
           alumnoNombre: alumno.nombre,
           accion: "CONFIRMACIÓN_GLOBAL",
-          detalles: `Alta confirmada manualmente. Inicio previsto: ${fechaInicioParaEmail}. Fecha técnica: ${fechaTecnica}`,
-          adminEmail: user?.email || ADMIN_EMAIL
-      });
+          detalles: `Alta confirmada manualmente. Fecha técnica guardada: ${fechaAEnviar}`,
+          adminEmail: userEmail || 'admin'
+        });
 
-        alert(`✅ ¡Hecho! Grabado con fecha técnica: ${fechaTecnica}`);
+        alert(`✅ Alumno inscrito.\nFecha guardada: ${fechaAEnviar}`);
     } catch (error) {
         console.error("Error al validar:", error);
-        alert("❌ Error en el proceso.");
+        alert("❌ Error: " + error.message);
     }
   }
 };
