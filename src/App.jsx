@@ -1437,83 +1437,92 @@ const validarPlaza = async (alumno) => {
       else if (actText.includes('aquagym')) actId = 'aquagym';
   }
 
-  // 2. 📅 LÓGICA DE FECHAS
+  // --- 📅 2. LÓGICA DE FECHAS (Sincronizada con el día 21) ---
   const infoFechas = obtenerInfoAlta();
   let fechaInicioParaEmail = "";
+
+  // 🚩 REGLA MAESTRA: Si el corte pasó, da igual lo que eligiera el alumno.
   if (infoFechas.diaCortePasado) {
-    fechaInicioParaEmail = infoFechas.fechaInicioSiguiente;
+    fechaInicioParaEmail = infoFechas.fechaInicioSiguiente; 
   } else {
+    // Si NO ha pasado el día 20, entonces sí miramos su preferencia
     fechaInicioParaEmail = (alumno.inicioDeseado === 'inmediato') 
       ? `Inmediato (Mes de ${infoFechas.mesActual})` 
       : infoFechas.fechaInicioSiguiente;
   }
 
-  // 3. ❓ CONFIRMACIÓN
+  // --- ❓ 3. CONFIRMACIÓN ---
+  // Ahora el mensaje que verás en pantalla será SIEMPRE el correcto
   if (confirm(`✅ ¿Validar plaza definitiva para ${alumno.nombre}?\n\n📅 INICIO: ${fechaInicioParaEmail}\n📍 GRUPO: ${alumno.actividad}`)) {
     try {
-        const padreId = alumno.parentId || alumno.user;
-        const emailPadre = padres[padreId]?.email;
-        
-        // 🚩 REFUERZO RADICAL: Calculamos la fecha técnica exacta para la DB
-        const info = obtenerInfoAlta();
-        const fechaParaDB = info.diaCortePasado 
-            ? info.tecnicaProximoMes 
-            : (alumno.inicioDeseado === 'inmediato' ? info.tecnicaHoy : info.tecnicaProximoMes);
+      const padreId = alumno.parentId || alumno.user;
+      const emailPadre = padres[padreId]?.email;
+      
+      // 1. Calculamos la fecha técnica exacta para la DB
+      const info = obtenerInfoAlta();
+      const fechaParaDB = info.diaCortePasado 
+          ? info.tecnicaProximoMes 
+          : (alumno.inicioDeseado === 'inmediato' ? info.tecnicaHoy : info.tecnicaProximoMes);
 
-        console.log("Dato real enviado a DB:", fechaParaDB);
+      // 🚩 REFUERZO DE ID: Si alumno.id está vacío (pasa en alumnos nuevos), usamos el UID
+      const idCorrecto = String(alumno.id || alumno.uid || "").trim();
+      
+      if (!idCorrecto) {
+          throw new Error("No se ha podido localizar el ID del alumno.");
+      }
 
-        // 🎯 GUARDADO CON SETDOC (MERGE)
-        const alumnoRef = doc(db, 'students', alumno.id);
-        await setDoc(alumnoRef, { 
-          estado: 'inscrito',
-          actividadId: actId,
-          validadoAdmin: true,
-          fechaAlta: String(fechaParaDB), // Forzamos texto plano "2026-03-01"
-          revisadoAdmin: true,
-          fechaInicioReal: fechaInicioParaEmail,
-          // Añadimos marca de tiempo para obligar a React a refrescar la vista
-          ultimaActualizacion: new Date().getTime()
-        }, { merge: true });
+      console.log("Guardando en ID:", idCorrecto, "Fecha:", fechaParaDB);
 
-        // 📧 4. ENVÍO DE EMAIL AUTOMÁTICO
-        if (emailPadre) {
-          try {
-            await addDoc(collection(db, 'mail'), {
-              to: emailPadre,
-              message: {
-                subject: `✅ Alta confirmada - Natación: ${alumno.nombre}`,
-                html: `<div style="font-family: sans-serif; color: #333;">
-                        <h2>¡Hola! Tu alta ya es efectiva.</h2>
-                        <p>Inscripción de <strong>${alumno.nombre}</strong> validada para el <strong>${fechaInicioParaEmail}</strong>.</p>
-                      </div>`
-              }
-            });
-          } catch (eEmail) { console.warn("Error en cola de email, pero el alta se guardó."); }
-        }
+      // 🎯 GUARDADO CON SETDOC (MERGE)
+      const alumnoRef = doc(db, 'students', idCorrecto);
+      await setDoc(alumnoRef, { 
+        estado: 'inscrito',
+        actividadId: actId,
+        validadoAdmin: true,
+        fechaAlta: String(fechaParaDB), // "2026-03-01"
+        revisadoAdmin: true,
+        fechaInicioReal: fechaInicioParaEmail,
+        ultimaActualizacion: new Date().getTime()
+      }, { merge: true });
 
-        // 📜 LOGS (Corregido: usamos la variable fechaParaDB que SÍ existe)
-        await addDoc(collection(db, 'logs'), {
-          fecha: new Date().getTime(),
-          alumnoId: alumno.id,
-          alumnoNombre: alumno.nombre,
-          accion: "CONFIRMACIÓN_GLOBAL",
-          detalles: `Alta confirmada. Fecha técnica guardada: ${fechaParaDB}`,
-          adminEmail: userEmail || 'admin'
-        });
+      // 📧 4. ENVÍO DE EMAIL AUTOMÁTICO
+      if (emailPadre) {
+        try {
+          await addDoc(collection(db, 'mail'), {
+            to: emailPadre,
+            message: {
+              subject: `✅ Alta confirmada - Natación: ${alumno.nombre}`,
+              html: `<div style="font-family: sans-serif; color: #333;">
+                      <h2>¡Hola! Tu alta ya es efectiva.</h2>
+                      <p>Inscripción de <strong>${alumno.nombre}</strong> validada para el <strong>${fechaInicioParaEmail}</strong>.</p>
+                    </div>`
+            }
+          });
+        } catch (eEmail) { console.warn("Error en email, pero el alta se guardó."); }
+      }
 
-        // ✅ FINAL: Mensaje de éxito con la variable correcta
-        alert(`✅ GUARDADO CON ÉXITO\nFecha técnica: ${fechaParaDB}\nInicio: ${fechaInicioParaEmail}`);
+      // 📜 5. LOGS (Usamos la variable fechaParaDB que existe)
+      await addDoc(collection(db, 'logs'), {
+        fecha: new Date().getTime(),
+        alumnoId: idCorrecto,
+        alumnoNombre: alumno.nombre,
+        accion: "CONFIRMACIÓN_GLOBAL",
+        detalles: `Alta confirmada. Fecha técnica: ${fechaParaDB}`,
+        adminEmail: userEmail || 'admin'
+      });
 
-        // 🚩 AÑADE ESTA LÍNEA AQUÍ:
-        // Esto obliga a la web a recargarse y leer los datos frescos de la nube.
-        // Al recargar, el Radar leerá el "2026-03-01" y se limpiará febrero.
-        window.location.reload(); 
+      // ✅ FINAL: Mensaje de éxito y REFRESCAR para limpiar el Radar
+      alert(`✅ GUARDADO CON ÉXITO\nFecha técnica: ${fechaParaDB}\nID Alumno: ${idCorrecto}`);
 
-    } catch (error) {
-        console.error("Error al validar:", error);
-        alert("❌ Error: " + error.message);
-    }
+      // 🚩 ESTO ES LO QUE SOLUCIONA TU PROBLEMA:
+      // Fuerza a la web a recargarse para mostrar los datos nuevos de la DB
+      window.location.reload(); 
+
+  } catch (error) {
+      console.error("Error al validar:", error);
+      alert("❌ Error: " + error.message);
   }
+}
 };
 
 // ---------------------------------------------------------
