@@ -2662,26 +2662,39 @@ const registrarLog = async (accion, detalles) => {
     console.error("Error al registrar log:", error);
   }
 };
-  // Función para guardar cambios de fecha al instante
-  // 🚩 FUNCIÓN CORREGIDA: Guarda en texto puro para que el Radar lo entienda
-  const cambiarFecha = async (campo, e) => {
-    if (userRole !== 'admin') return;
-    
-    const valorNuevoTexto = e.target.value; // Cogemos el "2026-03-01" directamente
-    const valorOriginal = e.target.defaultValue;
+// 🚩 FUNCIÓN REFORZADA: Asegura el ID y refresca la vista
+const cambiarFecha = async (campo, e) => {
+  if (userRole !== 'admin') return;
+  
+  const valorNuevoTexto = e.target.value; 
+  // 🚩 ASEGURAMOS EL ID: Si uno falla, usamos el otro
+  const idReal = alumno.id || alumno.uid;
 
-    try {
-        await updateDoc(doc(db, 'students', alumno.id), { 
-            [campo]: valorNuevoTexto 
-        });
-        
-        // Registro en el historial
-        registrarLog("EDICIÓN FECHA", `Cambio en ${campo}: a ${valorNuevoTexto}`);
-        alert("💾 Fecha guardada correctamente");
-    } catch (error) {
-        console.error("Error al guardar fecha:", error);
-        alert("❌ Error al guardar");
-    }
+  if (!idReal) {
+      return alert("❌ Error: No se encuentra el ID del alumno para guardar.");
+  }
+
+  try {
+      const alumnoRef = doc(db, 'students', idReal);
+      
+      await updateDoc(alumnoRef, { 
+          [campo]: valorNuevoTexto,
+          ultimaActualizacion: new Date().getTime() // Forzamos cambio en DB
+      });
+      
+      // Registro en el historial
+      registrarLog("EDICIÓN FECHA", `Cambio en ${campo}: a ${valorNuevoTexto}`);
+      
+      alert("💾 Fecha guardada. La página se recargará para actualizar el Radar.");
+      
+      // 🔄 RECARGA CRÍTICA: Esto hace que el "Sin fecha" desaparezca 
+      // y el Radar de marzo cuente a este alumno.
+      window.location.reload();
+
+  } catch (error) {
+      console.error("Error al guardar fecha:", error);
+      alert("❌ Error al guardar: " + error.message);
+  }
 };
   const camposAlumno = Object.keys(alumno).join(', ');
   const camposPadre = Object.keys(p).join(', ');
@@ -2736,15 +2749,18 @@ const registrarLog = async (accion, detalles) => {
         <label className="block text-xs font-bold text-gray-500 uppercase mb-1">📅 Fecha de Alta Real</label>
         <input 
           type="date" 
-          // 🚩 CLAVE: Mostramos SOLO la fecha de alta. Si está vacía, se verá vacía.
           defaultValue={alumno.fechaAlta || ""} 
           disabled={userRole !== 'admin'}
-          onChange={(e) => cambiarFecha('fechaAlta', e)}
+          onChange={(e) => {
+            cambiarFecha('fechaAlta', e);
+            // 🚩 Truco: Si cambias la fecha a mano, esto ayuda a que se guarde
+          }}
           className={`w-full p-2 rounded border font-bold ${userRole === 'admin' ? 'bg-white border-blue-400' : 'bg-gray-200'}`}
         />
-        {!alumno.fechaAlta && (
+        {/* 🚩 CAMBIO: Usamos una condición más sólida */}
+        {(!alumno.fechaAlta || alumno.fechaAlta === "") && (
           <p className="text-[9px] text-red-600 font-black mt-1 uppercase">
-            ⚠️ SIN FECHA (Saldrá en febrero)
+            ⚠️ SIN FECHA (Saldrá en el mes anterior)
           </p>
         )}
     </div>
