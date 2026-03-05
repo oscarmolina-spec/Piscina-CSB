@@ -1458,70 +1458,74 @@ const validarPlaza = async (alumno) => {
       const padreId = alumno.parentId || alumno.user;
       const emailPadre = padres[padreId]?.email;
       
-      // 1. Calculamos la fecha técnica exacta para la DB
-      const info = obtenerInfoAlta();
-      const fechaParaDB = info.diaCortePasado 
-          ? info.tecnicaProximoMes 
-          : (alumno.inicioDeseado === 'inmediato' ? info.tecnicaHoy : info.tecnicaProximoMes);
-
-      // 🚩 REFUERZO DE ID: Si alumno.id está vacío (pasa en alumnos nuevos), usamos el UID
-      const idCorrecto = String(alumno.id || alumno.uid || "").trim();
+// 1. Calculamos la fecha técnica exacta para la DB
+const info = obtenerInfoAlta();
       
-      if (!idCorrecto) {
-          throw new Error("No se ha podido localizar el ID del alumno.");
+// 🚩 REGLA DE ORO: Si el corte pasó (día 21+), ignoramos 'inmediato' y va al mes siguiente
+const fechaParaDB = info.diaCortePasado 
+    ? info.tecnicaProximoMes 
+    : (alumno.inicioDeseado === 'inmediato' ? info.tecnicaHoy : info.tecnicaProximoMes);
+
+// 🚩 REFUERZO DE ID: Priorizamos el ID del niño (id) sobre el del padre (uid)
+// Esto evita que la fecha se guarde en el usuario del padre y el niño quede vacío.
+const idCorrecto = (alumno.id && alumno.id.length > 5) 
+    ? String(alumno.id).trim() 
+    : String(alumno.docId || alumno.uid || "").trim();
+
+if (!idCorrecto) {
+    throw new Error("No se ha podido localizar el ID del alumno.");
+}
+
+console.log("Guardando en ID:", idCorrecto, "Fecha:", fechaParaDB);
+
+// 🎯 GUARDADO CON SETDOC (MERGE)
+const alumnoRef = doc(db, 'students', idCorrecto);
+await setDoc(alumnoRef, { 
+  estado: 'inscrito',
+  actividadId: actId,
+  validadoAdmin: true,
+  fechaAlta: String(fechaParaDB), // Se guarda como "2026-03-05" o "2026-04-01"
+  revisadoAdmin: true,
+  fechaInicioReal: fechaInicioParaEmail,
+  ultimaActualizacion: new Date().getTime()
+}, { merge: true });
+
+// 📧 4. ENVÍO DE EMAIL AUTOMÁTICO
+if (emailPadre) {
+  try {
+    await addDoc(collection(db, 'mail'), {
+      to: emailPadre,
+      message: {
+        subject: `✅ Alta confirmada - Natación: ${alumno.nombre}`,
+        html: `<div style="font-family: sans-serif; color: #333;">
+                <h2>¡Hola! Tu alta ya es efectiva.</h2>
+                <p>Inscripción de <strong>${alumno.nombre}</strong> validada para el <strong>${fechaInicioParaEmail}</strong>.</p>
+              </div>`
       }
+    });
+  } catch (eEmail) { console.warn("Error en email, pero el alta se guardó."); }
+}
 
-      console.log("Guardando en ID:", idCorrecto, "Fecha:", fechaParaDB);
+// 📜 5. LOGS
+await addDoc(collection(db, 'logs'), {
+  fecha: new Date().getTime(),
+  alumnoId: idCorrecto,
+  alumnoNombre: alumno.nombre,
+  accion: "CONFIRMACIÓN_GLOBAL",
+  detalles: `Alta confirmada. Fecha técnica: ${fechaParaDB}`,
+  adminEmail: userEmail || 'admin'
+});
 
-      // 🎯 GUARDADO CON SETDOC (MERGE)
-      const alumnoRef = doc(db, 'students', idCorrecto);
-      await setDoc(alumnoRef, { 
-        estado: 'inscrito',
-        actividadId: actId,
-        validadoAdmin: true,
-        fechaAlta: String(fechaParaDB), // "2026-03-01"
-        revisadoAdmin: true,
-        fechaInicioReal: fechaInicioParaEmail,
-        ultimaActualizacion: new Date().getTime()
-      }, { merge: true });
+// ✅ FINAL: Mensaje de éxito con diagnóstico de ID
+alert(`✅ GUARDADO CON ÉXITO\nFecha técnica: ${fechaParaDB}\nID Alumno: ${idCorrecto}`);
 
-      // 📧 4. ENVÍO DE EMAIL AUTOMÁTICO
-      if (emailPadre) {
-        try {
-          await addDoc(collection(db, 'mail'), {
-            to: emailPadre,
-            message: {
-              subject: `✅ Alta confirmada - Natación: ${alumno.nombre}`,
-              html: `<div style="font-family: sans-serif; color: #333;">
-                      <h2>¡Hola! Tu alta ya es efectiva.</h2>
-                      <p>Inscripción de <strong>${alumno.nombre}</strong> validada para el <strong>${fechaInicioParaEmail}</strong>.</p>
-                    </div>`
-            }
-          });
-        } catch (eEmail) { console.warn("Error en email, pero el alta se guardó."); }
-      }
+// 🚩 RECARGA CRÍTICA: Obliga a la ficha a leer el nuevo dato de la DB
+window.location.reload(); 
 
-      // 📜 5. LOGS (Usamos la variable fechaParaDB que existe)
-      await addDoc(collection(db, 'logs'), {
-        fecha: new Date().getTime(),
-        alumnoId: idCorrecto,
-        alumnoNombre: alumno.nombre,
-        accion: "CONFIRMACIÓN_GLOBAL",
-        detalles: `Alta confirmada. Fecha técnica: ${fechaParaDB}`,
-        adminEmail: userEmail || 'admin'
-      });
-
-      // ✅ FINAL: Mensaje de éxito y REFRESCAR para limpiar el Radar
-      alert(`✅ GUARDADO CON ÉXITO\nFecha técnica: ${fechaParaDB}\nID Alumno: ${idCorrecto}`);
-
-      // 🚩 ESTO ES LO QUE SOLUCIONA TU PROBLEMA:
-      // Fuerza a la web a recargarse para mostrar los datos nuevos de la DB
-      window.location.reload(); 
-
-  } catch (error) {
-      console.error("Error al validar:", error);
-      alert("❌ Error: " + error.message);
-  }
+} catch (error) {
+console.error("Error al validar:", error);
+alert("❌ Error: " + error.message);
+}
 }
 };
 
