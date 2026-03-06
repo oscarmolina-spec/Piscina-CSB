@@ -1400,23 +1400,47 @@ const validarPlaza = async (alumno) => {
       const padreId = alumno.parentId || alumno.user;
       const emailPadre = padres[padreId]?.email;
       
-// 1. Calculamos la fecha técnica exacta para la DB
+// 1. Obtenemos solo la info del día actual para el corte
 const info = obtenerInfoAlta();
+const hoy = new Date();
+const añoActual = hoy.getFullYear();
+const mesActualIndex = hoy.getMonth(); // Marzo es 2
+
 let fechaParaDB = "";
 let textoInicioReal = "";
 
-// 🚩 REGLA DE ORO RECUPERADA:
+// 🚩 REGLA DE ORO ESCRITA A MANO
 if (info.diaCortePasado) {
-    // A: Si es día 21 o más (Corte pasado), siempre al día 1 del mes siguiente
-    fechaParaDB = info.tecnicaProximoMes;
-    textoInicioReal = info.fechaInicioSiguiente; // Ej: "1 de abril"
+    // A: Ya ha pasado el día 20 -> Forzamos el día 1 del mes siguiente
+    // Construimos el mes siguiente sumando 1 al índice
+    const mesSiguienteIndex = mesActualIndex + 1;
+    const fechaProximo = new Date(añoActual, mesSiguienteIndex, 1);
+    
+    const y = fechaProximo.getFullYear();
+    const m = String(fechaProximo.getMonth() + 1).padStart(2, '0');
+    const d = "01"; // Forzamos el día 1 siempre
+    
+    fechaParaDB = `${y}-${m}-${d}`;
+    textoInicioReal = info.fechaInicioSiguiente;
 } else {
-    // B: Si es día 1 al 20, respetamos la elección del formulario
+    // B: Estamos a día 6 (antes del 20) -> Respetamos elección
     if (alumno.inicioDeseado === 'inmediato') {
-        fechaParaDB = info.tecnicaHoy; // Ej: "2026-03-06"
+        const y = hoy.getFullYear();
+        const m = String(hoy.getMonth() + 1).padStart(2, '0');
+        const d = String(hoy.getDate()).padStart(2, '0');
+        
+        fechaParaDB = `${y}-${m}-${d}`; // Esto dará "2026-03-06"
         textoInicioReal = `Inmediato (Mes de ${info.mesActual})`;
     } else {
-        fechaParaDB = info.tecnicaProximoMes;
+        // Si elige próximo mes aunque sea día 6
+        const mesSiguienteIndex = mesActualIndex + 1;
+        const fechaProximo = new Date(añoActual, mesSiguienteIndex, 1);
+        
+        const y = fechaProximo.getFullYear();
+        const m = String(fechaProximo.getMonth() + 1).padStart(2, '0');
+        const d = "01";
+        
+        fechaParaDB = `${y}-${m}-${d}`; // Esto dará "2026-04-01"
         textoInicioReal = info.fechaInicioSiguiente;
     }
 }
