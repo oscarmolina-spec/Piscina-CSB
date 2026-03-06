@@ -1400,37 +1400,48 @@ const validarPlaza = async (alumno) => {
       const padreId = alumno.parentId || alumno.user;
       const emailPadre = padres[padreId]?.email;
       
-// 🚩 SUSTITUYE TU BLOQUE COMPLETO POR ESTE:
+// 1. Calculamos la fecha técnica exacta para la DB
+const info = obtenerInfoAlta();
+let fechaParaDB = "";
+let textoInicioReal = "";
 
-      // 1. Calculamos la fecha técnica exacta para la DB
-      const info = obtenerInfoAlta();
-      const fechaParaDB = info.diaCortePasado 
-          ? info.tecnicaProximoMes 
-          : (alumno.inicioDeseado === 'inmediato' ? info.tecnicaHoy : info.tecnicaProximoMes);
+// 🚩 REGLA DE ORO RECUPERADA:
+if (info.diaCortePasado) {
+    // A: Si es día 21 o más (Corte pasado), siempre al día 1 del mes siguiente
+    fechaParaDB = info.tecnicaProximoMes;
+    textoInicioReal = info.fechaInicioSiguiente; // Ej: "1 de abril"
+} else {
+    // B: Si es día 1 al 20, respetamos la elección del formulario
+    if (alumno.inicioDeseado === 'inmediato') {
+        fechaParaDB = info.tecnicaHoy; // Ej: "2026-03-06"
+        textoInicioReal = `Inmediato (Mes de ${info.mesActual})`;
+    } else {
+        fechaParaDB = info.tecnicaProximoMes;
+        textoInicioReal = info.fechaInicioSiguiente;
+    }
+}
 
-      // 🚩 EL ARREGLO PARA ALUMNOS NUEVOS:
-      // Buscamos el ID en este orden: el ID del alumno, luego el ID de documento, y por último el UID.
-      // Usamos trim() para evitar espacios invisibles que rompen Firebase.
-      const idCorrecto = String(alumno.id || alumno.docId || alumno.uid || "").trim();
-      
-      if (!idCorrecto || idCorrecto === "undefined") {
-          throw new Error("No se puede validar: El alumno no tiene un ID asignado todavía.");
-      }
+// 🚩 EL ARREGLO PARA ALUMNOS NUEVOS:
+const idCorrecto = String(alumno.id || alumno.docId || alumno.uid || "").trim();
 
-      console.log("Grabando fechaAlta en:", idCorrecto, "Valor:", fechaParaDB);
+if (!idCorrecto || idCorrecto === "undefined") {
+    throw new Error("No se puede validar: El alumno no tiene un ID asignado todavía.");
+}
 
-      // 🎯 GUARDADO CON SETDOC (MERGE) - Esto crea el campo si no existe
-      const alumnoRef = doc(db, 'students', idCorrecto);
-      
-      await setDoc(alumnoRef, { 
-        estado: 'inscrito',
-        actividadId: actId || alumno.actividadId || 'sin_asignar',
-        validadoAdmin: true,
-        fechaAlta: String(fechaParaDB), // 👈 ESTO ES LO QUE ESTÁ FALLANDO
-        revisadoAdmin: true,
-        fechaInicioReal: fechaInicioParaEmail,
-        ultimaActualizacion: new Date().getTime()
-      }, { merge: true });
+console.log("Grabando fechaAlta en:", idCorrecto, "Valor:", fechaParaDB);
+
+// 🎯 GUARDADO CON SETDOC (MERGE)
+const alumnoRef = doc(db, 'students', idCorrecto);
+
+await setDoc(alumnoRef, { 
+  estado: 'inscrito',
+  actividadId: actId || alumno.actividadId || 'sin_asignar',
+  validadoAdmin: true,
+  fechaAlta: String(fechaParaDB), // 👈 Guardará "2026-03-06" o "2026-04-01"
+  revisadoAdmin: true,
+  fechaInicioReal: textoInicioReal, // 👈 Texto dinámico para el email y la ficha
+  ultimaActualizacion: new Date().getTime()
+}, { merge: true });
 
       // 📧 4. ENVÍO DE EMAIL AUTOMÁTICO
       if (emailPadre) {
