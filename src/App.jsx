@@ -1189,66 +1189,7 @@ const confirmarInscripcion = async (alumnoId) => {
   }, []);
 
   // --- 3. FUNCIONES ---
-  // 🎯 FUNCIÓN PARA VALIDAR DESDE LA CARPETA DE ESPERA
-  const validarPlazaDirecto = async (alumno) => {
-    if (!confirm(`¿Quieres confirmar la plaza para ${alumno.nombre}? Se le enviará el email de bienvenida automáticamente.`)) return;
-
-    try {
-      const alumnoRef = doc(db, 'students', alumno.id);
-      
-      // Calculamos el inicio (Día 1 del mes que viene)
-      const hoy = new Date();
-      const inicio = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 1, 12, 0, 0);
-      const fechaAltaISO = inicio.toISOString();
-
-      // 1. Actualizamos el alumno
-      await updateDoc(alumnoRef, {
-        estado: 'inscrito',
-        fechaAlta: fechaAltaISO,
-        revisadoAdmin: true
-      });
-
-      // 2. Buscamos el email del padre
-      const padreId = alumno.parentId || alumno.user;
-      const emailDestino = padres[padreId]?.email || alumno.email;
-
-      if (emailDestino) {
-        await addDoc(collection(db, 'mail'), {
-          to: emailDestino,
-          message: {
-            subject: `✅ Plaza Confirmada: ${alumno.nombre}`,
-            html: `
-              <div style="font-family: sans-serif; color: #333; max-width: 600px; border: 1px solid #eee; padding: 20px; border-radius: 15px;">
-                <h2 style="color: #059669;">¡Felicidades! Plaza Confirmada</h2>
-                <p>Hola, te informamos de que <strong>${alumno.nombre}</strong> ya tiene su plaza confirmada en la actividad.</p>
-                <div style="background: #f9fafb; padding: 15px; border-radius: 10px; border-left: 5px solid #059669;">
-                  <p><strong>🏊‍♂️ Actividad:</strong> ${alumno.actividad}</p>
-                  <p><strong>🗓️ Horario:</strong> ${alumno.horario} (${alumno.dias})</p>
-                  <p><strong>📅 Comienzo:</strong> 1 de ${inicio.toLocaleString('es-ES', { month: 'long' })}</p>
-                </div>
-                <p style="margin-top: 20px;">Ya podéis acudir directamente el primer día de clase en vuestro horario. ¡Os esperamos!</p>
-              </div>
-            `
-          }
-        });
-      }
-      // 🚩 AÑADE ESTO JUSTO AQUÍ (Antes del alert)
-      await addDoc(collection(db, 'logs'), {
-        fecha: new Date().getTime(),
-        alumnoId: alumno.id,
-        alumnoNombre: alumno.nombre,
-        accion: "VALIDAR_ESPERA",
-        detalles: `Plaza validada desde lista de espera por el administrador`,
-        adminEmail: user?.email || ADMIN_EMAIL
-    });
-
-      alert("✅ Plaza validada y email enviado.");
-    } catch (error) {
-      console.error("Error al validar:", error);
-      alert("No se pudo validar la plaza.");
-    }
-  };
-  // 🎯 FUNCIÓN PARA ACEPTAR DESDE PRUEBAS DE NIVEL (CON AFORO)
+  // 🎯 FUNCIÓN PARA ACEPTAR DESDE PRUEBAS DE NIVEL (REPARADA)
   const aceptarAlumnoDirecto = async (e, alumno) => {
     if (e && e.stopPropagation) e.stopPropagation();
 
@@ -1263,16 +1204,24 @@ const confirmarInscripcion = async (alumnoId) => {
     try {
       const alumnoRef = doc(db, 'students', alumno.id);
       
-      // 1. Actualizamos al alumno
+      // --- 🚩 NUEVO: LÓGICA DE FECHAS INTEGRADA ---
+      const info = obtenerInfoAlta();
+      // Si hoy es día 21+, va al mes siguiente. Si no, según lo que eligió (o inmediato por defecto)
+      const fechaParaDB = info.diaCortePasado 
+          ? info.tecnicaProximoMes 
+          : (alumno.inicioDeseado === 'inmediato' ? info.tecnicaHoy : info.tecnicaProximoMes);
+
+      // 1. Actualizamos al alumno (AÑADIDO FECHA ALTA)
       await updateDoc(alumnoRef, {
         estado: 'inscrito',
         grupo: grupoDestino,
         fechaValidacion: new Date().toISOString(),
+        fechaAlta: String(fechaParaDB), // 👈 ESTO ES LO QUE FALTABA
         revisadoAdmin: true,
         validadoAdmin: true 
       });
 
-      // 2. ACTUALIZAMOS EL AFORO
+      // 2. ACTUALIZAMOS EL AFORO (Tu lógica original)
       const grupoRef = doc(db, 'clases', grupoDestino); 
       try {
         await updateDoc(grupoRef, { cupo: increment(-1) });
@@ -1280,40 +1229,33 @@ const confirmarInscripcion = async (alumnoId) => {
         console.warn("No se pudo descontar la plaza automáticamente.");
       }
 
-      // BUSCA ESTO EN: AdminDashboard -> función aceptarAlumnoDirecto
-// 📧 3. ENVÍO DE EMAIL (CONFIGURACIÓN FINAL)
-const padreId = alumno.parentId || alumno.user;
-const emailPadre = padres[padreId]?.email || alumno.email;
+      // 📧 3. ENVÍO DE EMAIL
+      const padreId = alumno.parentId || alumno.user;
+      const emailPadre = padres[padreId]?.email || alumno.email;
 
-if (emailPadre) {
-  // Aquí montamos los 3 datos: Actividad + Días + Horario
-  // Resultado: "🏅 Natación Primaria (16:15-17:15) — [PACK 2 DÍAS] Lunes y Miércoles a las 16:15-17:15"
-  const detalleGrupoCompleto = `${alumno.actividad} — ${alumno.dias} a las ${alumno.horario}`;
+      if (emailPadre) {
+        const detalleGrupoCompleto = `${alumno.actividad} — ${alumno.dias} a las ${alumno.horario}`;
+        await enviarEmailConfirmacion(emailPadre, alumno.nombre, detalleGrupoCompleto, 'alta');
+      }
 
-  await enviarEmailConfirmacion(
-    emailPadre, 
-    alumno.nombre, 
-    detalleGrupoCompleto,
-    'alta' // 'alta' activa el color verde y el título "Plaza Validada"
-  );
-}
+      // 🚩 4. LOG DE AUDITORÍA
+      await addDoc(collection(db, 'logs'), {
+        fecha: new Date().getTime(),
+        alumnoId: alumno.id,
+        alumnoNombre: alumno.nombre,
+        accion: "ACEPTAR_PRUEBA",
+        detalles: `Prueba superada. Fecha Alta: ${fechaParaDB}. Grupo: ${grupoDestino}`,
+        adminEmail: userEmail || ADMIN_EMAIL 
+      });
 
-// 🚩 4. LOG DE AUDITORÍA
-await addDoc(collection(db, 'logs'), {
-  fecha: new Date().getTime(),
-  alumnoId: alumno.id,
-  alumnoNombre: alumno.nombre,
-  accion: "ACEPTAR_PRUEBA",
-  detalles: `Prueba superada. Grupo: ${grupoDestino}. Email enviado a ${emailPadre}`,
-  // 🎯 CAMBIO AQUÍ: Cambiamos 'user?.email' por 'userEmail'
-  adminEmail: userEmail || ADMIN_EMAIL 
-});
-
-      alert(`✅ ${alumno.nombre} aceptado y email de confirmación enviado.`);
+      alert(`✅ ${alumno.nombre} aceptado.\n📅 Fecha de Alta: ${fechaParaDB}`);
       
+      // 🔄 RECARGA PARA SINCRONIZAR FICHA Y RADAR
+      window.location.reload();
+
     } catch (error) {
       console.error("Error al aceptar:", error);
-      alert("No se pudo procesar la inscripción.");
+      alert("No se pudo procesar la inscripción: " + error.message);
     }
 };
   
