@@ -1364,7 +1364,7 @@ const obtenerInfoAlta = () => {
 const validarPlaza = async (alumno) => {
   if (userRole !== 'admin') return alert("⛔ Solo coordinadores.");
   
-  // 1. 🔍 BUSCADOR DE IDs (Tu lógica exacta)
+  // 1. 🔍 BUSCADOR DE IDs (Limpiado)
   let actId = alumno.actividadId;
   const actText = (alumno.actividad || "").toLowerCase();
   if (!actId) {
@@ -1379,108 +1379,61 @@ const validarPlaza = async (alumno) => {
       else if (actText.includes('aquagym')) actId = 'aquagym';
   }
 
-  // --- 📅 2. LÓGICA DE FECHAS (Sincronizada con el día 21) ---
-  const infoFechas = obtenerInfoAlta();
-  let fechaInicioParaEmail = "";
+  // --- 📅 2. LÓGICA DE FECHAS ÚNICA Y BLINDADA ---
+  const info = obtenerInfoAlta();
+  const hoy = new Date();
+  let fechaParaDB = "";
+  let textoInicioReal = "";
 
-  // 🚩 REGLA MAESTRA: Si el corte pasó, da igual lo que eligiera el alumno.
-  if (infoFechas.diaCortePasado) {
-    fechaInicioParaEmail = infoFechas.fechaInicioSiguiente; 
+  if (info.diaCortePasado) {
+      // CASO A: Día 21 al 31 -> Siempre 1 del mes que viene
+      const proximo = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 1);
+      fechaParaDB = `${proximo.getFullYear()}-${String(proximo.getMonth() + 1).padStart(2, '0')}-01`;
+      textoInicioReal = info.fechaInicioSiguiente;
   } else {
-    // Si NO ha pasado el día 20, entonces sí miramos su preferencia
-    fechaInicioParaEmail = (alumno.inicioDeseado === 'inmediato') 
-      ? `Inmediato (Mes de ${infoFechas.mesActual})` 
-      : infoFechas.fechaInicioSiguiente;
+      // CASO B: Día 1 al 20 (Hoy es 6 de marzo)
+      if (alumno.inicioDeseado === 'inmediato') {
+          fechaParaDB = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-${String(hoy.getDate()).padStart(2, '0')}`;
+          textoInicioReal = `Inmediato (Mes de ${info.mesActual})`;
+      } else {
+          const proximo = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 1);
+          fechaParaDB = `${proximo.getFullYear()}-${String(proximo.getMonth() + 1).padStart(2, '0')}-01`;
+          textoInicioReal = info.fechaInicioSiguiente;
+      }
   }
 
-  // --- ❓ 3. CONFIRMACIÓN ---
-  // Ahora el mensaje que verás en pantalla será SIEMPRE el correcto
-  if (confirm(`✅ ¿Validar plaza definitiva para ${alumno.nombre}?\n\n📅 INICIO: ${fechaInicioParaEmail}\n📍 GRUPO: ${alumno.actividad}`)) {
-    try {
+  // 3. CONFIRMACIÓN
+  if (!confirm(`✅ ¿Validar plaza definitiva para ${alumno.nombre}?\n\n📅 INICIO: ${textoInicioReal}\n📍 GRUPO: ${alumno.actividad}`)) return;
+
+  try {
+      const idCorrecto = String(alumno.id || alumno.docId || alumno.uid || "").trim();
+      if (!idCorrecto || idCorrecto === "undefined") throw new Error("ID no localizado.");
+
       const padreId = alumno.parentId || alumno.user;
       const emailPadre = padres[padreId]?.email;
       
-// 1. Obtenemos solo la info del día actual para el corte
-const info = obtenerInfoAlta();
-const hoy = new Date();
-const añoActual = hoy.getFullYear();
-const mesActualIndex = hoy.getMonth(); // Marzo es 2
+      // 🎯 GUARDADO ÚNICO
+      await setDoc(doc(db, 'students', idCorrecto), { 
+        estado: 'inscrito',
+        actividadId: actId || 'sin_asignar',
+        validadoAdmin: true,
+        fechaAlta: fechaParaDB, // 👈 Aquí se guarda el texto real: "2026-03-06" o "2026-04-01"
+        revisadoAdmin: true,
+        fechaInicioReal: textoInicioReal,
+        ultimaActualizacion: new Date().getTime()
+      }, { merge: true });
 
-let fechaParaDB = "";
-let textoInicioReal = "";
-
-// 🚩 REGLA DE ORO ESCRITA A MANO
-if (info.diaCortePasado) {
-    // A: Ya ha pasado el día 20 -> Forzamos el día 1 del mes siguiente
-    // Construimos el mes siguiente sumando 1 al índice
-    const mesSiguienteIndex = mesActualIndex + 1;
-    const fechaProximo = new Date(añoActual, mesSiguienteIndex, 1);
-    
-    const y = fechaProximo.getFullYear();
-    const m = String(fechaProximo.getMonth() + 1).padStart(2, '0');
-    const d = "01"; // Forzamos el día 1 siempre
-    
-    fechaParaDB = `${y}-${m}-${d}`;
-    textoInicioReal = info.fechaInicioSiguiente;
-} else {
-    // B: Estamos a día 6 (antes del 20) -> Respetamos elección
-    if (alumno.inicioDeseado === 'inmediato') {
-        const y = hoy.getFullYear();
-        const m = String(hoy.getMonth() + 1).padStart(2, '0');
-        const d = String(hoy.getDate()).padStart(2, '0');
-        
-        fechaParaDB = `${y}-${m}-${d}`; // Esto dará "2026-03-06"
-        textoInicioReal = `Inmediato (Mes de ${info.mesActual})`;
-    } else {
-        // Si elige próximo mes aunque sea día 6
-        const mesSiguienteIndex = mesActualIndex + 1;
-        const fechaProximo = new Date(añoActual, mesSiguienteIndex, 1);
-        
-        const y = fechaProximo.getFullYear();
-        const m = String(fechaProximo.getMonth() + 1).padStart(2, '0');
-        const d = "01";
-        
-        fechaParaDB = `${y}-${m}-${d}`; // Esto dará "2026-04-01"
-        textoInicioReal = info.fechaInicioSiguiente;
-    }
-}
-
-// 🚩 EL ARREGLO PARA ALUMNOS NUEVOS:
-const idCorrecto = String(alumno.id || alumno.docId || alumno.uid || "").trim();
-
-if (!idCorrecto || idCorrecto === "undefined") {
-    throw new Error("No se puede validar: El alumno no tiene un ID asignado todavía.");
-}
-
-console.log("Grabando fechaAlta en:", idCorrecto, "Valor:", fechaParaDB);
-
-// 🎯 GUARDADO CON SETDOC (MERGE)
-const alumnoRef = doc(db, 'students', idCorrecto);
-
-await setDoc(alumnoRef, { 
-  estado: 'inscrito',
-  actividadId: actId || alumno.actividadId || 'sin_asignar',
-  validadoAdmin: true,
-  fechaAlta: String(fechaParaDB), // 👈 Guardará "2026-03-06" o "2026-04-01"
-  revisadoAdmin: true,
-  fechaInicioReal: textoInicioReal, // 👈 Texto dinámico para el email y la ficha
-  ultimaActualizacion: new Date().getTime()
-}, { merge: true });
-
-      // 📧 4. ENVÍO DE EMAIL AUTOMÁTICO
+      // 📧 4. EMAIL
       if (emailPadre) {
         try {
           await addDoc(collection(db, 'mail'), {
             to: emailPadre,
             message: {
               subject: `✅ Alta confirmada - Natación: ${alumno.nombre}`,
-              html: `<div style="font-family: sans-serif; color: #333;">
-                      <h2>¡Hola! Tu alta ya es efectiva.</h2>
-                      <p>Inscripción de <strong>${alumno.nombre}</strong> validada para el <strong>${fechaInicioParaEmail}</strong>.</p>
-                    </div>`
+              html: `<p>Hola, el alta de <strong>${alumno.nombre}</strong> es efectiva para: <strong>${textoInicioReal}</strong>.</p>`
             }
           });
-        } catch (eEmail) { console.warn("Error en email, pero el alta se guardó."); }
+        } catch (e) { console.warn("Email falló"); }
       }
 
       // 📜 5. LOGS
@@ -1488,22 +1441,17 @@ await setDoc(alumnoRef, {
         fecha: new Date().getTime(),
         alumnoId: idCorrecto,
         alumnoNombre: alumno.nombre,
-        accion: "CONFIRMACIÓN_GLOBAL",
-        detalles: `Alta confirmada. Fecha técnica: ${fechaParaDB}`,
+        accion: "VALIDACIÓN_ADMIN",
+        detalles: `Alta confirmada para ${fechaParaDB}`,
         adminEmail: userEmail || 'admin'
       });
 
-      // ✅ FINAL: Mensaje de éxito con diagnóstico
-      alert(`✅ GUARDADO CON ÉXITO\n\nID: ${idCorrecto}\nFecha Alta: ${fechaParaDB}`);
-
-      // 🚩 RECARGA OBLIGATORIA: Para que la ficha "despierte" y lea la fecha
+      alert(`✅ GUARDADO CON ÉXITO\n\nFecha Alta: ${fechaParaDB}`);
       window.location.reload(); 
 
   } catch (error) {
-      console.error("Error al validar:", error);
       alert("❌ Error: " + error.message);
   }
-}
 };
 
 // ---------------------------------------------------------
