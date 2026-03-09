@@ -2475,16 +2475,17 @@ return (
 
                             {/* ACCIÓN */}
                             <td className="p-3 text-right">
-                                <button 
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        validarPlazaDirecto(a);
-                                        registrarLog("VALIDAR_PLAZA", `Validada plaza para ${a.nombre} (Puesto #${index + 1})`);
-                                    }}
-                                    className="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded font-black text-[10px] uppercase shadow transition-all active:scale-95"
-                                >
-                                    Validar Plaza
-                                </button>
+                            <button 
+    onClick={(e) => {
+        e.stopPropagation();
+        // CAMBIAMOS validarPlazaDirecto POR validarPlaza
+        validarPlaza(a); 
+        registrarLog("VALIDAR_PLAZA", `Validada plaza para ${a.nombre} (Puesto #${index + 1})`);
+    }}
+    className="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded font-black text-[10px] uppercase shadow transition-all active:scale-95"
+>
+    Validar Plaza
+</button>
                             </td>
                         </tr>
                     ))}
