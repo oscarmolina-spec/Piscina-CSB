@@ -1415,9 +1415,9 @@ const validarPlaza = async (alumno) => {
       // 🎯 GUARDADO ÚNICO
       await setDoc(doc(db, 'students', idCorrecto), { 
         estado: 'inscrito',
-        actividadId: actId || 'sin_asignar',
         validadoAdmin: true,
-        fechaAlta: fechaParaDB, // 👈 Aquí se guarda el texto real: "2026-03-06" o "2026-04-01"
+        fechaAlta: fechaParaDB,      // El dato bueno (Ej: 2026-03-09 o 2026-04-01)
+        fecha_alta: fechaParaDB,     // Actualizamos también este por si la ficha lee aquí
         revisadoAdmin: true,
         fechaInicioReal: textoInicioReal,
         ultimaActualizacion: new Date().getTime()
