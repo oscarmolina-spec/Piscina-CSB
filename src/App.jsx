@@ -324,10 +324,9 @@ const enviarEmailConfirmacion = async (email, alumno, detalle, tipo, fechaInicio
     const esAlta = tipo === 'alta'; 
 
     // Formateamos la fecha si viene (de 2026-03-11 a 11/03/2026)
-    // 🚩 NUEVA LÓGICA: Si no hay fecha, al menos que no sea null
-    const fechaFormateada = (fechaInicio && typeof fechaInicio === 'string' && fechaInicio.includes('-')) 
+    const fechaFormateada = fechaInicio && fechaInicio !== 'cita' 
       ? fechaInicio.split('-').reverse().join('/') 
-      : (fechaInicio || 'Confirmada'); // Si falla el formato, al menos pone 'Confirmada'
+      : null;
 
     await addDoc(collection(db, 'mail'), {
       to: [email],
@@ -346,18 +345,17 @@ const enviarEmailConfirmacion = async (email, alumno, detalle, tipo, fechaInicio
             }
 
             <div style="background: ${esAlta ? '#ECFDF5' : '#EFF6FF'}; padding: 15px; border-radius: 10px; margin: 20px 0; border: 1px solid ${esAlta ? '#10B981' : '#BFDBFE'};">
-            <p style="margin: 0; color: ${esAlta ? '#065F46' : '#1E40AF'}; font-weight: bold;">
-              ${esAlta ? '📍 Detalles de la Inscripción:' : '📅 Detalles de la Cita:'}
-            </p>
-            <p style="margin: 10px 0 0 0; font-size: 16px;">${detalle}</p>
-            
-            {/* 🚩 SOLO aparecerá si es ALTA y si la fecha NO es la palabra 'cita' */}
-            ${esAlta && fechaInicio && fechaInicio !== 'cita' ? `
-              <p style="margin: 10px 0 0 0; font-size: 16px; color: #d32f2f;">
-                <strong>📅 Fecha de inicio:</strong> ${fechaFormateada}
+              <p style="margin: 0; color: ${esAlta ? '#065F46' : '#1E40AF'}; font-weight: bold;">
+                ${esAlta ? '📍 Detalles de la Inscripción:' : '📅 Detalles de la Cita:'}
               </p>
-            ` : ''}
-          </div>
+              <p style="margin: 10px 0 0 0; font-size: 16px;">${detalle}</p>
+              
+              ${esAlta && fechaFormateada ? `
+                <p style="margin: 10px 0 0 0; font-size: 16px; color: #d32f2f;">
+                  <strong>📅 Fecha de inicio:</strong> ${fechaFormateada}
+                </p>
+              ` : ''}
+            </div>
 
             ${esAlta 
               ? `<p>🎒 <strong>Recordad traer:</strong> Bañador, gorro, toalla, gafas y chanclas.</p>`
@@ -1213,37 +1211,39 @@ const confirmarInscripcion = async (alumnoId) => {
     try {
       const alumnoRef = doc(db, 'students', alumno.id);
       
-// --- 🚩 BLOQUE DE FECHA MANUAL REPARADO ---
+// --- 🚩 BLOQUE DE FECHA MANUAL CORREGIDO ---
 const hoy = new Date();
 const dia = hoy.getDate();
 const mes = hoy.getMonth() + 1;
 const año = hoy.getFullYear();
 
-// Buscamos la preferencia en el alumno o en los datos de su familia (padres)
-const padreId = alumno.parentId || alumno.user;
-const datosFamilia = (typeof padres !== 'undefined' && padres[padreId]) ? padres[padreId] : {};
-
-// Si no existe en ningún sitio, usamos 'inmediato'
-const preferenciaReal = (alumno.inicioDeseado || datosFamilia.inicioDeseado || 'inmediato').toLowerCase();
+// 1. Forzamos una preferencia: Si no existe, al ser día 11, lo lógico es 'inmediato'
+const preferencia = alumno.inicioDeseado || 'inmediato'; 
 
 let fechaParaDB = "";
 
+// 2. REGLA DEL DÍA 20
 if (dia > 20) {
-    let mSig = mes + 1; let aSig = año;
+    // Si ha pasado el día 20, forzamos siempre el mes que viene
+    let mSig = mes + 1;
+    let aSig = año;
     if (mSig > 12) { mSig = 1; aSig++; }
     fechaParaDB = `${aSig}-${String(mSig).padStart(2, '0')}-01`; 
 } else {
-    // Si el padre eligió algo que contenga "prox" (próximo mes)
-    if (preferenciaReal.includes('prox')) {
-        let mSig = mes + 1; let aSig = año;
+    // Estamos a día 11:
+    if (preferencia === 'inmediato') {
+        // ESTO ES LO QUE QUIERES: 2026-03-11
+        fechaParaDB = `${año}-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
+    } else {
+        // Solo si el usuario pidió explícitamente el mes que viene
+        let mSig = mes + 1;
+        let aSig = año;
         if (mSig > 12) { mSig = 1; aSig++; }
         fechaParaDB = `${aSig}-${String(mSig).padStart(2, '0')}-01`;
-    } else {
-        fechaParaDB = `${año}-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
     }
 }
 
-console.log("📍 RESULTADO:", { preferenciaReal, fechaParaDB });
+console.log("DEBUG FECHA:", { dia, preferencia, resultado: fechaParaDB });
 
       // 1. Actualizamos al alumno
       await updateDoc(alumnoRef, {
