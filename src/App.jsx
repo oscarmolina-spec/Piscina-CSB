@@ -1213,32 +1213,41 @@ const confirmarInscripcion = async (alumnoId) => {
     try {
       const alumnoRef = doc(db, 'students', alumno.id);
       
-// --- 📅 CÁLCULO DE FECHAS (VOLVEMOS A LA VERSIÓN ESTABLE) ---
+// --- 📅 CÁLCULO DE FECHAS (VERSIÓN DEFINITIVA) ---
 const hoy = new Date();
-const dia = hoy.getDate();
-const mes = hoy.getMonth() + 1;
-const año = hoy.getFullYear();
+const diaHoy = hoy.getDate();
+const mesHoy = hoy.getMonth() + 1;
+const añoHoy = hoy.getFullYear();
 
-// Forzamos que si no hay nada, sea 'inmediato'
-const preferencia = (alumno.inicioDeseado || 'inmediato').toLowerCase();
-console.log("Preferencia detectada:", preferencia);
+// Limpiamos la preferencia para que no importe si es 'Proximo', 'próximo', etc.
+const rawPreferencia = String(alumno.inicioDeseado || '').toLowerCase();
+const esProximoMes = rawPreferencia.includes('prox');
 
 let fechaParaDB = "";
 
-if (dia > 20) {
-    let mSig = mes + 1; let aSig = año;
+// Regla del día 20 (Si hoy es 21 o más, siempre va al mes siguiente)
+if (diaHoy > 20) {
+    let mSig = mesHoy + 1; let aSig = añoHoy;
     if (mSig > 12) { mSig = 1; aSig++; }
     fechaParaDB = `${aSig}-${String(mSig).padStart(2, '0')}-01`;
 } else {
-    // Si es día 11 y la preferencia NO es 'proximo', ponemos HOY
-    if (preferencia === 'proximo' || preferencia === 'próximo') {
-        let mSig = mes + 1; let aSig = año;
+    // Si estamos a día 11 (Hoy):
+    if (esProximoMes) {
+        // ALTA PRÓXIMO MES (Día 1)
+        let mSig = mesHoy + 1; let aSig = añoHoy;
         if (mSig > 12) { mSig = 1; aSig++; }
         fechaParaDB = `${aSig}-${String(mSig).padStart(2, '0')}-01`;
     } else {
-        fechaParaDB = `${año}-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
+        // ALTA HOY (Día 11)
+        fechaParaDB = `${añoHoy}-${String(mesHoy).padStart(2, '0')}-${String(diaHoy).padStart(2, '0')}`;
     }
 }
+
+// 🚩 CHIVATO: Esto te dirá qué ha entendido el programa antes de guardar
+alert(`DEBUG:
+Preferencia leída: "${alumno.inicioDeseado}"
+¿Es próximo mes?: ${esProximoMes}
+Fecha que se va a guardar: ${fechaParaDB}`);
 
 console.log("DEBUG FECHA:", { dia, preferencia, resultado: fechaParaDB });
 
