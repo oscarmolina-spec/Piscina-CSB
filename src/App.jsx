@@ -318,7 +318,7 @@ const getHumanDate = (d) => {
 };
 
 // Sistema de envío de Emails (simulado con extensión Firebase Trigger Email)
-const enviarEmailConfirmacion = async (email, alumno, detalle, tipo = 'cita') => {
+const enviarEmailConfirmacion = async (email, alumno, detalle, tipo, fechaInicio = 'cita') => {
   try {
     const nombreAlumno = String(alumno).trim();
     const esAlta = tipo === 'alta'; // ¿Es una validación final?
@@ -1254,13 +1254,15 @@ console.log("DEBUG FECHA:", { dia, preferencia, resultado: fechaParaDB });
         console.warn("No se pudo descontar la plaza.");
       }
 
-      // 📧 3. ENVÍO DE EMAIL
+      // 📧 3. ENVÍO DE EMAIL (Actualizado con fecha confirmada)
       const padreId = alumno.parentId || alumno.user;
       const emailPadre = padres[padreId]?.email || alumno.email;
 
       if (emailPadre) {
         const detalleGrupoCompleto = `${alumno.actividad} — ${alumno.dias} a las ${alumno.horario}`;
-        await enviarEmailConfirmacion(emailPadre, alumno.nombre, detalleGrupoCompleto, 'alta');
+        
+        // Pasamos 'fechaParaDB' como último argumento
+        await enviarEmailConfirmacion(emailPadre, alumno.nombre, detalleGrupoCompleto, 'alta', fechaParaDB);
       }
 
       // 🚩 4. LOG DE AUDITORÍA
