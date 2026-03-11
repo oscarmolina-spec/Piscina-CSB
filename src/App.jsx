@@ -1213,39 +1213,37 @@ const confirmarInscripcion = async (alumnoId) => {
     try {
       const alumnoRef = doc(db, 'students', alumno.id);
       
-// --- 🚩 BLOQUE DE FECHA MANUAL CORREGIDO ---
+// --- 🚩 BLOQUE DE FECHA MANUAL REPARADO ---
 const hoy = new Date();
 const dia = hoy.getDate();
 const mes = hoy.getMonth() + 1;
 const año = hoy.getFullYear();
 
-// 1. Forzamos una preferencia: Si no existe, al ser día 11, lo lógico es 'inmediato'
-const preferencia = alumno.inicioDeseado || 'inmediato'; 
+// Buscamos la preferencia en el alumno o en los datos de su familia (padres)
+const padreId = alumno.parentId || alumno.user;
+const datosFamilia = (typeof padres !== 'undefined' && padres[padreId]) ? padres[padreId] : {};
+
+// Si no existe en ningún sitio, usamos 'inmediato'
+const preferenciaReal = (alumno.inicioDeseado || datosFamilia.inicioDeseado || 'inmediato').toLowerCase();
 
 let fechaParaDB = "";
 
-// 2. REGLA DEL DÍA 20
 if (dia > 20) {
-    // Si ha pasado el día 20, forzamos siempre el mes que viene
-    let mSig = mes + 1;
-    let aSig = año;
+    let mSig = mes + 1; let aSig = año;
     if (mSig > 12) { mSig = 1; aSig++; }
     fechaParaDB = `${aSig}-${String(mSig).padStart(2, '0')}-01`; 
 } else {
-    // Estamos a día 11:
-    if (preferencia === 'inmediato') {
-        // ESTO ES LO QUE QUIERES: 2026-03-11
-        fechaParaDB = `${año}-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
-    } else {
-        // Solo si el usuario pidió explícitamente el mes que viene
-        let mSig = mes + 1;
-        let aSig = año;
+    // Si el padre eligió algo que contenga "prox" (próximo mes)
+    if (preferenciaReal.includes('prox')) {
+        let mSig = mes + 1; let aSig = año;
         if (mSig > 12) { mSig = 1; aSig++; }
         fechaParaDB = `${aSig}-${String(mSig).padStart(2, '0')}-01`;
+    } else {
+        fechaParaDB = `${año}-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
     }
 }
 
-console.log("DEBUG FECHA:", { dia, preferencia, resultado: fechaParaDB });
+console.log("📍 RESULTADO:", { preferenciaReal, fechaParaDB });
 
       // 1. Actualizamos al alumno
       await updateDoc(alumnoRef, {
