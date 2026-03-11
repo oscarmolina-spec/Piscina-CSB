@@ -346,15 +346,18 @@ const enviarEmailConfirmacion = async (email, alumno, detalle, tipo, fechaInicio
             }
 
             <div style="background: ${esAlta ? '#ECFDF5' : '#EFF6FF'}; padding: 15px; border-radius: 10px; margin: 20px 0; border: 1px solid ${esAlta ? '#10B981' : '#BFDBFE'};">
-  <p style="margin: 0; color: ${esAlta ? '#065F46' : '#1E40AF'}; font-weight: bold;">
-    ${esAlta ? '📍 Detalles de la Inscripción:' : '📅 Detalles de la Cita:'}
-  </p>
-  <p style="margin: 10px 0 0 0; font-size: 16px;">${detalle}</p>
-  
-  <p style="margin: 10px 0 0 0; font-size: 16px; color: #d32f2f;">
-    <strong>📅 Fecha de inicio:</strong> ${fechaFormateada || fechaInicio || 'Pendiente de asignar'}
-  </p>
-</div>
+            <p style="margin: 0; color: ${esAlta ? '#065F46' : '#1E40AF'}; font-weight: bold;">
+              ${esAlta ? '📍 Detalles de la Inscripción:' : '📅 Detalles de la Cita:'}
+            </p>
+            <p style="margin: 10px 0 0 0; font-size: 16px;">${detalle}</p>
+            
+            {/* 🚩 SOLO aparecerá si es ALTA y si la fecha NO es la palabra 'cita' */}
+            ${esAlta && fechaInicio && fechaInicio !== 'cita' ? `
+              <p style="margin: 10px 0 0 0; font-size: 16px; color: #d32f2f;">
+                <strong>📅 Fecha de inicio:</strong> ${fechaFormateada}
+              </p>
+            ` : ''}
+          </div>
 
             ${esAlta 
               ? `<p>🎒 <strong>Recordad traer:</strong> Bañador, gorro, toalla, gafas y chanclas.</p>`
@@ -1210,35 +1213,30 @@ const confirmarInscripcion = async (alumnoId) => {
     try {
       const alumnoRef = doc(db, 'students', alumno.id);
       
-// --- 🚩 BLOQUE DE FECHA MANUAL CORREGIDO ---
+// --- 📅 CÁLCULO DE FECHAS (VOLVEMOS A LA VERSIÓN ESTABLE) ---
 const hoy = new Date();
 const dia = hoy.getDate();
 const mes = hoy.getMonth() + 1;
 const año = hoy.getFullYear();
 
-// 1. Forzamos una preferencia: Si no existe, al ser día 11, lo lógico es 'inmediato'
-const preferencia = alumno.inicioDeseado || 'inmediato'; 
+// Forzamos que si no hay nada, sea 'inmediato'
+const preferencia = (alumno.inicioDeseado || 'inmediato').toLowerCase();
+console.log("Preferencia detectada:", preferencia);
 
 let fechaParaDB = "";
 
-// 2. REGLA DEL DÍA 20
 if (dia > 20) {
-    // Si ha pasado el día 20, forzamos siempre el mes que viene
-    let mSig = mes + 1;
-    let aSig = año;
+    let mSig = mes + 1; let aSig = año;
     if (mSig > 12) { mSig = 1; aSig++; }
-    fechaParaDB = `${aSig}-${String(mSig).padStart(2, '0')}-01`; 
+    fechaParaDB = `${aSig}-${String(mSig).padStart(2, '0')}-01`;
 } else {
-    // Estamos a día 11:
-    if (preferencia === 'inmediato') {
-        // ESTO ES LO QUE QUIERES: 2026-03-11
-        fechaParaDB = `${año}-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
-    } else {
-        // Solo si el usuario pidió explícitamente el mes que viene
-        let mSig = mes + 1;
-        let aSig = año;
+    // Si es día 11 y la preferencia NO es 'proximo', ponemos HOY
+    if (preferencia === 'proximo' || preferencia === 'próximo') {
+        let mSig = mes + 1; let aSig = año;
         if (mSig > 12) { mSig = 1; aSig++; }
         fechaParaDB = `${aSig}-${String(mSig).padStart(2, '0')}-01`;
+    } else {
+        fechaParaDB = `${año}-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
     }
 }
 
