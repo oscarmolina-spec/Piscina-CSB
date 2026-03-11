@@ -1201,32 +1201,39 @@ const confirmarInscripcion = async (alumnoId) => {
     try {
       const alumnoRef = doc(db, 'students', alumno.id);
       
-      // --- 🚩 BLOQUE DE FECHA MANUAL (ADIÓS AL 31/03) ---
-      const hoy = new Date();
-      const dia = hoy.getDate();
-      const mes = hoy.getMonth() + 1;
-      const año = hoy.getFullYear();
+// --- 🚩 BLOQUE DE FECHA MANUAL CORREGIDO ---
+const hoy = new Date();
+const dia = hoy.getDate();
+const mes = hoy.getMonth() + 1;
+const año = hoy.getFullYear();
 
-      let fechaParaDB = "";
+// 1. Forzamos una preferencia: Si no existe, al ser día 11, lo lógico es 'inmediato'
+const preferencia = alumno.inicioDeseado || 'inmediato'; 
 
-      // REGLA DEL DÍA 20
-      if (dia > 20) {
-          // Si es 21 o más, forzamos el día 1 del mes que viene
-          let mSig = mes + 1;
-          let aSig = año;
-          if (mSig > 12) { mSig = 1; aSig++; }
-          fechaParaDB = `${aSig}-${String(mSig).padStart(2, '0')}-01`; // 👈 TEXTO PURO "01"
-      } else {
-          // Estamos a día 11 (Marzo), grabamos HOY o el 1 del mes que viene según el alumno
-          if (alumno.inicioDeseado === 'inmediato') {
-              fechaParaDB = `${año}-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
-          } else {
-              let mSig = mes + 1;
-              let aSig = año;
-              if (mSig > 12) { mSig = 1; aSig++; }
-              fechaParaDB = `${aSig}-${String(mSig).padStart(2, '0')}-01`;
-          }
-      }
+let fechaParaDB = "";
+
+// 2. REGLA DEL DÍA 20
+if (dia > 20) {
+    // Si ha pasado el día 20, forzamos siempre el mes que viene
+    let mSig = mes + 1;
+    let aSig = año;
+    if (mSig > 12) { mSig = 1; aSig++; }
+    fechaParaDB = `${aSig}-${String(mSig).padStart(2, '0')}-01`; 
+} else {
+    // Estamos a día 11:
+    if (preferencia === 'inmediato') {
+        // ESTO ES LO QUE QUIERES: 2026-03-11
+        fechaParaDB = `${año}-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
+    } else {
+        // Solo si el usuario pidió explícitamente el mes que viene
+        let mSig = mes + 1;
+        let aSig = año;
+        if (mSig > 12) { mSig = 1; aSig++; }
+        fechaParaDB = `${aSig}-${String(mSig).padStart(2, '0')}-01`;
+    }
+}
+
+console.log("DEBUG FECHA:", { dia, preferencia, resultado: fechaParaDB });
 
       // 1. Actualizamos al alumno
       await updateDoc(alumnoRef, {
