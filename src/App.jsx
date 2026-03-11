@@ -318,15 +318,19 @@ const getHumanDate = (d) => {
 };
 
 // Sistema de envío de Emails (simulado con extensión Firebase Trigger Email)
-const enviarEmailConfirmacion = async (email, alumno, detalle, tipo, fechaInicio = 'cita') => {
+const enviarEmailConfirmacion = async (email, alumno, detalle, tipo, fechaInicio) => { // 🚩 Quitamos el '= cita' para que use el valor real
   try {
     const nombreAlumno = String(alumno).trim();
-    const esAlta = tipo === 'alta'; // ¿Es una validación final?
+    const esAlta = tipo === 'alta'; 
+
+    // Formateamos la fecha si viene (de 2026-03-11 a 11/03/2026)
+    const fechaFormateada = fechaInicio && fechaInicio !== 'cita' 
+      ? fechaInicio.split('-').reverse().join('/') 
+      : null;
 
     await addDoc(collection(db, 'mail'), {
       to: [email],
       message: {
-        // Título dinámico
         subject: esAlta ? `✅ Plaza Confirmada: ${nombreAlumno}` : `Reserva Confirmada: ${nombreAlumno}`,
         html: `
           <div style="font-family: sans-serif; padding: 20px; color: #333; border: 1px solid #ddd; border-radius: 15px; max-width: 600px;">
@@ -345,6 +349,12 @@ const enviarEmailConfirmacion = async (email, alumno, detalle, tipo, fechaInicio
                 ${esAlta ? '📍 Detalles de la Inscripción:' : '📅 Detalles de la Cita:'}
               </p>
               <p style="margin: 10px 0 0 0; font-size: 16px;">${detalle}</p>
+              
+              ${esAlta && fechaFormateada ? `
+                <p style="margin: 10px 0 0 0; font-size: 16px; color: #d32f2f;">
+                  <strong>📅 Fecha de inicio:</strong> ${fechaFormateada}
+                </p>
+              ` : ''}
             </div>
 
             ${esAlta 
