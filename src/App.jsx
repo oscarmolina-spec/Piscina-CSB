@@ -324,9 +324,10 @@ const enviarEmailConfirmacion = async (email, alumno, detalle, tipo, fechaInicio
     const esAlta = tipo === 'alta'; 
 
     // Formateamos la fecha si viene (de 2026-03-11 a 11/03/2026)
-    const fechaFormateada = fechaInicio && fechaInicio !== 'cita' 
+    // 🚩 NUEVA LÓGICA: Si no hay fecha, al menos que no sea null
+    const fechaFormateada = (fechaInicio && typeof fechaInicio === 'string' && fechaInicio.includes('-')) 
       ? fechaInicio.split('-').reverse().join('/') 
-      : null;
+      : (fechaInicio || 'Confirmada'); // Si falla el formato, al menos pone 'Confirmada'
 
     await addDoc(collection(db, 'mail'), {
       to: [email],
@@ -345,17 +346,15 @@ const enviarEmailConfirmacion = async (email, alumno, detalle, tipo, fechaInicio
             }
 
             <div style="background: ${esAlta ? '#ECFDF5' : '#EFF6FF'}; padding: 15px; border-radius: 10px; margin: 20px 0; border: 1px solid ${esAlta ? '#10B981' : '#BFDBFE'};">
-              <p style="margin: 0; color: ${esAlta ? '#065F46' : '#1E40AF'}; font-weight: bold;">
-                ${esAlta ? '📍 Detalles de la Inscripción:' : '📅 Detalles de la Cita:'}
-              </p>
-              <p style="margin: 10px 0 0 0; font-size: 16px;">${detalle}</p>
-              
-              ${esAlta && fechaFormateada ? `
-                <p style="margin: 10px 0 0 0; font-size: 16px; color: #d32f2f;">
-                  <strong>📅 Fecha de inicio:</strong> ${fechaFormateada}
-                </p>
-              ` : ''}
-            </div>
+  <p style="margin: 0; color: ${esAlta ? '#065F46' : '#1E40AF'}; font-weight: bold;">
+    ${esAlta ? '📍 Detalles de la Inscripción:' : '📅 Detalles de la Cita:'}
+  </p>
+  <p style="margin: 10px 0 0 0; font-size: 16px;">${detalle}</p>
+  
+  <p style="margin: 10px 0 0 0; font-size: 16px; color: #d32f2f;">
+    <strong>📅 Fecha de inicio:</strong> ${fechaFormateada || fechaInicio || 'Pendiente de asignar'}
+  </p>
+</div>
 
             ${esAlta 
               ? `<p>🎒 <strong>Recordad traer:</strong> Bañador, gorro, toalla, gafas y chanclas.</p>`
