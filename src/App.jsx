@@ -1189,44 +1189,62 @@ const confirmarInscripcion = async (alumnoId) => {
   }, []);
 
   // --- 3. FUNCIONES ---
-  // 🎯 FUNCIÓN PARA ACEPTAR DESDE PRUEBAS DE NIVEL (REPARADA)
+  // 🎯 FUNCIÓN PARA ACEPTAR DESDE PRUEBAS DE NIVEL (BLINDADA CONTRA EL 31/03)
   const aceptarAlumnoDirecto = async (e, alumno) => {
     if (e && e.stopPropagation) e.stopPropagation();
 
     const grupoDestino = alumno.actividad || 'Sin asignar';
-    
-    if (grupoDestino === 'Sin asignar') {
-        return alert("⚠️ El alumno no tiene un grupo asignado.");
-    }
+    if (grupoDestino === 'Sin asignar') return alert("⚠️ El alumno no tiene un grupo asignado.");
 
-    if (!confirm(`¿Inscribir a ${alumno.nombre} en ${grupoDestino} y descontar plaza del aforo?`)) return;
+    if (!confirm(`¿Inscribir a ${alumno.nombre} en ${grupoDestino}?`)) return;
 
     try {
       const alumnoRef = doc(db, 'students', alumno.id);
       
-      // --- 🚩 NUEVO: LÓGICA DE FECHAS INTEGRADA ---
-      const info = obtenerInfoAlta();
-      // Si hoy es día 21+, va al mes siguiente. Si no, según lo que eligió (o inmediato por defecto)
-      const fechaParaDB = info.diaCortePasado 
-          ? info.tecnicaProximoMes 
-          : (alumno.inicioDeseado === 'inmediato' ? info.tecnicaHoy : info.tecnicaProximoMes);
+      // --- 🚩 BLOQUE DE FECHA MANUAL (ADIÓS AL 31/03) ---
+      const hoy = new Date();
+      const dia = hoy.getDate();
+      const mes = hoy.getMonth() + 1;
+      const año = hoy.getFullYear();
 
-      // 1. Actualizamos al alumno (AÑADIDO FECHA ALTA)
+      let fechaParaDB = "";
+
+      // REGLA DEL DÍA 20
+      if (dia > 20) {
+          // Si es 21 o más, forzamos el día 1 del mes que viene
+          let mSig = mes + 1;
+          let aSig = año;
+          if (mSig > 12) { mSig = 1; aSig++; }
+          fechaParaDB = `${aSig}-${String(mSig).padStart(2, '0')}-01`; // 👈 TEXTO PURO "01"
+      } else {
+          // Estamos a día 11 (Marzo), grabamos HOY o el 1 del mes que viene según el alumno
+          if (alumno.inicioDeseado === 'inmediato') {
+              fechaParaDB = `${año}-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
+          } else {
+              let mSig = mes + 1;
+              let aSig = año;
+              if (mSig > 12) { mSig = 1; aSig++; }
+              fechaParaDB = `${aSig}-${String(mSig).padStart(2, '0')}-01`;
+          }
+      }
+
+      // 1. Actualizamos al alumno
       await updateDoc(alumnoRef, {
         estado: 'inscrito',
         grupo: grupoDestino,
         fechaValidacion: new Date().toISOString(),
-        fechaAlta: String(fechaParaDB), // 👈 ESTO ES LO QUE FALTABA
+        fechaAlta: fechaParaDB, // 🎯 Guardará "2026-03-11" o "2026-04-01"
+        fecha_alta: fechaParaDB, // Refuerzo por si la ficha lee este campo
         revisadoAdmin: true,
         validadoAdmin: true 
       });
 
-      // 2. ACTUALIZAMOS EL AFORO (Tu lógica original)
+      // 2. ACTUALIZAMOS EL AFORO
       const grupoRef = doc(db, 'clases', grupoDestino); 
       try {
         await updateDoc(grupoRef, { cupo: increment(-1) });
       } catch (errAforo) {
-        console.warn("No se pudo descontar la plaza automáticamente.");
+        console.warn("No se pudo descontar la plaza.");
       }
 
       // 📧 3. ENVÍO DE EMAIL
@@ -1244,18 +1262,16 @@ const confirmarInscripcion = async (alumnoId) => {
         alumnoId: alumno.id,
         alumnoNombre: alumno.nombre,
         accion: "ACEPTAR_PRUEBA",
-        detalles: `Prueba superada. Fecha Alta: ${fechaParaDB}. Grupo: ${grupoDestino}`,
-        adminEmail: userEmail || ADMIN_EMAIL 
+        detalles: `Prueba superada. Fecha Alta: ${fechaParaDB}`,
+        adminEmail: userEmail || 'admin' 
       });
 
-      alert(`✅ ${alumno.nombre} aceptado.\n📅 Fecha de Alta: ${fechaParaDB}`);
-      
-      // 🔄 RECARGA PARA SINCRONIZAR FICHA Y RADAR
+      alert(`✅ ${alumno.nombre} aceptado.\n📅 Fecha de Alta grabada: ${fechaParaDB}`);
       window.location.reload();
 
     } catch (error) {
       console.error("Error al aceptar:", error);
-      alert("No se pudo procesar la inscripción: " + error.message);
+      alert("No se pudo procesar: " + error.message);
     }
 };
   
@@ -1415,9 +1431,9 @@ const validarPlaza = async (alumno) => {
       // 🎯 GUARDADO ÚNICO
       await setDoc(doc(db, 'students', idCorrecto), { 
         estado: 'inscrito',
+        actividadId: actId || 'sin_asignar',
         validadoAdmin: true,
-        fechaAlta: fechaParaDB,      // El dato bueno (Ej: 2026-03-09 o 2026-04-01)
-        fecha_alta: fechaParaDB,     // Actualizamos también este por si la ficha lee aquí
+        fechaAlta: fechaParaDB, // 👈 Aquí se guarda el texto real: "2026-03-06" o "2026-04-01"
         revisadoAdmin: true,
         fechaInicioReal: textoInicioReal,
         ultimaActualizacion: new Date().getTime()
