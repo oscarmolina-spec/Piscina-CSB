@@ -1213,41 +1213,37 @@ const confirmarInscripcion = async (alumnoId) => {
     try {
       const alumnoRef = doc(db, 'students', alumno.id);
       
-// --- 📅 CÁLCULO DE FECHAS (VERSIÓN DEFINITIVA) ---
+// --- 🚩 BLOQUE DE FECHA MANUAL CORREGIDO ---
 const hoy = new Date();
-const diaHoy = hoy.getDate();
-const mesHoy = hoy.getMonth() + 1;
-const añoHoy = hoy.getFullYear();
+const dia = hoy.getDate();
+const mes = hoy.getMonth() + 1;
+const año = hoy.getFullYear();
 
-// Limpiamos la preferencia para que no importe si es 'Proximo', 'próximo', etc.
-const rawPreferencia = String(alumno.inicioDeseado || '').toLowerCase();
-const esProximoMes = rawPreferencia.includes('prox');
+// 1. Forzamos una preferencia: Si no existe, al ser día 11, lo lógico es 'inmediato'
+const preferencia = alumno.inicioDeseado || 'inmediato'; 
 
 let fechaParaDB = "";
 
-// Regla del día 20 (Si hoy es 21 o más, siempre va al mes siguiente)
-if (diaHoy > 20) {
-    let mSig = mesHoy + 1; let aSig = añoHoy;
+// 2. REGLA DEL DÍA 20
+if (dia > 20) {
+    // Si ha pasado el día 20, forzamos siempre el mes que viene
+    let mSig = mes + 1;
+    let aSig = año;
     if (mSig > 12) { mSig = 1; aSig++; }
-    fechaParaDB = `${aSig}-${String(mSig).padStart(2, '0')}-01`;
+    fechaParaDB = `${aSig}-${String(mSig).padStart(2, '0')}-01`; 
 } else {
-    // Si estamos a día 11 (Hoy):
-    if (esProximoMes) {
-        // ALTA PRÓXIMO MES (Día 1)
-        let mSig = mesHoy + 1; let aSig = añoHoy;
+    // Estamos a día 11:
+    if (preferencia === 'inmediato') {
+        // ESTO ES LO QUE QUIERES: 2026-03-11
+        fechaParaDB = `${año}-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
+    } else {
+        // Solo si el usuario pidió explícitamente el mes que viene
+        let mSig = mes + 1;
+        let aSig = año;
         if (mSig > 12) { mSig = 1; aSig++; }
         fechaParaDB = `${aSig}-${String(mSig).padStart(2, '0')}-01`;
-    } else {
-        // ALTA HOY (Día 11)
-        fechaParaDB = `${añoHoy}-${String(mesHoy).padStart(2, '0')}-${String(diaHoy).padStart(2, '0')}`;
     }
 }
-
-// 🚩 CHIVATO: Esto te dirá qué ha entendido el programa antes de guardar
-alert(`DEBUG:
-Preferencia leída: "${alumno.inicioDeseado}"
-¿Es próximo mes?: ${esProximoMes}
-Fecha que se va a guardar: ${fechaParaDB}`);
 
 console.log("DEBUG FECHA:", { dia, preferencia, resultado: fechaParaDB });
 
