@@ -3630,13 +3630,14 @@ const inscribir = async (act, op) => {
       close(); 
       
       setTimeout(() => { 
-        // 🚩 PASAMOS LOS DATOS AQUÍ PARA QUE NO SE PIERDAN
+        // 🚩 AÑADIMOS 'inicioDeseado' AQUÍ PARA QUE NO SE PIERDA
         onRequirePrueba({
           actividad: act.nombre,
           actividadId: act.id,
           dias: op.dias,
           horario: op.horario,
-          precio: op.precio
+          precio: op.precio,
+          inicioDeseado: inicioDeseado // <--- 🎯 CLAVE: Pasamos la elección al siguiente paso
         }); 
       }, 400); 
       
