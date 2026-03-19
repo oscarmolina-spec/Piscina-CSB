@@ -1217,34 +1217,34 @@ const dia = hoy.getDate();
 const mes = hoy.getMonth() + 1;
 const año = hoy.getFullYear();
 
-// 1. Forzamos una preferencia: Si no existe, al ser día 11, lo lógico es 'inmediato'
-const preferencia = alumno.inicioDeseado || 'inmediato'; 
+// 1. 🎯 BUSCAMOS EN EL PADRE (Ya que en el alumno no existe el campo)
+const idDelPadre = alumno.parentId; // Usamos parentId que sí existe en tu Firebase
+const fichaDelPadre = (padres && padres[idDelPadre]) ? padres[idDelPadre] : {};
+
+// 2. Intentamos leer 'inicioDeseado' de la ficha del padre
+const preferenciaReal = String(fichaDelPadre.inicioDeseado || 'inmediato').toLowerCase(); 
 
 let fechaParaDB = "";
 
-// 2. REGLA DEL DÍA 20
+// 3. REGLA DEL DÍA 20
 if (dia > 20) {
-    // Si ha pasado el día 20, forzamos siempre el mes que viene
-    let mSig = mes + 1;
-    let aSig = año;
+    let mSig = mes + 1; let aSig = año;
     if (mSig > 12) { mSig = 1; aSig++; }
     fechaParaDB = `${aSig}-${String(mSig).padStart(2, '0')}-01`; 
 } else {
-    // Estamos a día 11:
-    if (preferencia === 'inmediato') {
-        // ESTO ES LO QUE QUIERES: 2026-03-11
-        fechaParaDB = `${año}-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
-    } else {
-        // Solo si el usuario pidió explícitamente el mes que viene
-        let mSig = mes + 1;
-        let aSig = año;
+    // 🚩 Si el padre eligió "Próximo mes" al registrarse:
+    if (preferenciaReal.includes('prox')) {
+        let mSig = mes + 1; let aSig = año;
         if (mSig > 12) { mSig = 1; aSig++; }
         fechaParaDB = `${aSig}-${String(mSig).padStart(2, '0')}-01`;
+    } else {
+        // Si no hay preferencia o es inmediato: Hoy (2026-03-19)
+        fechaParaDB = `${año}-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
     }
 }
 
-console.log("DEBUG FECHA:", { dia, preferencia, resultado: fechaParaDB });
-
+// Consola para que veas si por fin ha leído al padre
+console.log("🕵️ INFO PADRE:", { id: idDelPadre, preferencia: preferenciaReal, resultado: fechaParaDB });
       // 1. Actualizamos al alumno
       await updateDoc(alumnoRef, {
         estado: 'inscrito',
