@@ -1219,18 +1219,25 @@ const añoActual = hoy.getFullYear();
 
 let preferenciaReal = 'inmediato';
 
-// 1. 🎯 BUSCAMOS AL PADRE Y VEMOS QUÉ TIENE DENTRO
 const idDelPadre = alumno.parentId || alumno.user;
 const padreSnap = await getDoc(doc(db, 'users', idDelPadre)); 
 
 if (padreSnap.exists()) {
     const datosPadre = padreSnap.data();
     
-    // 🚩 ESTO ES LO IMPORTANTE: Mira la consola del navegador (F12) 
-    console.log("🔍 FICHA COMPLETA DEL PADRE:", datosPadre);
-
-    // Intentamos detectar el campo por varios nombres comunes
-    preferenciaReal = datosPadre.inicioDeseado || datosPadre.inicio || datosPadre.comienzo || 'inmediato';
+    // 🚩 1. CHIVATO TEMPORAL: Esto nos dirá qué campos hay
+    alert("Campos encontrados en el padre: " + Object.keys(datosPadre).join(", "));
+    
+    // 🚩 2. BUSQUEDA AGRESIVA (Añadimos 'comienzoCurso' y 'tipoAlta' por si acaso)
+    preferenciaReal = datosPadre.inicioDeseado || datosPadre.inicio || datosPadre.comienzo || datosPadre.comienzoCurso || datosPadre.tipoAlta || 'inmediato';
+    
+    // 🚩 3. SI NADA DE LO ANTERIOR FUNCIONA, miramos si el texto "prox" está en algún valor del objeto
+    if (preferenciaReal === 'inmediato') {
+        const valores = Object.values(datosPadre).join(" ").toLowerCase();
+        if (valores.includes("proximo") || valores.includes("próximo")) {
+            preferenciaReal = "proximo";
+        }
+    }
 }
 
 const preferencia = String(preferenciaReal).toLowerCase();
