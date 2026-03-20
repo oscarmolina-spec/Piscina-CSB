@@ -3491,20 +3491,21 @@ const PantallaInscripcion = ({ alumno, close, onRequirePrueba, user, refresh }) 
     });
     return () => unsub();
   }, []);
-  // 🚩 LÓGICA PARA EL SELECTOR DE FECHAS
+  // 🚩 LÓGICA PARA EL SELECTOR DE FECHAS (CORREGIDA: EL DÍA 20 YA NO SE PUEDE)
   const infoAlta = (() => {
     const hoy = new Date();
-    const dia = hoy.getDate();
+    const dia = hoy.getDate(); // Hoy es 20
     const mesActual = hoy.toLocaleString('es-ES', { month: 'long' });
     const sigMes = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 1).toLocaleString('es-ES', { month: 'long' });
     
     return { 
-      diaCortePasado: dia > 20, 
+      // 🎯 CAMBIO AQUÍ: Usamos >= para que hoy día 20 ya marque como pasado
+      diaCortePasado: dia >= 20, 
       mesActual, 
       sigMes 
     };
   })();
-
+  
 
 
   const obtenerEstadoPlaza = (actividadId, textoDiasSeleccionado, cursoAlumno) => {
