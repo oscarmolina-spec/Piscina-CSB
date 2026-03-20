@@ -1224,7 +1224,7 @@ const preferencia = String(alumno.inicioDeseado || 'proximo').toLowerCase();
 let fechaParaDB = "";
 
 // 2. REGLA DE ORO
-if (diaActual > 20) {
+if (diaActual >= 20) {
     // Si ha pasado el día 20, siempre vamos al día 1 del mes que viene
     let mSig = mesActual + 1; let aSig = añoActual;
     if (mSig > 12) { mSig = 1; aSig++; }
@@ -1246,7 +1246,7 @@ if (diaActual > 20) {
 console.log("Preferencia leída:", preferencia, "Resultado:", fechaParaDB);
 
 // 2. REGLA DEL DÍA 20
-if (diaActual > 20) {
+if (diaActual >= 20) {
     let mSig = mesActual + 1; let aSig = añoActual;
     if (mSig > 12) { mSig = 1; aSig++; }
     fechaParaDB = `${aSig}-${String(mSig).padStart(2, '0')}-01`; 
@@ -4041,12 +4041,15 @@ const PantallaPruebaNivel = ({ alumno, close, onSuccess, user }) => {
         citaFecha: fecha,
         citaHora: hora,
         fechaSolicitud: new Date().toISOString(),
-      
-        // 🚩 USAMOS OPERADORES "|| ''" PARA QUE NUNCA SEA UNDEFINED
+
         actividad: alumno.actividad || '', 
         actividadId: alumno.actividadId || '',
         dias: alumno.dias || '',
         horario: alumno.horario || '',
+        
+        // 🎯 ESTA ES LA LÍNEA QUE FALTA PARA ARREGLARLO TODO:
+        inicioDeseado: alumno.inicioDeseado || 'proximo', 
+        
         grupo: (alumno.dias && alumno.horario) ? `${alumno.dias} ${alumno.horario}` : ''
       });
 
