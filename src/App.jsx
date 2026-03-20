@@ -1211,37 +1211,39 @@ const confirmarInscripcion = async (alumnoId) => {
     try {
       const alumnoRef = doc(db, 'students', alumno.id);
       
-// --- 🚩 BLOQUE DE FECHA DETECTIVE ---
+// --- 🚩 BLOQUE DE FECHA REPARADO (DIRECTO AL ALUMNO) ---
 const hoy = new Date();
 const diaActual = hoy.getDate();
 const mesActual = hoy.getMonth() + 1;
 const añoActual = hoy.getFullYear();
 
-let preferenciaReal = 'inmediato';
+// 🎯 CAMBIO CLAVE: Leemos la preferencia directamente del objeto 'alumno'
+// Si no existe en el alumno, ponemos 'proximo' por defecto (porque ya es día 19/20)
+const preferencia = String(alumno.inicioDeseado || 'proximo').toLowerCase(); 
 
-const idDelPadre = alumno.parentId || alumno.user;
-const padreSnap = await getDoc(doc(db, 'users', idDelPadre)); 
+let fechaParaDB = "";
 
-if (padreSnap.exists()) {
-    const datosPadre = padreSnap.data();
-    
-    // 🚩 1. CHIVATO TEMPORAL: Esto nos dirá qué campos hay
-    alert("Campos encontrados en el padre: " + Object.keys(datosPadre).join(", "));
-    
-    // 🚩 2. BUSQUEDA AGRESIVA (Añadimos 'comienzoCurso' y 'tipoAlta' por si acaso)
-    preferenciaReal = datosPadre.inicioDeseado || datosPadre.inicio || datosPadre.comienzo || datosPadre.comienzoCurso || datosPadre.tipoAlta || 'inmediato';
-    
-    // 🚩 3. SI NADA DE LO ANTERIOR FUNCIONA, miramos si el texto "prox" está en algún valor del objeto
-    if (preferenciaReal === 'inmediato') {
-        const valores = Object.values(datosPadre).join(" ").toLowerCase();
-        if (valores.includes("proximo") || valores.includes("próximo")) {
-            preferenciaReal = "proximo";
-        }
+// 2. REGLA DE ORO
+if (diaActual > 20) {
+    // Si ha pasado el día 20, siempre vamos al día 1 del mes que viene
+    let mSig = mesActual + 1; let aSig = añoActual;
+    if (mSig > 12) { mSig = 1; aSig++; }
+    fechaParaDB = `${aSig}-${String(mSig).padStart(2, '0')}-01`; 
+} else {
+    // Si estamos a día 19 o 20 (como hoy):
+    if (preferencia.includes('prox')) {
+        // El usuario eligió el mes que viene
+        let mSig = mesActual + 1; let aSig = añoActual;
+        if (mSig > 12) { mSig = 1; aSig++; }
+        fechaParaDB = `${aSig}-${String(mSig).padStart(2, '0')}-01`;
+    } else {
+        // El usuario eligió inmediato
+        fechaParaDB = `${añoActual}-${String(mesActual).padStart(2, '0')}-${String(diaActual).padStart(2, '0')}`;
     }
 }
 
-const preferencia = String(preferenciaReal).toLowerCase();
-let fechaParaDB = "";
+// Consola para tu control (puedes borrar los alerts antiguos)
+console.log("Preferencia leída:", preferencia, "Resultado:", fechaParaDB);
 
 // 2. REGLA DEL DÍA 20
 if (diaActual > 20) {
