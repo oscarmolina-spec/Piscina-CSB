@@ -3495,8 +3495,7 @@ const PantallaInscripcion = ({ alumno, close, onRequirePrueba, user, refresh }) 
   const infoAlta = (() => {
     const hoy = new Date();
     const dia = hoy.getDate();
-    const mesActualNum = hoy.getMonth() + 1; // Marzo es 3
-    
+    const mesActualNum = 10; // 🚩 TRUCO TEMPORAL: Le decimos al código que es Octubre    
     // 🎯 REGLA DE ORO: Si el mes es menor a 10 (estamos en Marzo, Mayo, Sept...),
     // bloqueamos el alta inmediata y solo dejamos "Octubre".
     const esPeriodoReserva = mesActualNum < 10;
