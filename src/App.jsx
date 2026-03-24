@@ -3491,21 +3491,32 @@ const PantallaInscripcion = ({ alumno, close, onRequirePrueba, user, refresh }) 
     });
     return () => unsub();
   }, []);
-  // 🚩 LÓGICA PARA EL SELECTOR DE FECHAS (CORREGIDA: EL DÍA 20 YA NO SE PUEDE)
+  // 🚩 LÓGICA DE TEMPORADA (MARZO-SEPTIEMBRE = SOLO OCTUBRE)
   const infoAlta = (() => {
     const hoy = new Date();
-    const dia = hoy.getDate(); // Hoy es 20
-    const mesActual = hoy.toLocaleString('es-ES', { month: 'long' });
-    const sigMes = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 1).toLocaleString('es-ES', { month: 'long' });
+    const dia = hoy.getDate();
+    const mesActualNum = hoy.getMonth() + 1; // Marzo es 3
     
+    // 🎯 REGLA DE ORO: Si el mes es menor a 10 (estamos en Marzo, Mayo, Sept...),
+    // bloqueamos el alta inmediata y solo dejamos "Octubre".
+    const esPeriodoReserva = mesActualNum < 10;
+
+    if (esPeriodoReserva) {
+      return { 
+        diaCortePasado: true, // Esto oculta el botón de "Empezar Hoy"
+        mesActual: hoy.toLocaleString('es-ES', { month: 'long' }),
+        sigMes: "octubre" // Forzamos que el texto del botón sea Octubre
+      };
+    }
+
+    // SI YA ES OCTUBRE, NOVIEMBRE O DICIEMBRE: Lógica normal
     return { 
-      // 🎯 CAMBIO AQUÍ: Usamos >= para que hoy día 20 ya marque como pasado
       diaCortePasado: dia >= 20, 
-      mesActual, 
-      sigMes 
+      mesActual: hoy.toLocaleString('es-ES', { month: 'long' }), 
+      sigMes: new Date(hoy.getFullYear(), hoy.getMonth() + 1, 1).toLocaleString('es-ES', { month: 'long' })
     };
   })();
-  
+
 
 
   const obtenerEstadoPlaza = (actividadId, textoDiasSeleccionado, cursoAlumno) => {
@@ -3591,20 +3602,31 @@ const inscribir = async (act, op) => {
     }
 
     // 🚩 2. DATOS COMUNES (BLINDAJE TOTAL CONTRA ERRORES DE FECHA)
+    // 🚩 CÁLCULO DE FECHA BLINDADO POR TEMPORADA
     const hoyParaCalculo = new Date();
     const diaActual = hoyParaCalculo.getDate();
+    const mesActualNum = hoyParaCalculo.getMonth() + 1; // Marzo es 3, Octubre es 10
     const inicioDeseado = datosAlumno.inicioDeseado || 'proximo';
 
     let fechaFinalISO;
 
-    if (inicioDeseado === 'inmediato' && diaActual <= 20) {
-        // CASO 1: Hoy mismo
-        fechaFinalISO = hoyParaCalculo.toISOString();
-    } else {
-        // CASO 2: Día 1 del mes que viene (FORZADO MANUAL)
-        // Usamos el constructor (Año, Mes + 1, Día 1, Hora 12) para evitar saltos de zona horaria
-        const proximoMes = new Date(hoyParaCalculo.getFullYear(), hoyParaCalculo.getMonth() + 1, 1, 12, 0, 0);
-        fechaFinalISO = proximoMes.toISOString();
+    // 🎯 REGLA DE TEMPORADA: Si estamos entre Enero (1) y Septiembre (9)
+    if (mesActualNum < 10) {
+        // FORZAMOS 1 DE OCTUBRE DE 2026
+        // (El mes 9 en el constructor de Date es Octubre)
+        const inicioTemporada = new Date(2026, 9, 1, 12, 0, 0); 
+        fechaFinalISO = inicioTemporada.toISOString();
+    } 
+    // SI YA ESTAMOS EN TEMPORADA (Octubre, Noviembre, Diciembre)
+    else {
+        if (inicioDeseado === 'inmediato' && diaActual < 20) {
+            // CASO 1: Hoy mismo (Solo si es antes del día 20)
+            fechaFinalISO = hoyParaCalculo.toISOString();
+        } else {
+            // CASO 2: Día 1 del mes que viene
+            const proximoMes = new Date(hoyParaCalculo.getFullYear(), hoyParaCalculo.getMonth() + 1, 1, 12, 0, 0);
+            fechaFinalISO = proximoMes.toISOString();
+        }
     }
 
     const datosComunes = {
@@ -3615,17 +3637,12 @@ const inscribir = async (act, op) => {
       dias: op.dias,
       horario: op.horario,
       precio: op.precio,
-      fechaAlta: fechaFinalISO, // 🎯 Ahora sí será siempre día 01 o hoy
+      fechaAlta: fechaFinalISO, // 🎯 Guardará Octubre o la fecha calculada
       revisadoAdmin: false,
       inicioDeseado: inicioDeseado, 
       autorizaFotos: autorizaFotos,
       aceptaNormas: normasRef.current
     };
-
-    const cursoNombre = (d.curso || '').toUpperCase();
-    const esInfantil = cursoNombre.includes('INF');
-    const tienePaseVIP = d.natacionPasado === 'si' || d.esAntiguoAlumno === true || d.esAntiguoAlumno === 'true' || d.antiguo === 'si';
-
     // CASO A: REVISADO Y ASEGURADO (PRUEBA DE NIVEL)
     if (act.requierePrueba && !esInfantil && !tienePaseVIP && !d.citaNivel && d.estado !== 'prueba_reservada') {
       if(!confirm(`⚠️ Esta actividad requiere PRUEBA DE NIVEL.\n\n¿Continuar para elegir hora?`)) return;
