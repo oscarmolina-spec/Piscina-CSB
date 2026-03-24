@@ -3575,7 +3575,8 @@ const PantallaInscripcion = ({ alumno, close, onRequirePrueba, user, refresh }) 
     };
   };
   // 2. FUNCIÓN DE INSCRIPCIÓN
-const inscribir = async (act, op) => {
+  const inscribir = async (act, op) => {
+    // 1. Verificación de Normas
     if (normasRef.current !== true) {
         return alert("⚠️ Es obligatorio aceptar las normas.");
     }
@@ -3585,45 +3586,29 @@ const inscribir = async (act, op) => {
     const snap = await getDoc(alumnoRef);
     const d = snap.exists() ? snap.data() : alumno;
 
-    // 🕵️‍♂️ MODO DETECTIVE
-    console.log("DEBUG INSCRIPCIÓN:", {
-        nombre: d.nombre,
-        curso: d.curso,
-        natacionPasado: d.natacionPasado,
-        esAntiguo: d.esAntiguoAlumno
-    });
+    // 🕵️‍♂️ DEFINICIÓN DE VARIABLES CRÍTICAS (Aquí estaba el fallo, ahora están todas)
+    const cursoNombre = (d.curso || '').toUpperCase();
+    const esInfantil = cursoNombre.includes('INF');
+    const tienePaseVIP = d.natacionPasado === 'si' || d.esAntiguoAlumno === true || d.antiguo === 'si';
+    const esAdulto = act.id === 'adultos' || cursoNombre.includes('ADULTO');
 
-    const esAdulto = act.id === 'adultos' || (d.curso || '').toUpperCase().includes('ADULTO');
-    
-    // 🚩 1. CALCULAMOS EL ESTADO INICIAL (Normal o Prueba)
-    let estadoFinal = 'inscrito';
-    if (!esAdulto && act.requierePrueba) {
-        estadoFinal = 'requiere_prueba';
-    }
-
-    // 🚩 2. DATOS COMUNES (BLINDAJE TOTAL CONTRA ERRORES DE FECHA)
-    // 🚩 CÁLCULO DE FECHA BLINDADO POR TEMPORADA
+    // 🚩 CÁLCULO DE FECHA BLINDADO POR TEMPORADA (REVISADO)
     const hoyParaCalculo = new Date();
     const diaActual = hoyParaCalculo.getDate();
-    const mesActualNum = hoyParaCalculo.getMonth() + 1; // Marzo es 3, Octubre es 10
+    const mesActualNum = hoyParaCalculo.getMonth() + 1; 
     const inicioDeseado = datosAlumno.inicioDeseado || 'proximo';
 
     let fechaFinalISO;
 
-    // 🎯 REGLA DE TEMPORADA: Si estamos entre Enero (1) y Septiembre (9)
+    // REGLA: De Marzo a Septiembre siempre es 1 de Octubre
     if (mesActualNum < 10) {
-        // FORZAMOS 1 DE OCTUBRE DE 2026
-        // (El mes 9 en el constructor de Date es Octubre)
         const inicioTemporada = new Date(2026, 9, 1, 12, 0, 0); 
         fechaFinalISO = inicioTemporada.toISOString();
-    } 
-    // SI YA ESTAMOS EN TEMPORADA (Octubre, Noviembre, Diciembre)
-    else {
+    } else {
+        // Temporada activa (Octubre-Diciembre)
         if (inicioDeseado === 'inmediato' && diaActual < 20) {
-            // CASO 1: Hoy mismo (Solo si es antes del día 20)
             fechaFinalISO = hoyParaCalculo.toISOString();
         } else {
-            // CASO 2: Día 1 del mes que viene
             const proximoMes = new Date(hoyParaCalculo.getFullYear(), hoyParaCalculo.getMonth() + 1, 1, 12, 0, 0);
             fechaFinalISO = proximoMes.toISOString();
         }
@@ -3637,39 +3622,33 @@ const inscribir = async (act, op) => {
       dias: op.dias,
       horario: op.horario,
       precio: op.precio,
-      fechaAlta: fechaFinalISO, // 🎯 Guardará Octubre o la fecha calculada
+      fechaAlta: fechaFinalISO, 
       revisadoAdmin: false,
       inicioDeseado: inicioDeseado, 
       autorizaFotos: autorizaFotos,
       aceptaNormas: normasRef.current
     };
-    // CASO A: REVISADO Y ASEGURADO (PRUEBA DE NIVEL)
-    if (act.requierePrueba && !esInfantil && !tienePaseVIP && !d.citaNivel && d.estado !== 'prueba_reservada') {
+
+    // CASO A: REQUIERE PRUEBA DE NIVEL (REVISADO)
+    // No piden prueba: Infantiles, VIPs, Adultos o si ya tienen cita/reserva
+    if (act.requierePrueba && !esInfantil && !tienePaseVIP && !d.citaNivel && d.estado !== 'prueba_reservada' && !esAdulto) {
       if(!confirm(`⚠️ Esta actividad requiere PRUEBA DE NIVEL.\n\n¿Continuar para elegir hora?`)) return;
       
       close(); 
-      
       setTimeout(() => { 
-        // 🚩 AÑADIMOS 'inicioDeseado' AQUÍ PARA QUE NO SE PIERDA
         onRequirePrueba({
-          actividad: act.nombre,
-          actividadId: act.id,
-          dias: op.dias,
-          horario: op.horario,
-          precio: op.precio,
-          inicioDeseado: inicioDeseado // <--- 🎯 CLAVE: Pasamos la elección al siguiente paso
+          ...datosComunes,
+          inicioDeseado: inicioDeseado
         }); 
       }, 400); 
-      
       return; 
     }
 
-// CASO B: INSCRIPCIÓN DIRECTA (VIP, INFANTIL O EXENTO)
-    // 🚩 3. DETERMINAR ESTADO Y VERIFICAR AFORO (CORREGIDO)
+    // CASO B: INSCRIPCIÓN DIRECTA O LISTA DE ESPERA
     const infoPlaza = obtenerEstadoPlaza(act.id, op.dias, d.curso);
     
     let estadoFinalReal;
-    if (tienePaseVIP || esInfantil || d.esAntiguoAlumno) {
+    if (tienePaseVIP || esInfantil || esAdulto) {
         estadoFinalReal = 'inscrito';
     } else if (act.requierePrueba) {
         estadoFinalReal = 'prueba_reservada'; 
@@ -3679,13 +3658,12 @@ const inscribir = async (act, op) => {
 
     let mensajeConfirmacion = `¿Confirmar inscripción en ${act.nombre}?`;
     if (infoPlaza.lleno) {
-        mensajeConfirmacion = `⚠️ Este grupo está completo actualmente.\n\n¿Quieres apuntarte a la LISTA DE ESPERA para ${op.dias}? Te avisaremos si queda una vacante.`;
+        mensajeConfirmacion = `⚠️ Este grupo está completo actualmente.\n\n¿Quieres apuntarte a la LISTA DE ESPERA para ${op.dias}?`;
         estadoFinalReal = 'lista_espera';
     }
 
     if (!confirm(mensajeConfirmacion)) return;
     
-    // 4. GUARDADO FINAL
     const grupoFormateado = `${op.dias} ${op.horario}`;
     let idLimpio = act.id;
     if (act.nombre.toLowerCase().includes('16:15')) idLimpio = 'primaria_1615';
@@ -3695,42 +3673,28 @@ const inscribir = async (act, op) => {
           ...datosComunes,
           estado: estadoFinalReal,
           grupo: grupoFormateado, 
-          horario: op.horario,
-          actividad: act.nombre,
-          actividadId: idLimpio,
-          dias: op.dias,
           revisadoAdmin: (estadoFinalReal === 'inscrito'),
           validadoAdmin: (estadoFinalReal === 'inscrito'),
           fechaInscripcion: new Date().toISOString()
         });
 
-        // 5. EMAIL DE CONFIRMACIÓN (ACTUALIZADO)
-if (user && user.email) {
-  // 🚩 CAMBIO: Construimos el detalle con Actividad, Días y Horario
-  // Usamos una estructura clara para evitar que la hora se mezcle o se duplique
-  let detalleParaEmail = estadoFinalReal === 'lista_espera' 
-      ? `LISTA DE ESPERA para ${act.nombre} (${op.dias})` 
-      : `${act.nombre} — ${op.dias} a las ${op.horario}`; 
-      
-  // Añadimos 'alta' como cuarto parámetro para que el email sea VERDE
-  await enviarEmailConfirmacion(user.email, d.nombre, detalleParaEmail, 'alta');
-}
-        // 6. FINALIZACIÓN Y LIMPIEZA
+        // Envío de Email
+        if (user && user.email) {
+            let detalleParaEmail = estadoFinalReal === 'lista_espera' 
+                ? `LISTA DE ESPERA para ${act.nombre} (${op.dias})` 
+                : `${act.nombre} — ${op.dias} a las ${op.horario}`; 
+            await enviarEmailConfirmacion(user.email, d.nombre, detalleParaEmail, 'alta');
+        }
+
         await refresh(user.uid); 
         close();
-
-        setTimeout(() => {
-          let msg = "✅ ¡Inscripción realizada con éxito!";
-          if (estadoFinalReal === 'lista_espera') msg = "✅ Te has apuntado a la lista de espera.";
-          if (estadoFinalReal === 'prueba_reservada') msg = "✅ Solicitud enviada. Recuerda acudir a la prueba de nivel el día seleccionado.";
-          alert(msg);
-        }, 100);
+        alert("✅ Proceso completado correctamente.");
 
     } catch (error) {
-        console.error("Error en el guardado final:", error);
+        console.error("Error final:", error);
         alert("Hubo un error al guardar los datos.");
     }
-}; // <--- ESTE CIERRA LA FUNCIÓN "inscribir"
+};
 
 return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
