@@ -4046,9 +4046,18 @@ const PantallaPruebaNivel = ({ alumno, close, onSuccess, user }) => {
 
   // 2. GENERAR TURNOS DE 5 MINUTOS
   const franjas = [];
-  for (let h = 16; h < 20; h++) {
-    for (let m = 0; m < 60; m += 5) {
-      franjas.push(`${h}:${m.toString().padStart(2, '0')}`);
+  if (fecha) {
+    const d = new Date(fecha);
+    const mesActual = d.getUTCMonth() + 1;
+    
+    // Configuración de horas: Junio y Septiembre (17-18h), Resto (16-18h)
+    const horaInicio = (mesActual === 6 || mesActual === 9) ? 17 : 16;
+    const horaFin = 18;
+
+    for (let h = horaInicio; h < horaFin; h++) {
+      for (let m = 0; m < 60; m += 5) {
+        franjas.push(`${h}:${m.toString().padStart(2, '0')}`);
+      }
     }
   }
 
