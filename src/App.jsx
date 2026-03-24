@@ -3963,26 +3963,27 @@ const PantallaPruebaNivel = ({ alumno, close, onSuccess, user }) => {
     );
   }
 
-  // 1. FUNCIÓN PARA VALIDAR FECHA SEGÚN TEMPORADA
+  // 1. FUNCIÓN PARA VALIDAR FECHA SEGÚN TEMPORADA (CORREGIDA)
   const validarSiEsLunes = (e) => {
-    const seleccionada = new Date(e.target.value);
+    const valorSeleccionado = e.target.value;
+    if (!valorSeleccionado) return;
+
+    const seleccionada = new Date(valorSeleccionado);
     const diaSemana = seleccionada.getUTCDay(); // 1=Lunes, 3=Miércoles
-    const mes = seleccionada.getUTCMonth() + 1; // 1=Enero, 6=Junio...
+    const mes = seleccionada.getUTCMonth() + 1;
     const diaDelMes = seleccionada.getUTCDate();
     
     let esValido = false;
     let mensajeError = "";
 
-    // REGLA 1: JUNIO (Lunes o Miércoles)
+    // Mantenemos tus reglas exactamente igual
     if (mes === 6) {
         if (diaSemana === 1 || diaSemana === 3) esValido = true;
         else mensajeError = "En JUNIO las pruebas son LUNES o MIÉRCOLES.";
     }
-    // REGLA 2: JULIO Y AGOSTO (Cerrado)
     else if (mes === 7 || mes === 8) {
         mensajeError = "En JULIO y AGOSTO no hay pruebas de nivel.";
     }
-    // REGLA 3: SEPTIEMBRE (Del 14 en adelante, Lunes o Miércoles)
     else if (mes === 9) {
         if (diaDelMes < 14) {
             mensajeError = "En SEPTIEMBRE las pruebas comienzan el día 14.";
@@ -3992,22 +3993,25 @@ const PantallaPruebaNivel = ({ alumno, close, onSuccess, user }) => {
             mensajeError = "En SEPTIEMBRE las pruebas son LUNES o MIÉRCOLES.";
         }
     }
-    // REGLA 4: RESTO DEL CURSO (Octubre a Mayo -> Solo Lunes)
     else {
         if (diaSemana === 1) esValido = true;
         else mensajeError = "Las pruebas se realizan exclusivamente los LUNES.";
     }
 
+    // 🚩 EL TRUCO: Primero ponemos la fecha para que el calendario se mueva a ese mes
+    setFecha(valorSeleccionado);
+
     if (!esValido) {
-      alert("📅 " + mensajeError);
-      setFecha('');
+      // Esperamos 100ms para que al usuario le dé tiempo a ver septiembre antes del alert
+      setTimeout(() => {
+        alert("📅 " + mensajeError);
+        setFecha(''); // Ahora sí lo borramos porque no es válido
+      }, 100);
       return;
     }
 
-    setFecha(e.target.value);
     setHora(null);
   };
-
   // 2. GENERAR TURNOS DE 5 MINUTOS
   const franjas = [];
   if (fecha) {
