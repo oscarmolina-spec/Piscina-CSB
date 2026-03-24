@@ -3999,16 +3999,47 @@ const PantallaPruebaNivel = ({ alumno, close, onSuccess, user }) => {
     );
   }
 
-  // 1. FUNCIÓN PARA VALIDAR SI ES LUNES
+  // 1. FUNCIÓN PARA VALIDAR FECHA SEGÚN TEMPORADA
   const validarSiEsLunes = (e) => {
     const seleccionada = new Date(e.target.value);
-    const diaSemana = seleccionada.getUTCDay(); // 1 es Lunes
+    const diaSemana = seleccionada.getUTCDay(); // 1=Lunes, 3=Miércoles
+    const mes = seleccionada.getUTCMonth() + 1; // 1=Enero, 6=Junio...
+    const diaDelMes = seleccionada.getUTCDate();
+    
+    let esValido = false;
+    let mensajeError = "";
 
-    if (diaSemana !== 1) {
-      alert("📅 Las pruebas de nivel solo se realizan los LUNES. Por favor, selecciona otro día.");
+    // REGLA 1: JUNIO (Lunes o Miércoles)
+    if (mes === 6) {
+        if (diaSemana === 1 || diaSemana === 3) esValido = true;
+        else mensajeError = "En JUNIO las pruebas son LUNES o MIÉRCOLES.";
+    }
+    // REGLA 2: JULIO Y AGOSTO (Cerrado)
+    else if (mes === 7 || mes === 8) {
+        mensajeError = "En JULIO y AGOSTO no hay pruebas de nivel.";
+    }
+    // REGLA 3: SEPTIEMBRE (Del 14 en adelante, Lunes o Miércoles)
+    else if (mes === 9) {
+        if (diaDelMes < 14) {
+            mensajeError = "En SEPTIEMBRE las pruebas comienzan el día 14.";
+        } else if (diaSemana === 1 || diaSemana === 3) {
+            esValido = true;
+        } else {
+            mensajeError = "En SEPTIEMBRE las pruebas son LUNES o MIÉRCOLES.";
+        }
+    }
+    // REGLA 4: RESTO DEL CURSO (Octubre a Mayo -> Solo Lunes)
+    else {
+        if (diaSemana === 1) esValido = true;
+        else mensajeError = "Las pruebas se realizan exclusivamente los LUNES.";
+    }
+
+    if (!esValido) {
+      alert("📅 " + mensajeError);
       setFecha('');
       return;
     }
+
     setFecha(e.target.value);
     setHora(null);
   };
