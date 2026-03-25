@@ -3963,55 +3963,11 @@ const PantallaPruebaNivel = ({ alumno, close, onSuccess, user }) => {
     );
   }
 
-  // 1. FUNCIÓN PARA VALIDAR FECHA SEGÚN TEMPORADA (CORREGIDA)
-  const validarSiEsLunes = (e) => {
-    const valorSeleccionado = e.target.value;
-    if (!valorSeleccionado) return;
-
-    const seleccionada = new Date(valorSeleccionado);
-    const diaSemana = seleccionada.getUTCDay(); // 1=Lunes, 3=Miércoles
-    const mes = seleccionada.getUTCMonth() + 1;
-    const diaDelMes = seleccionada.getUTCDate();
-    
-    let esValido = false;
-    let mensajeError = "";
-
-    // Mantenemos tus reglas exactamente igual
-    if (mes === 6) {
-        if (diaSemana === 1 || diaSemana === 3) esValido = true;
-        else mensajeError = "En JUNIO las pruebas son LUNES o MIÉRCOLES.";
-    }
-    else if (mes === 7 || mes === 8) {
-        mensajeError = "En JULIO y AGOSTO no hay pruebas de nivel.";
-    }
-    else if (mes === 9) {
-        if (diaDelMes < 14) {
-            mensajeError = "En SEPTIEMBRE las pruebas comienzan el día 14.";
-        } else if (diaSemana === 1 || diaSemana === 3) {
-            esValido = true;
-        } else {
-            mensajeError = "En SEPTIEMBRE las pruebas son LUNES o MIÉRCOLES.";
-        }
-    }
-    else {
-        if (diaSemana === 1) esValido = true;
-        else mensajeError = "Las pruebas se realizan exclusivamente los LUNES.";
-    }
-
-    // 🚩 EL TRUCO: Primero ponemos la fecha para que el calendario se mueva a ese mes
-    setFecha(valorSeleccionado);
-
-    if (!esValido) {
-      // Esperamos 100ms para que al usuario le dé tiempo a ver septiembre antes del alert
-      setTimeout(() => {
-        alert("📅 " + mensajeError);
-        setFecha(''); // Ahora sí lo borramos porque no es válido
-      }, 100);
-      return;
-    }
-
-    setHora(null);
-  };
+// 1. FUNCIÓN PARA SELECCIONAR DÍA (Súper sencilla para el Calendario Visual)
+const seleccionarDiaPrueba = (fechaISO) => {
+  setFecha(fechaISO);
+  setHora(null); // Siempre reseteamos la hora al cambiar de día
+};
   // 2. GENERAR TURNOS DE 5 MINUTOS
   const franjas = [];
   if (fecha) {
@@ -4172,20 +4128,81 @@ if (alumno.natacionPasado === 'si' || alumno.esAntiguoAlumno === true) {
           </div>
 
           <div className="space-y-6">
-            <div>
-              <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">1. Selecciona un Lunes</label>
-              <input 
-                type="date" 
-                className="w-full p-4 border-2 border-gray-100 rounded-2xl bg-gray-50 font-bold"
-                min={new Date().toISOString().split('T')[0]}
-                value={fecha}
-                onChange={validarSiEsLunes}
-              />
+            {/* --- 📅 1. CALENDARIO VISUAL --- */}
+            <div className="bg-white border-2 border-blue-50 rounded-3xl overflow-hidden shadow-sm">
+              <div className="bg-slate-800 p-3 text-white text-center font-black uppercase text-[10px] tracking-[0.2em]">
+                Paso 1: Elige el día de la prueba
+              </div>
+              
+              <div className="p-4">
+                <div className="grid grid-cols-7 gap-1 mb-2">
+                  {['Lu', 'Ma', 'Mi', 'Ju', 'Vi', 'Sá', 'Do'].map(d => (
+                    <div key={d} className="text-center text-[9px] font-black text-slate-400 uppercase">{d}</div>
+                  ))}
+                </div>
+
+                <div className="grid grid-cols-7 gap-1">
+                  {(() => {
+                    const celdas = [];
+                    const hoy = new Date();
+                    const startOffset = (hoy.getDay() === 0 ? 7 : hoy.getDay()) - 1;
+                    
+                    for (let i = 0; i < 63; i++) {
+                      const d = new Date();
+                      d.setDate(hoy.getDate() - startOffset + i);
+                      const iso = d.toISOString().split('T')[0];
+                      const diaMes = d.getDate();
+                      const mes = d.getMonth() + 1;
+                      const diaSemana = d.getDay(); 
+                      const esPasado = d < new Date().setHours(0,0,0,0);
+
+                      let permitido = false;
+                      if (!esPasado) {
+                        if (mes === 6 || mes === 9) {
+                          if (mes === 9 && diaMes < 14) permitido = false; 
+                          else if (diaSemana === 1 || diaSemana === 3) permitido = true; 
+                        } else if (mes === 7 || mes === 8) {
+                          permitido = false;
+                        } else {
+                          if (diaSemana === 1) permitido = true; 
+                        }
+                      }
+
+                      celdas.push(
+                        <button
+                          key={iso}
+                          type="button"
+                          disabled={!permitido}
+                          onClick={() => seleccionarDiaPrueba(iso)}
+                          className={`h-10 w-full rounded-xl text-xs font-bold transition-all flex flex-col items-center justify-center
+                            ${!permitido ? 'text-slate-200 cursor-not-allowed' : 
+                              fecha === iso ? 'bg-blue-600 text-white shadow-lg scale-110 z-10' : 'bg-blue-50 text-blue-700 hover:bg-blue-100'}
+                          `}
+                        >
+                          <span>{diaMes}</span>
+                          {permitido && (
+                            <span className={`text-[6px] mt-0.5 ${fecha === iso ? 'text-blue-100' : 'text-blue-400'}`}>
+                              {mes === 6 || mes === 9 ? '17h' : '16h'}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    }
+                    return celdas;
+                  })()}
+                </div>
+              </div>
+              <div className="bg-slate-50 p-2 text-[8px] text-center text-slate-500 font-bold uppercase border-t border-blue-50">
+                💡 Azul: Disponible / Gris: Cerrado
+              </div>
             </div>
 
+            {/* --- 🕒 2. TURNOS DE HORA --- */}
             {fecha && (
-              <div className="animate-in fade-in slide-in-from-bottom-4">
-                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">2. Turnos de 5 min (Aforo máx. 2)</label>
+              <div className="animate-in fade-in slide-in-from-bottom-4 bg-blue-50/50 p-4 rounded-3xl border-2 border-blue-100">
+                <label className="block text-[10px] font-black text-blue-900 uppercase tracking-widest mb-3 text-center">
+                  Paso 2: Elige hora para el {fecha.split('-').reverse().join('/')}
+                </label>
                 <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
                   {franjas.map(f => {
                     const ocupados = ocupacion[f] || 0;
@@ -4193,11 +4210,12 @@ if (alumno.natacionPasado === 'si' || alumno.esAntiguoAlumno === true) {
                     return (
                       <button
                         key={f}
+                        type="button"
                         disabled={estaLleno}
                         onClick={() => setHora(f)}
                         className={`p-2 rounded-xl text-xs font-bold border-2 transition-all ${
                           estaLleno ? 'bg-gray-100 text-gray-300 border-gray-100' : 
-                          hora === f ? 'bg-blue-600 text-white border-blue-600 scale-105' : 
+                          hora === f ? 'bg-emerald-500 text-white border-emerald-500 scale-105 shadow-md' : 
                           'bg-white text-blue-600 border-blue-50 hover:border-blue-500'
                         }`}
                       >
@@ -4211,10 +4229,8 @@ if (alumno.natacionPasado === 'si' || alumno.esAntiguoAlumno === true) {
           </div>
         </div>
 
-{/* PIE DEL MODAL BLINDADO (Sustituye tu bloque anterior por este) */}
+        {/* --- PIE DEL MODAL --- */}
         <div className="p-4 bg-gray-50 border-t flex flex-col items-center gap-3">
-          
-          {/* Añadimos un aviso visual de que es obligatorio */}
           <p className="text-[10px] font-black text-orange-600 uppercase tracking-tighter">
             ⚠️ Debes seleccionar una hora para completar el registro
           </p>
@@ -4226,8 +4242,6 @@ if (alumno.natacionPasado === 'si' || alumno.esAntiguoAlumno === true) {
           >
             {loading ? 'Procesando reserva...' : 'FINALIZAR Y CONFIRMAR CITA'}
           </button>
-
-          {/* 🚩 EL BOTÓN DE CANCELAR HA SIDO ELIMINADO */}
         </div>
       </div>
     </div>
