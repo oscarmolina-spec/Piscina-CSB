@@ -3083,39 +3083,57 @@ if (hijo.estado === 'inscrito') {
         </div>
     ) : 
     
-    /* CASO: PENDIENTE DE VALIDAR (AMARILLO - El tuyo) */
-    !estaAdmitido && hijo.estado === 'inscrito' ? (
-        <div className="text-center pr-6">
-            <p className="font-bold text-yellow-900 text-sm uppercase mb-1">{hijo.actividad}</p>
-            <div className="flex justify-center gap-2 text-yellow-800 text-xs mb-2 opacity-80">
-                <span>📅 {hijo.dias}</span><span>⏰ {hijo.horario}</span>
-            </div>
-            <div className="bg-white/50 rounded p-1 border border-yellow-200">
-                <p className="font-bold text-yellow-800 text-xs">⏳ Solicitud Recibida</p>
-                <p className="text-[10px] text-yellow-700">
-                  {(hijo.actividad || '').toUpperCase().includes('ADULTO') || (hijo.actividad || '').toUpperCase().includes('WATERPOLO')
-                    ? "El club está revisando tu inscripción."
-                    : "El coordinador está validando el nivel."
-                  }
-                </p>
-            </div>
-        </div>
-    ) : (
-        /* CASO: ADMITIDO O BAJA PENDIENTE (VERDE/ROJO - El tuyo) */
-        <div className="pr-6">
-          <p className="font-bold mb-1 text-gray-800 uppercase">{hijo.actividad}</p>
-          <div className="flex items-center gap-2 text-gray-600">
-            <span>📅 {hijo.dias}</span><span>⏰ {hijo.horario}</span>
-          </div>
-          {hijo.estado === 'baja_pendiente' && (
-            <p className="text-red-600 font-bold text-xs mt-2 uppercase">⚠️ Baja efectiva a fin de mes</p>
-          )}
-          {estaAdmitido && hijo.estado === 'inscrito' && (
-            <p className="text-green-600 font-bold text-[10px] mt-2 uppercase">✅ Plaza Confirmada</p>
-          )}
-        </div>
+/* CASO: PENDIENTE DE VALIDAR (AMARILLO - El tuyo) */
+!estaAdmitido && hijo.estado === 'inscrito' ? (
+  <div className="text-center pr-6">
+      <p className="font-bold text-yellow-900 text-sm uppercase mb-1">{hijo.actividad}</p>
+      
+      {/* 🚀 FECHA PREVISTA EN AMARILLO */}
+      {hijo.inicioDeseado && (
+        <p className="text-[10px] font-black text-yellow-700 mb-1 uppercase">
+          🎯 Previsto para: {hijo.inicioDeseado.split('-').reverse().join('/')}
+        </p>
+      )}
+
+      <div className="flex justify-center gap-2 text-yellow-800 text-xs mb-2 opacity-80">
+          <span>📅 {hijo.dias}</span><span>⏰ {hijo.horario}</span>
+      </div>
+      <div className="bg-white/50 rounded p-1 border border-yellow-200">
+          <p className="font-bold text-yellow-800 text-xs">⏳ Solicitud Recibida</p>
+          <p className="text-[10px] text-yellow-700">
+            {(hijo.actividad || '').toUpperCase().includes('ADULTO') || (hijo.actividad || '').toUpperCase().includes('WATERPOLO')
+              ? "El club está revisando tu inscripción."
+              : "El coordinador está validando el nivel."
+            }
+          </p>
+      </div>
+  </div>
+) : (
+  /* CASO: ADMITIDO O BAJA PENDIENTE (VERDE/ROJO - El tuyo) */
+  <div className="pr-6">
+    <p className="font-bold mb-1 text-gray-800 uppercase">{hijo.actividad}</p>
+    
+    {/* 🚀 FECHA DE INICIO CONFIRMADA EN AZUL */}
+    {hijo.fechaAlta && (
+      <div className="mb-2">
+        <span className="bg-blue-600 text-white text-[10px] font-black px-2 py-1 rounded shadow-sm inline-flex items-center gap-1 uppercase">
+          🚀 Inicio: {hijo.fechaAlta.split('T')[0].split('-').reverse().join('/')}
+        </span>
+      </div>
+    )}
+
+    <div className="flex items-center gap-2 text-gray-600">
+      <span>📅 {hijo.dias}</span><span>⏰ {hijo.horario}</span>
+    </div>
+    {hijo.estado === 'baja_pendiente' && (
+      <p className="text-red-600 font-bold text-xs mt-2 uppercase">⚠️ Baja efectiva a fin de mes</p>
+    )}
+    {estaAdmitido && hijo.estado === 'inscrito' && (
+      <p className="text-green-600 font-bold text-[10px] mt-2 uppercase">✅ Plaza Confirmada</p>
     )}
   </div>
+)}
+</div>
 )}
               
 {/* DATOS DE PRUEBA */}
