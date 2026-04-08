@@ -4003,9 +4003,11 @@ const confirmarReserva = async () => {
 
     close(); 
 
+    // ... justo después del close() ...
+
     setTimeout(() => {
-      // Mensaje de éxito reforzado
-      alert(`✅ ¡RESERVA COMPLETADA!\n\nPrueba de nivel: ${citaTexto}\nAlta oficial: 1 de Octubre`);
+      // 🚩 CAMBIAMOS EL MENSAJE PARA NO DAR FALSAS ESPERANZAS
+      alert(`✅ ¡CITA RESERVADA!\n\nPrueba de nivel: ${citaTexto}\n\nRECUERDA: Tu plaza para el 1 de octubre quedará confirmada en cuanto el coordinador valide la prueba de nivel.`);
     }, 300);
 
   } catch (e) {
