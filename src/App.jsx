@@ -3974,15 +3974,18 @@ const confirmarReserva = async () => {
       citaFecha: fecha,
       citaHora: hora,
 
-      // 🚩 LIMPIEZA TOTAL: Borramos fechaSolicitud y fechaAlta de aquí.
-      // Así el cartel azul de "Plaza Confirmada" no aparecerá todavía.
+      // 🚩 LIMPIEZA DE SEGURIDAD:
+      // Borramos estos campos para que el Panel Familiar NO muestre "Inscrito" todavía.
+      fechaAlta: null,
+      fechaSolicitud: null,
+      fecha_alta: null,
       
       actividad: alumno.actividad || '', 
       actividadId: alumno.actividadId || '',
       dias: alumno.dias || '',
       horario: alumno.horario || '',
       
-      // 🎯 GUARDAMOS SOLO LA PREFERENCIA (Sin confirmar nada aún)
+      // 🎯 Solo dejamos anotada la preferencia para cuando el Admin acepte
       inicioDeseado: "2026-10-01", 
       mesInicio: 'octubre',
       
