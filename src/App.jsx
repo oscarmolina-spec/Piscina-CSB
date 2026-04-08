@@ -4135,21 +4135,22 @@ return (
           <h3 className="font-black text-xl flex items-center gap-2">🏊 Reserva Prueba de Nivel</h3>
           <p className="text-blue-100 text-xs font-medium uppercase">{alumno.nombre}</p>
         </div>
-        <button onClick={close} className="text-white/80 hover:text-white transition-colors p-2">✕</button>
+        <button onClick={close} className="text-white/80 hover:text-white transition-colors p-2 text-xl">✕</button>
       </div>
       
       <div className="p-6 overflow-y-auto flex-1 bg-white">
-        <div className="mb-6 bg-orange-50 border border-orange-200 p-4 rounded-2xl flex items-start gap-3">
-           <span className="text-xl">ℹ️</span>
-           <p className="text-orange-900 text-sm font-medium">Recuerda traer el equipo de natación (bañador, gorro, gafas y chanclas).</p>
-        </div>
-
         <div className="space-y-6">
-          {/* --- 📅 1. CALENDARIO VISUAL INTELIGENTE --- */}
+          
+          {/* --- 📅 1. CALENDARIO CON SELECTOR DE MES --- */}
           <div className="bg-white border-2 border-blue-50 rounded-3xl overflow-hidden shadow-sm">
-            <div className="bg-slate-800 p-3 text-white flex justify-between items-center px-5">
-              <span className="text-[10px] font-black uppercase tracking-widest">Paso 1: Elige el día</span>
-              <span className="text-[10px] font-bold uppercase bg-blue-600 px-3 py-1 rounded-full">Temporada 2026</span>
+            
+            {/* SELECTOR DE MES (Pestañas/Flechas) */}
+            <div className="bg-slate-800 p-4 text-white flex justify-between items-center px-6">
+              <button type="button" onClick={() => moverMes(-1)} className="bg-white/10 hover:bg-white/20 w-8 h-8 rounded-full flex items-center justify-center transition-all">◀</button>
+              <h4 className="font-black uppercase tracking-[0.2em] text-xs">
+                {mesVisual.toLocaleString('es-ES', { month: 'long', year: 'numeric' })}
+              </h4>
+              <button type="button" onClick={() => moverMes(1)} className="bg-white/10 hover:bg-white/20 w-8 h-8 rounded-full flex items-center justify-center transition-all">▶</button>
             </div>
             
             <div className="p-4">
@@ -4160,33 +4161,41 @@ return (
                 ))}
               </div>
 
-              {/* Rejilla de días con lógica de meses */}
+              {/* Días del mes seleccionado */}
               <div className="grid grid-cols-7 gap-1">
                 {(() => {
                   const celdas = [];
-                  const hoy = new Date();
-                  const startOffset = (hoy.getDay() === 0 ? 7 : hoy.getDay()) - 1;
+                  const año = mesVisual.getFullYear();
+                  const mesIdx = mesVisual.getMonth();
                   
-                  for (let i = 0; i < 63; i++) {
-                    const dLoop = new Date();
-                    dLoop.setDate(hoy.getDate() - startOffset + i);
-                    
-                    const iso = dLoop.toISOString().split('T')[0];
-                    const diaMes = dLoop.getDate();
-                    const mesNum = dLoop.getMonth() + 1;
-                    const diaSemana = dLoop.getDay(); // 1=L, 3=X
-                    const esPasado = dLoop < new Date().setHours(0,0,0,0);
+                  const primerDia = new Date(año, mesIdx, 1);
+                  const offset = (primerDia.getDay() === 0 ? 7 : primerDia.getDay()) - 1;
+                  const diasEnMes = new Date(año, mesIdx + 1, 0).getDate();
 
-                    // REGLAS DE ORO CSB
+                  // Huecos para empezar en el día de la semana correcto
+                  for (let i = 0; i < offset; i++) {
+                    celdas.push(<div key={`vacio-${i}`} className="h-10"></div>);
+                  }
+
+                  // Días reales del mes
+                  for (let d = 1; d <= diasEnMes; d++) {
+                    const fActual = new Date(año, mesIdx, d);
+                    const iso = `${año}-${String(mesIdx + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+                    const sem = fActual.getDay(); // 1=L, 3=X
+                    const esPasado = fActual < new Date().setHours(0,0,0,0);
+                    
                     let permitido = false;
+                    const mNum = mesIdx + 1;
+
+                    // APLICAMOS TUS REGLAS DE ORO
                     if (!esPasado) {
-                      if (mesNum === 6 || mesNum === 9) {
-                        if (mesNum === 9 && diaMes < 14) permitido = false; 
-                        else if (diaSemana === 1 || diaSemana === 3) permitido = true; 
-                      } else if (mesNum === 7 || mesNum === 8) {
+                      if (mNum === 6 || mNum === 9) { // Junio o Septiembre
+                        if (mNum === 9 && d < 14) permitido = false;
+                        else if (sem === 1 || sem === 3) permitido = true;
+                      } else if (mNum === 7 || mNum === 8) {
                         permitido = false;
                       } else {
-                        if (diaSemana === 1) permitido = true; 
+                        if (sem === 1) permitido = true;
                       }
                     }
 
@@ -4196,21 +4205,15 @@ return (
                         type="button"
                         disabled={!permitido}
                         onClick={() => seleccionarDiaPrueba(iso)}
-                        className={`h-12 w-full rounded-xl text-xs font-bold transition-all flex flex-col items-center justify-center relative
-                          ${!permitido ? 'text-slate-200 cursor-not-allowed' : 
+                        className={`h-11 rounded-xl text-xs font-bold transition-all flex flex-col items-center justify-center
+                          ${!permitido ? 'text-slate-200 cursor-not-allowed opacity-30' : 
                             fecha === iso ? 'bg-blue-600 text-white shadow-lg scale-105 z-10' : 'bg-blue-50 text-blue-700 hover:bg-blue-100'}
                         `}
                       >
-                        {/* Pequeño indicador de mes si es día 1 */}
-                        {diaMes === 1 && (
-                          <span className="absolute -top-1 bg-slate-700 text-white text-[5px] px-1 rounded uppercase">
-                            {dLoop.toLocaleString('es-ES', { month: 'short' })}
-                          </span>
-                        )}
-                        <span>{diaMes}</span>
+                        {d}
                         {permitido && (
-                          <span className={`text-[6px] font-black uppercase ${fecha === iso ? 'text-blue-100' : 'text-blue-400'}`}>
-                            {mesNum === 6 || mesNum === 9 ? '17:00' : '16:00'}
+                          <span className={`text-[5px] font-black ${fecha === iso ? 'text-blue-100' : 'text-blue-400'}`}>
+                            {mNum === 6 || mNum === 9 ? '17:00' : '16:00'}
                           </span>
                         )}
                       </button>
@@ -4220,18 +4223,18 @@ return (
                 })()}
               </div>
             </div>
-            <div className="bg-slate-50 p-2 text-[8px] text-center text-slate-500 font-bold uppercase border-t border-blue-50">
-              💡 Lunes {new Date().getMonth()+1 <= 9 && "y Miércoles"} en azul disponibles
+            <div className="bg-slate-50 p-2 text-[8px] text-center text-slate-500 font-bold uppercase border-t border-blue-50 italic">
+              💡 Pulsa las flechas para cambiar de mes
             </div>
           </div>
 
           {/* --- 🕒 2. TURNOS DE HORA --- */}
           {fecha && (
             <div className="animate-in fade-in slide-in-from-bottom-4 bg-blue-50/50 p-5 rounded-3xl border-2 border-blue-100">
-              <div className="flex flex-col items-center mb-4">
-                  <span className="bg-blue-600 text-white text-[9px] font-black px-2 py-0.5 rounded-full mb-1">PASO 2</span>
+              <div className="flex flex-col items-center mb-4 text-center">
+                  <span className="bg-blue-600 text-white text-[9px] font-black px-2 py-0.5 rounded-full mb-1">DÍA ELEGIDO: {fecha.split('-').reverse().join('/')}</span>
                   <label className="text-[11px] font-black text-blue-900 uppercase tracking-widest">
-                    Horas para el {fecha.split('-').reverse().join('/')}
+                    Selecciona tu hora preferida:
                   </label>
               </div>
               <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
@@ -4267,11 +4270,8 @@ return (
           disabled={loading || !hora}
           className="w-full py-4 bg-blue-600 text-white rounded-2xl font-black shadow-xl disabled:bg-gray-200 disabled:text-gray-400 transition-all transform active:scale-95 flex items-center justify-center gap-2"
         >
-          {loading ? 'Procesando...' : (hora ? '✅ CONFIRMAR CITA' : 'ESPERANDO HORA...')}
+          {loading ? 'Procesando...' : (hora ? '✅ FINALIZAR RESERVA' : 'ELIGE DÍA Y HORA')}
         </button>
-        <p className="text-[9px] font-bold text-gray-400 uppercase tracking-tighter italic">
-          * Al confirmar, recibirás un email con los detalles
-        </p>
       </div>
     </div>
   </div>
