@@ -3984,28 +3984,44 @@ const PantallaPruebaNivel = ({ alumno, close, onSuccess, user, refresh }) => {
     consultarAforo();
   }, [fecha]);
 
-  // 4. FUNCIÓN GUARDAR RESERVA
+  // 4. FUNCIÓN GUARDAR RESERVA (CON CONTROL DE ALTA EN OCTUBRE)
   const confirmarReserva = async () => {
     if (!fecha || !hora) return alert("⚠️ Selecciona un lunes y una hora.");
     
-    const citaTexto = `${fecha} a las ${hora}`;
+    const citaTexto = `${fecha.split('-').reverse().join('/')} a las ${hora}`;
     if (citaTexto.includes('undefined') || !citaTexto) return alert("⚠️ Error al generar la cita.");
 
     setLoading(true);
     try {
       const alumnoRef = doc(db, 'students', alumno.id);
 
+      // 🕒 Calculamos cuándo debe ser el alta
+      const hoy = new Date();
+      const octubre2026 = new Date('2026-10-01');
+      let fechaAltaFinal;
+
+      if (hoy < octubre2026) {
+        // 🎯 Si estamos antes de octubre (como ahora), alta fija el 1 de Octubre
+        fechaAltaFinal = '2026-10-01';
+      } else {
+        // 🎯 Si ya es octubre o más tarde, usa la elección del usuario
+        fechaAltaFinal = alumno.inicioDeseado || 'proximo';
+      }
+
       await updateDoc(alumnoRef, {
         estado: 'prueba_reservada',
         citaNivel: citaTexto, 
         citaFecha: fecha,
         citaHora: hora,
-        fechaSolicitud: new Date().toISOString(),
+        fechaSolicitud: hoy.toISOString(),
         actividad: alumno.actividad || '', 
         actividadId: alumno.actividadId || '',
         dias: alumno.dias || '',
         horario: alumno.horario || '',
-        inicioDeseado: alumno.inicioDeseado || 'proximo', 
+        
+        // 🚀 APLICAMOS LA FECHA DE ALTA CORRECTA:
+        inicioDeseado: fechaAltaFinal, 
+        
         grupo: (alumno.dias && alumno.horario) ? `${alumno.dias} ${alumno.horario}` : ''
       });
 
@@ -4025,7 +4041,7 @@ const PantallaPruebaNivel = ({ alumno, close, onSuccess, user, refresh }) => {
       close(); 
 
       setTimeout(() => {
-        alert(`✅ Cita confirmada.\nPrueba: ${citaTexto}\nGrupo: ${alumno.actividad} (${alumno.dias})`);
+        alert(`✅ Cita confirmada.\nPrueba: ${citaTexto}\nAlta del alumno: 1 de Octubre`);
       }, 300);
 
     } catch (e) {
