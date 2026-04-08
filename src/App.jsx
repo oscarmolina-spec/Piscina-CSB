@@ -3984,7 +3984,7 @@ const PantallaPruebaNivel = ({ alumno, close, onSuccess, user, refresh }) => {
     consultarAforo();
   }, [fecha]);
 
-// 4. FUNCIÓN GUARDAR RESERVA (BLOQUEANDO ALTA HASTA OCTUBRE)
+// 4. FUNCIÓN GUARDAR RESERVA (BLINDAJE TOTAL OCTUBRE)
 const confirmarReserva = async () => {
   if (!fecha || !hora) return alert("⚠️ Selecciona un lunes y una hora.");
   
@@ -3995,38 +3995,31 @@ const confirmarReserva = async () => {
   try {
     const alumnoRef = doc(db, 'students', alumno.id);
     
-    // --- LÓGICA DE FECHAS INTELIGENTE ---
-    const hoy = new Date();
-    const octubre2026 = new Date('2026-10-01');
-    let fechaAltaFinal;
-
-    if (hoy < octubre2026) {
-      // 🎯 Si estamos antes de octubre, forzamos el 1 de Octubre
-      fechaAltaFinal = '2026-10-01';
-    } else {
-      // 🎯 Si ya es octubre, usamos lo que el usuario elija
-      fechaAltaFinal = alumno.inicioDeseado || 'proximo';
-    }
+    // 🎯 LA FECHA DE ORO: 1 de Octubre (Formato ISO puro sin horas de hoy)
+    const fechaFijaOctubre = "2026-10-01T08:00:00.000Z";
+    const soloFechaOctubre = "2026-10-01";
 
     await updateDoc(alumnoRef, {
       estado: 'prueba_reservada',
       citaNivel: citaTexto, 
       citaFecha: fecha,
       citaHora: hora,
-      
-      // 🚩 CAMBIO CLAVE: Cambiamos la fecha de solicitud por la de octubre
-      // para que el sistema no use el día de hoy (Abril)
-      fechaSolicitud: fechaAltaFinal, 
+
+      // 🚩 AQUÍ ESTÁ EL TRUCO: Engañamos al sistema para que crea que 
+      // la solicitud se hizo directamente para octubre.
+      fechaSolicitud: soloFechaOctubre, 
+      createdAt: fechaFijaOctubre, // Por si mira la fecha de creación
 
       actividad: alumno.actividad || '', 
       actividadId: alumno.actividadId || '',
       dias: alumno.dias || '',
       horario: alumno.horario || '',
       
-      // 🚀 BLINDAJE TOTAL:
-      inicioDeseado: fechaAltaFinal, 
-      fechaAlta: fechaAltaFinal,
-      mesInicio: 'octubre', // Añadimos este para reforzar
+      // 🚀 FORZAMOS EL INICIO EN TODOS LOS CAMPOS POSIBLES
+      inicioDeseado: soloFechaOctubre, 
+      fechaAlta: soloFechaOctubre,
+      mesInicio: 'octubre',
+      fechaInicio: soloFechaOctubre,
       
       grupo: (alumno.dias && alumno.horario) ? `${alumno.dias} ${alumno.horario}` : ''
     });
@@ -4043,7 +4036,8 @@ const confirmarReserva = async () => {
     close(); 
 
     setTimeout(() => {
-      alert(`✅ Cita confirmada.\n\nPrueba: ${citaTexto}\nAlta oficial: 1 de Octubre`);
+      // Mensaje de éxito reforzado
+      alert(`✅ ¡RESERVA COMPLETADA!\n\nPrueba de nivel: ${citaTexto}\nAlta oficial: 1 de Octubre`);
     }, 300);
 
   } catch (e) {
