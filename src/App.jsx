@@ -3930,11 +3930,26 @@ return (
 // ==========================================
 // 📅 PANTALLA PRUEBA DE NIVEL (SOLO LUNES + 5 MIN + EMAIL)
 // ==========================================
-const PantallaPruebaNivel = ({ alumno, close, onSuccess, user }) => {
+const PantallaPruebaNivel = ({ alumno, close, onSuccess, user, refresh }) => {
   const [fecha, setFecha] = useState('');
   const [hora, setHora] = useState(null);
   const [loading, setLoading] = useState(false);
   const [ocupacion, setOcupacion] = useState({});
+
+  // 🚩 NUEVO: Estado para saber qué mes estamos viendo (por defecto hoy)
+  const [mesVisual, setMesVisual] = useState(new Date());
+
+  // 1. FUNCIÓN PARA SELECCIONAR DÍA
+  const seleccionarDiaPrueba = (fechaISO) => {
+    setFecha(fechaISO);
+    setHora(null); 
+  };
+
+  // Funciones para las flechas (< Enero >)
+  const moverMes = (delta) => {
+    const nuevoMes = new Date(mesVisual.getFullYear(), mesVisual.getMonth() + delta, 1);
+    setMesVisual(nuevoMes);
+  };
 
   if (!alumno) return null;
   // BLOQUEO PARA ANTIGUOS ALUMNOS (PASE VIP)
