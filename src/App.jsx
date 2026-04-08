@@ -4145,14 +4145,32 @@ return (
           {/* --- 📅 1. CALENDARIO CON SELECTOR DE MES --- */}
           <div className="bg-white border-2 border-blue-50 rounded-3xl overflow-hidden shadow-sm">
             
-            {/* SELECTOR DE MES (Pestañas/Flechas) */}
-            <div className="bg-slate-800 p-4 text-white flex justify-between items-center px-6">
-              <button type="button" onClick={() => moverMes(-1)} className="bg-white/10 hover:bg-white/20 w-8 h-8 rounded-full flex items-center justify-center transition-all">◀</button>
-              <h4 className="font-black uppercase tracking-[0.2em] text-xs">
-                {mesVisual.toLocaleString('es-ES', { month: 'long', year: 'numeric' })}
-              </h4>
-              <button type="button" onClick={() => moverMes(1)} className="bg-white/10 hover:bg-white/20 w-8 h-8 rounded-full flex items-center justify-center transition-all">▶</button>
-            </div>
+{/* SELECTOR DE MES (Menú Desplegable + Flechas) */}
+<div className="bg-slate-800 p-4 text-white flex justify-between items-center px-6">
+  
+  {/* Flecha Izquierda */}
+  <button type="button" onClick={() => moverMes(-1)} className="bg-white/10 hover:bg-white/20 w-8 h-8 rounded-full flex items-center justify-center transition-all">◀</button>
+  
+  {/* 🎯 EL DESPLEGABLE DE MESES */}
+  <div className="flex flex-col items-center">
+    <select 
+      value={mesVisual.getMonth()} 
+      onChange={(e) => setMesVisual(new Date(mesVisual.getFullYear(), parseInt(e.target.value), 1))}
+      className="bg-slate-700 text-white text-xs font-black uppercase tracking-widest p-2 rounded-lg border-2 border-slate-600 outline-none focus:border-blue-500 transition-all cursor-pointer"
+    >
+      {/* Listamos los meses del curso escolar */}
+      {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map((mIdx) => (
+        <option key={mIdx} value={mIdx} className="bg-slate-800 text-white">
+          {new Date(2026, mIdx).toLocaleString('es-ES', { month: 'long' }).toUpperCase()}
+        </option>
+      ))}
+    </select>
+    <span className="text-[8px] font-bold text-slate-400 mt-1 uppercase tracking-[0.2em]">{mesVisual.getFullYear()}</span>
+  </div>
+
+  {/* Flecha Derecha */}
+  <button type="button" onClick={() => moverMes(1)} className="bg-white/10 hover:bg-white/20 w-8 h-8 rounded-full flex items-center justify-center transition-all">▶</button>
+</div>
             
             <div className="p-4">
               {/* Días de la semana */}
