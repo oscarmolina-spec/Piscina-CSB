@@ -3928,68 +3928,31 @@ return (
   );
 };
 // ==========================================
-// 📅 PANTALLA PRUEBA DE NIVEL (SOLO LUNES + 5 MIN + EMAIL)
+// 📅 PANTALLA PRUEBA DE NIVEL (VERSIÓN FINAL BLINDADA)
 // ==========================================
 const PantallaPruebaNivel = ({ alumno, close, onSuccess, user, refresh }) => {
   const [fecha, setFecha] = useState('');
   const [hora, setHora] = useState(null);
   const [loading, setLoading] = useState(false);
   const [ocupacion, setOcupacion] = useState({});
-
-  // 🚩 NUEVO: Estado para saber qué mes estamos viendo (por defecto hoy)
   const [mesVisual, setMesVisual] = useState(new Date());
 
-  // 1. FUNCIÓN PARA SELECCIONAR DÍA
+  // 1. FUNCIONES DE APOYO
   const seleccionarDiaPrueba = (fechaISO) => {
     setFecha(fechaISO);
     setHora(null); 
   };
 
-  // Funciones para las flechas (< Enero >)
   const moverMes = (delta) => {
     const nuevoMes = new Date(mesVisual.getFullYear(), mesVisual.getMonth() + delta, 1);
     setMesVisual(nuevoMes);
   };
 
-  if (!alumno) return null;
-  // BLOQUEO PARA ANTIGUOS ALUMNOS (PASE VIP)
-  if (alumno.natacionPasado === 'si') {
-    return (
-      <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-[999] backdrop-blur-sm">
-        <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-8 text-center animate-in zoom-in">
-          <div className="w-20 h-20 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-4 text-4xl">
-            ✅
-          </div>
-          <h3 className="text-2xl font-black text-blue-900 mb-2">¡Alumno Exento!</h3>
-          <p className="text-gray-600 mb-6">
-            Como <strong>{alumno.nombre}</strong> ya estuvo en la extraescolar de natación el curso pasado, no necesita realizar la prueba de nivel.
-          </p>
-          <button 
-            onClick={() => {
-              if (onSuccess) onSuccess(); // Esto activará el paso a los grupos
-              close();
-            }}
-            className="w-full bg-blue-600 text-white p-4 rounded-2xl font-bold shadow-lg hover:bg-blue-700 transition"
-          >
-            Continuar a Selección de Grupo
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-// 1. FUNCIÓN PARA SELECCIONAR DÍA (Súper sencilla para el Calendario Visual)
-const seleccionarDiaPrueba = (fechaISO) => {
-  setFecha(fechaISO);
-  setHora(null); // Siempre reseteamos la hora al cambiar de día
-};
   // 2. GENERAR TURNOS DE 5 MINUTOS
   const franjas = [];
   if (fecha) {
     const d = new Date(fecha);
     const mesActual = d.getUTCMonth() + 1;
-    
-    // Configuración de horas: Junio y Septiembre (17-18h), Resto (16-18h)
     const horaInicio = (mesActual === 6 || mesActual === 9) ? 17 : 16;
     const horaFin = 18;
 
@@ -4021,6 +3984,7 @@ const seleccionarDiaPrueba = (fechaISO) => {
     consultarAforo();
   }, [fecha]);
 
+  // 4. FUNCIÓN GUARDAR RESERVA
   const confirmarReserva = async () => {
     if (!fecha || !hora) return alert("⚠️ Selecciona un lunes y una hora.");
     
@@ -4031,270 +3995,229 @@ const seleccionarDiaPrueba = (fechaISO) => {
     try {
       const alumnoRef = doc(db, 'students', alumno.id);
 
-      // 2. ACTUALIZACIÓN ATÓMICA: Ahora incluimos los datos de la actividad
       await updateDoc(alumnoRef, {
         estado: 'prueba_reservada',
         citaNivel: citaTexto, 
         citaFecha: fecha,
         citaHora: hora,
         fechaSolicitud: new Date().toISOString(),
-
         actividad: alumno.actividad || '', 
         actividadId: alumno.actividadId || '',
         dias: alumno.dias || '',
         horario: alumno.horario || '',
-        
-        // 🎯 ESTA ES LA LÍNEA QUE FALTA PARA ARREGLARLO TODO:
         inicioDeseado: alumno.inicioDeseado || 'proximo', 
-        
         grupo: (alumno.dias && alumno.horario) ? `${alumno.dias} ${alumno.horario}` : ''
       });
 
-// 📧 3. Email (No bloqueante)
-// 📧 Email de Prueba de Nivel (Limpio, solo con la cita)
-// 📧 3. Email de Reserva de Prueba
-if (user?.email) {
-  // 🚩 CAMBIO: Eliminamos "Grupo" y "alumno.dias". Solo dejamos la cita.
-  const detalleSoloCita = citaTexto; 
+      if (user?.email) {
+        enviarEmailConfirmacion(
+          user.email, 
+          alumno.nombre, 
+          citaTexto, 
+          'cita'
+        ).catch(e => console.error(e));
+      }
 
-  enviarEmailConfirmacion(
-    user.email, 
-    alumno.nombre, 
-    detalleSoloCita, // Solo enviará "Día X a las Hora Y"
-    'cita'
-  ).catch(e => console.error(e));
-}
+      if (typeof refresh === 'function') {
+        await refresh(user.uid);
+      }
 
-// 🔄 4. REFRESH OBLIGATORIO
-if (typeof refresh === 'function') {
-  await refresh(user.uid);
-}
+      close(); 
 
-// 5. Cierre
-close(); 
+      setTimeout(() => {
+        alert(`✅ Cita confirmada.\nPrueba: ${citaTexto}\nGrupo: ${alumno.actividad} (${alumno.dias})`);
+      }, 300);
 
-setTimeout(() => {
-  // Aquí también lo ponemos bonito para el mensaje en pantalla
-  alert(`✅ Cita confirmada.\nPrueba: ${citaTexto}\nGrupo: ${alumno.actividad} (${alumno.dias})`);
-}, 300);
+    } catch (e) {
+      console.error("Error crítico en reserva:", e);
+      alert("❌ Hubo un error al guardar.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
-} catch (e) {
-  console.error("Error crítico en reserva:", e);
-  alert("❌ Hubo un error al guardar.");
-} finally {
-  setLoading(false);
-}
-}; // <--- ¡Añade esta llave aquí para cerrar la función confirmarReserva!
+  // 5. BLOQUEOS PARA ANTIGUOS ALUMNOS
+  if (!alumno) return null;
 
-// 🚀 ATAJO PARA ANTIGUOS ALUMNOS (PASE VIP) - CORREGIDO
-if (alumno.natacionPasado === 'si' || alumno.esAntiguoAlumno === true) {
+  if (alumno.natacionPasado === 'si' || alumno.esAntiguoAlumno === true) {
+    return (
+      <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-[999] backdrop-blur-sm">
+        <div className="bg-white rounded-3xl shadow-2xl w-full max-md p-8 text-center animate-in zoom-in">
+          <div className="w-20 h-20 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-4 text-4xl">✅</div>
+          <h3 className="text-2xl font-black text-blue-900 mb-2">¡Pase Directo!</h3>
+          <p className="text-gray-600 mb-6 font-medium">Como <strong>{alumno.nombre}</strong> ya estuvo el curso pasado, puede elegir grupo directamente.</p>
+          <button 
+            onClick={async () => {
+              try {
+                const alumnoRef = doc(db, 'students', alumno.id);
+                await updateDoc(alumnoRef, {
+                  estado: 'inscrito',
+                  revisadoAdmin: true,
+                  validadoAdmin: true,
+                  citaNivel: 'EXENTO - ANTIGUO ALUMNO' 
+                });
+                if (onSuccess) onSuccess(); 
+                close();
+              } catch (err) { console.error(err); }
+            }}
+            className="w-full bg-green-600 text-white p-4 rounded-2xl font-black shadow-lg hover:bg-green-700 transition transform active:scale-95"
+          >
+            ELEGIR GRUPO Y HORARIO
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // 6. RENDERIZADO DE LA PANTALLA
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-[999] backdrop-blur-sm">
-      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-8 text-center animate-in zoom-in">
-        <div className="w-20 h-20 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-4 text-4xl">
-          ✅
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
+        
+        <div className="bg-blue-600 p-5 text-white flex justify-between items-center shadow-lg shrink-0">
+          <div>
+            <h3 className="font-black text-xl flex items-center gap-2">🏊 Reserva Prueba de Nivel</h3>
+            <p className="text-blue-100 text-xs font-medium uppercase">{alumno.nombre}</p>
+          </div>
+          <button onClick={close} className="text-white/80 hover:text-white transition-colors p-2 text-xl">✕</button>
         </div>
-        <h3 className="text-2xl font-black text-blue-900 mb-2">¡Pase Directo!</h3>
-        <p className="text-gray-600 mb-6 font-medium">
-          Como <strong>{alumno.nombre}</strong> ya estuvo el curso pasado, puede elegir grupo directamente.
-        </p>
-        <button 
-  onClick={async () => {
-    try {
-      // 1. Antes de pasar al siguiente paso, desbloqueamos al alumno en la sombra
-      const alumnoRef = doc(db, 'students', alumno.id);
-      await updateDoc(alumnoRef, {
-        estado: 'inscrito',     // Lo marcamos como oficial ya mismo
-        revisadoAdmin: true,    // Para que no salga como "pendiente"
-        validadoAdmin: true,
-        citaNivel: 'EXENTO - ANTIGUO ALUMNO' 
-      });
+        
+        <div className="p-6 overflow-y-auto flex-1 bg-white">
+          <div className="space-y-6">
+            
+            <div className="bg-white border-2 border-blue-50 rounded-3xl overflow-hidden shadow-sm">
+              <div className="bg-slate-800 p-4 text-white flex justify-between items-center px-6">
+                <button type="button" onClick={() => moverMes(-1)} className="bg-white/10 hover:bg-white/20 w-8 h-8 rounded-full flex items-center justify-center transition-all">◀</button>
+                
+                <div className="flex flex-col items-center">
+                  <select 
+                    value={mesVisual.getMonth()} 
+                    onChange={(e) => setMesVisual(new Date(mesVisual.getFullYear(), parseInt(e.target.value), 1))}
+                    className="bg-slate-700 text-white text-xs font-black uppercase tracking-widest p-2 rounded-lg border-2 border-slate-600 outline-none cursor-pointer"
+                  >
+                    {[0,1,2,3,4,5,6,7,8,9,10,11].map((mIdx) => (
+                      <option key={mIdx} value={mIdx} className="bg-slate-800">
+                        {new Date(2026, mIdx).toLocaleString('es-ES', { month: 'long' }).toUpperCase()}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="text-[8px] font-bold text-slate-400 mt-1 uppercase tracking-[0.2em]">{mesVisual.getFullYear()}</span>
+                </div>
 
-      // 2. Ahora sí, le dejamos elegir el grupo
-      if (onSuccess) onSuccess(); 
-      close();
-    } catch (err) {
-      console.error("Error al activar pase VIP:", err);
-    }
-  }}
-  className="w-full bg-green-600 text-white p-4 rounded-2xl font-black shadow-lg hover:bg-green-700 transition transform active:scale-95"
->
-  ELEGIR GRUPO Y HORARIO
-</button>
+                <button type="button" onClick={() => moverMes(1)} className="bg-white/10 hover:bg-white/20 w-8 h-8 rounded-full flex items-center justify-center transition-all">▶</button>
+              </div>
+              
+              <div className="p-4">
+                <div className="grid grid-cols-7 gap-1 mb-2">
+                  {['Lu', 'Ma', 'Mi', 'Ju', 'Vi', 'Sá', 'Do'].map(d => (
+                    <div key={d} className="text-center text-[9px] font-black text-slate-400 uppercase">{d}</div>
+                  ))}
+                </div>
+
+                <div className="grid grid-cols-7 gap-1">
+                  {(() => {
+                    const celdas = [];
+                    const año = mesVisual.getFullYear();
+                    const mesIdx = mesVisual.getMonth();
+                    const primerDia = new Date(año, mesIdx, 1);
+                    const offset = (primerDia.getDay() === 0 ? 7 : primerDia.getDay()) - 1;
+                    const diasEnMes = new Date(año, mesIdx + 1, 0).getDate();
+
+                    for (let i = 0; i < offset; i++) celdas.push(<div key={`v-${i}`} className="h-10"></div>);
+
+                    for (let d = 1; d <= diasEnMes; d++) {
+                      const fActual = new Date(año, mesIdx, d);
+                      const iso = `${año}-${String(mesIdx + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+                      const sem = fActual.getDay();
+                      const esPasado = fActual < new Date().setHours(0,0,0,0);
+                      
+                      let permitido = false;
+                      const mNum = mesIdx + 1;
+
+                      if (!esPasado) {
+                        if (mNum === 6 || mNum === 9) {
+                          if (mNum === 9 && d < 14) permitido = false;
+                          else if (sem === 1 || sem === 3) permitido = true;
+                        } else if (mNum === 7 || mNum === 8) {
+                          permitido = false;
+                        } else {
+                          if (sem === 1) permitido = true;
+                        }
+                      }
+
+                      celdas.push(
+                        <button
+                          key={iso}
+                          type="button"
+                          disabled={!permitido}
+                          onClick={() => seleccionarDiaPrueba(iso)}
+                          className={`h-11 rounded-xl text-xs font-bold transition-all flex flex-col items-center justify-center
+                            ${!permitido ? 'text-slate-200 cursor-not-allowed opacity-30' : 
+                              fecha === iso ? 'bg-blue-600 text-white shadow-lg scale-105 z-10' : 'bg-blue-50 text-blue-700 hover:bg-blue-100'}
+                          `}
+                        >
+                          {d}
+                          {permitido && (
+                            <span className={`text-[5px] font-black ${fecha === iso ? 'text-blue-100' : 'text-blue-400'}`}>
+                              {mNum === 6 || mNum === 9 ? '17:00' : '16:00'}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    }
+                    return celdas;
+                  })()}
+                </div>
+              </div>
+              <div className="bg-slate-50 p-2 text-[8px] text-center text-slate-500 font-bold uppercase border-t border-blue-50 italic">
+                💡 Elige un mes y luego un día azul
+              </div>
+            </div>
+
+            {fecha && (
+              <div className="animate-in fade-in slide-in-from-bottom-4 bg-blue-50/50 p-5 rounded-3xl border-2 border-blue-100">
+                <div className="flex flex-col items-center mb-4 text-center">
+                    <span className="bg-blue-600 text-white text-[9px] font-black px-2 py-0.5 rounded-full mb-1">DÍA ELEGIDO: {fecha.split('-').reverse().join('/')}</span>
+                    <label className="text-[11px] font-black text-blue-900 uppercase tracking-widest">Selecciona tu hora preferida:</label>
+                </div>
+                <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
+                  {franjas.map(f => {
+                    const ocupados = ocupacion[f] || 0;
+                    const estaLleno = ocupados >= 2;
+                    return (
+                      <button
+                        key={f}
+                        type="button"
+                        disabled={estaLleno}
+                        onClick={() => setHora(f)}
+                        className={`p-2 rounded-xl text-xs font-bold border-2 transition-all ${
+                          estaLleno ? 'bg-gray-100 text-gray-300 border-gray-100' : 
+                          hora === f ? 'bg-emerald-500 text-white border-emerald-500 scale-105 shadow-md' : 
+                          'bg-white text-blue-600 border-blue-50 hover:border-blue-500'
+                        }`}
+                      >
+                        {f}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="p-4 bg-gray-50 border-t flex flex-col items-center gap-3 shrink-0">
+          <button 
+            onClick={confirmarReserva}
+            disabled={loading || !hora}
+            className="w-full py-4 bg-blue-600 text-white rounded-2xl font-black shadow-xl disabled:bg-gray-200 disabled:text-gray-400 transition-all transform active:scale-95 flex items-center justify-center gap-2"
+          >
+            {loading ? 'Procesando...' : (hora ? '✅ FINALIZAR RESERVA' : 'ELIGE DÍA Y HORA')}
+          </button>
+        </div>
       </div>
     </div>
   );
-}
-
-return (
-  <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-[999] backdrop-blur-sm">
-    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
-      
-      {/* CABECERA DEL MODAL */}
-      <div className="bg-blue-600 p-5 text-white flex justify-between items-center shadow-lg shrink-0">
-        <div>
-          <h3 className="font-black text-xl flex items-center gap-2">🏊 Reserva Prueba de Nivel</h3>
-          <p className="text-blue-100 text-xs font-medium uppercase">{alumno.nombre}</p>
-        </div>
-        <button onClick={close} className="text-white/80 hover:text-white transition-colors p-2 text-xl">✕</button>
-      </div>
-      
-      <div className="p-6 overflow-y-auto flex-1 bg-white">
-        <div className="space-y-6">
-          
-          {/* --- 📅 1. CALENDARIO CON SELECTOR DE MES --- */}
-          <div className="bg-white border-2 border-blue-50 rounded-3xl overflow-hidden shadow-sm">
-            
-{/* SELECTOR DE MES (Menú Desplegable + Flechas) */}
-<div className="bg-slate-800 p-4 text-white flex justify-between items-center px-6">
-  
-  {/* Flecha Izquierda */}
-  <button type="button" onClick={() => moverMes(-1)} className="bg-white/10 hover:bg-white/20 w-8 h-8 rounded-full flex items-center justify-center transition-all">◀</button>
-  
-  {/* 🎯 EL DESPLEGABLE DE MESES */}
-  <div className="flex flex-col items-center">
-    <select 
-      value={mesVisual.getMonth()} 
-      onChange={(e) => setMesVisual(new Date(mesVisual.getFullYear(), parseInt(e.target.value), 1))}
-      className="bg-slate-700 text-white text-xs font-black uppercase tracking-widest p-2 rounded-lg border-2 border-slate-600 outline-none focus:border-blue-500 transition-all cursor-pointer"
-    >
-      {/* Listamos los meses del curso escolar */}
-      {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map((mIdx) => (
-        <option key={mIdx} value={mIdx} className="bg-slate-800 text-white">
-          {new Date(2026, mIdx).toLocaleString('es-ES', { month: 'long' }).toUpperCase()}
-        </option>
-      ))}
-    </select>
-    <span className="text-[8px] font-bold text-slate-400 mt-1 uppercase tracking-[0.2em]">{mesVisual.getFullYear()}</span>
-  </div>
-
-  {/* Flecha Derecha */}
-  <button type="button" onClick={() => moverMes(1)} className="bg-white/10 hover:bg-white/20 w-8 h-8 rounded-full flex items-center justify-center transition-all">▶</button>
-</div>
-            
-            <div className="p-4">
-              {/* Días de la semana */}
-              <div className="grid grid-cols-7 gap-1 mb-2">
-                {['Lu', 'Ma', 'Mi', 'Ju', 'Vi', 'Sá', 'Do'].map(d => (
-                  <div key={d} className="text-center text-[9px] font-black text-slate-400 uppercase">{d}</div>
-                ))}
-              </div>
-
-              {/* Días del mes seleccionado */}
-              <div className="grid grid-cols-7 gap-1">
-                {(() => {
-                  const celdas = [];
-                  const año = mesVisual.getFullYear();
-                  const mesIdx = mesVisual.getMonth();
-                  
-                  const primerDia = new Date(año, mesIdx, 1);
-                  const offset = (primerDia.getDay() === 0 ? 7 : primerDia.getDay()) - 1;
-                  const diasEnMes = new Date(año, mesIdx + 1, 0).getDate();
-
-                  // Huecos para empezar en el día de la semana correcto
-                  for (let i = 0; i < offset; i++) {
-                    celdas.push(<div key={`vacio-${i}`} className="h-10"></div>);
-                  }
-
-                  // Días reales del mes
-                  for (let d = 1; d <= diasEnMes; d++) {
-                    const fActual = new Date(año, mesIdx, d);
-                    const iso = `${año}-${String(mesIdx + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-                    const sem = fActual.getDay(); // 1=L, 3=X
-                    const esPasado = fActual < new Date().setHours(0,0,0,0);
-                    
-                    let permitido = false;
-                    const mNum = mesIdx + 1;
-
-                    // APLICAMOS TUS REGLAS DE ORO
-                    if (!esPasado) {
-                      if (mNum === 6 || mNum === 9) { // Junio o Septiembre
-                        if (mNum === 9 && d < 14) permitido = false;
-                        else if (sem === 1 || sem === 3) permitido = true;
-                      } else if (mNum === 7 || mNum === 8) {
-                        permitido = false;
-                      } else {
-                        if (sem === 1) permitido = true;
-                      }
-                    }
-
-                    celdas.push(
-                      <button
-                        key={iso}
-                        type="button"
-                        disabled={!permitido}
-                        onClick={() => seleccionarDiaPrueba(iso)}
-                        className={`h-11 rounded-xl text-xs font-bold transition-all flex flex-col items-center justify-center
-                          ${!permitido ? 'text-slate-200 cursor-not-allowed opacity-30' : 
-                            fecha === iso ? 'bg-blue-600 text-white shadow-lg scale-105 z-10' : 'bg-blue-50 text-blue-700 hover:bg-blue-100'}
-                        `}
-                      >
-                        {d}
-                        {permitido && (
-                          <span className={`text-[5px] font-black ${fecha === iso ? 'text-blue-100' : 'text-blue-400'}`}>
-                            {mNum === 6 || mNum === 9 ? '17:00' : '16:00'}
-                          </span>
-                        )}
-                      </button>
-                    );
-                  }
-                  return celdas;
-                })()}
-              </div>
-            </div>
-            <div className="bg-slate-50 p-2 text-[8px] text-center text-slate-500 font-bold uppercase border-t border-blue-50 italic">
-              💡 Pulsa las flechas para cambiar de mes
-            </div>
-          </div>
-
-          {/* --- 🕒 2. TURNOS DE HORA --- */}
-          {fecha && (
-            <div className="animate-in fade-in slide-in-from-bottom-4 bg-blue-50/50 p-5 rounded-3xl border-2 border-blue-100">
-              <div className="flex flex-col items-center mb-4 text-center">
-                  <span className="bg-blue-600 text-white text-[9px] font-black px-2 py-0.5 rounded-full mb-1">DÍA ELEGIDO: {fecha.split('-').reverse().join('/')}</span>
-                  <label className="text-[11px] font-black text-blue-900 uppercase tracking-widest">
-                    Selecciona tu hora preferida:
-                  </label>
-              </div>
-              <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
-                {franjas.map(f => {
-                  const ocupados = ocupacion[f] || 0;
-                  const estaLleno = ocupados >= 2;
-                  return (
-                    <button
-                      key={f}
-                      type="button"
-                      disabled={estaLleno}
-                      onClick={() => setHora(f)}
-                      className={`p-2 rounded-xl text-xs font-bold border-2 transition-all ${
-                        estaLleno ? 'bg-gray-100 text-gray-300 border-gray-100' : 
-                        hora === f ? 'bg-emerald-500 text-white border-emerald-500 scale-105 shadow-md' : 
-                        'bg-white text-blue-600 border-blue-50 hover:border-blue-500'
-                      }`}
-                    >
-                      {f}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* --- PIE DEL MODAL --- */}
-      <div className="p-4 bg-gray-50 border-t flex flex-col items-center gap-3 shrink-0">
-        <button 
-          onClick={confirmarReserva}
-          disabled={loading || !hora}
-          className="w-full py-4 bg-blue-600 text-white rounded-2xl font-black shadow-xl disabled:bg-gray-200 disabled:text-gray-400 transition-all transform active:scale-95 flex items-center justify-center gap-2"
-        >
-          {loading ? 'Procesando...' : (hora ? '✅ FINALIZAR RESERVA' : 'ELIGE DÍA Y HORA')}
-        </button>
-      </div>
-    </div>
-  </div>
-);
 };
 
 // ==========================================
