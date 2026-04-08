@@ -4013,15 +4013,20 @@ const confirmarReserva = async () => {
       citaNivel: citaTexto, 
       citaFecha: fecha,
       citaHora: hora,
-      fechaSolicitud: hoy.toISOString(),
+      
+      // 🚩 CAMBIO CLAVE: Cambiamos la fecha de solicitud por la de octubre
+      // para que el sistema no use el día de hoy (Abril)
+      fechaSolicitud: fechaAltaFinal, 
+
       actividad: alumno.actividad || '', 
       actividadId: alumno.actividadId || '',
       dias: alumno.dias || '',
       horario: alumno.horario || '',
       
-      // 🚀 ESTO ES LO QUE ARREGLA TU CAPTURA:
+      // 🚀 BLINDAJE TOTAL:
       inicioDeseado: fechaAltaFinal, 
-      fechaAlta: fechaAltaFinal, // También lo ponemos aquí por si acaso
+      fechaAlta: fechaAltaFinal,
+      mesInicio: 'octubre', // Añadimos este para reforzar
       
       grupo: (alumno.dias && alumno.horario) ? `${alumno.dias} ${alumno.horario}` : ''
     });
