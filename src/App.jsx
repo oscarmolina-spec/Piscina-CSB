@@ -4110,142 +4110,157 @@ if (alumno.natacionPasado === 'si' || alumno.esAntiguoAlumno === true) {
   );
 }
 
-  return (
-    <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-[999] backdrop-blur-sm">
-      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
-        
-        <div className="bg-blue-600 p-5 text-white flex justify-between items-center shadow-lg">
-          <div>
-            <h3 className="font-black text-xl flex items-center gap-2">🏊 Prueba de Nivel: LUNES</h3>
-            <p className="text-blue-100 text-xs font-medium uppercase">{alumno.nombre}</p>
-          </div>
+return (
+  <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-[999] backdrop-blur-sm">
+    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
+      
+      {/* CABECERA DEL MODAL */}
+      <div className="bg-blue-600 p-5 text-white flex justify-between items-center shadow-lg shrink-0">
+        <div>
+          <h3 className="font-black text-xl flex items-center gap-2">🏊 Reserva Prueba de Nivel</h3>
+          <p className="text-blue-100 text-xs font-medium uppercase">{alumno.nombre}</p>
         </div>
-        
-        <div className="p-6 overflow-y-auto flex-1">
-          <div className="mb-6 bg-orange-50 border border-orange-200 p-4 rounded-2xl flex items-start gap-3">
-             <span className="text-xl">ℹ️</span>
-             <p className="text-orange-900 text-sm">Las pruebas son exclusivas para los <strong>lunes</strong> por la tarde. Recuerda traer el equipo de natación.</p>
-          </div>
+        <button onClick={close} className="text-white/80 hover:text-white transition-colors p-2">✕</button>
+      </div>
+      
+      <div className="p-6 overflow-y-auto flex-1 bg-white">
+        <div className="mb-6 bg-orange-50 border border-orange-200 p-4 rounded-2xl flex items-start gap-3">
+           <span className="text-xl">ℹ️</span>
+           <p className="text-orange-900 text-sm font-medium">Recuerda traer el equipo de natación (bañador, gorro, gafas y chanclas).</p>
+        </div>
 
-          <div className="space-y-6">
-            {/* --- 📅 1. CALENDARIO VISUAL --- */}
-            <div className="bg-white border-2 border-blue-50 rounded-3xl overflow-hidden shadow-sm">
-              <div className="bg-slate-800 p-3 text-white text-center font-black uppercase text-[10px] tracking-[0.2em]">
-                Paso 1: Elige el día de la prueba
-              </div>
-              
-              <div className="p-4">
-                <div className="grid grid-cols-7 gap-1 mb-2">
-                  {['Lu', 'Ma', 'Mi', 'Ju', 'Vi', 'Sá', 'Do'].map(d => (
-                    <div key={d} className="text-center text-[9px] font-black text-slate-400 uppercase">{d}</div>
-                  ))}
-                </div>
-
-                <div className="grid grid-cols-7 gap-1">
-                  {(() => {
-                    const celdas = [];
-                    const hoy = new Date();
-                    const startOffset = (hoy.getDay() === 0 ? 7 : hoy.getDay()) - 1;
-                    
-                    for (let i = 0; i < 63; i++) {
-                      const d = new Date();
-                      d.setDate(hoy.getDate() - startOffset + i);
-                      const iso = d.toISOString().split('T')[0];
-                      const diaMes = d.getDate();
-                      const mes = d.getMonth() + 1;
-                      const diaSemana = d.getDay(); 
-                      const esPasado = d < new Date().setHours(0,0,0,0);
-
-                      let permitido = false;
-                      if (!esPasado) {
-                        if (mes === 6 || mes === 9) {
-                          if (mes === 9 && diaMes < 14) permitido = false; 
-                          else if (diaSemana === 1 || diaSemana === 3) permitido = true; 
-                        } else if (mes === 7 || mes === 8) {
-                          permitido = false;
-                        } else {
-                          if (diaSemana === 1) permitido = true; 
-                        }
-                      }
-
-                      celdas.push(
-                        <button
-                          key={iso}
-                          type="button"
-                          disabled={!permitido}
-                          onClick={() => seleccionarDiaPrueba(iso)}
-                          className={`h-10 w-full rounded-xl text-xs font-bold transition-all flex flex-col items-center justify-center
-                            ${!permitido ? 'text-slate-200 cursor-not-allowed' : 
-                              fecha === iso ? 'bg-blue-600 text-white shadow-lg scale-110 z-10' : 'bg-blue-50 text-blue-700 hover:bg-blue-100'}
-                          `}
-                        >
-                          <span>{diaMes}</span>
-                          {permitido && (
-                            <span className={`text-[6px] mt-0.5 ${fecha === iso ? 'text-blue-100' : 'text-blue-400'}`}>
-                              {mes === 6 || mes === 9 ? '17h' : '16h'}
-                            </span>
-                          )}
-                        </button>
-                      );
-                    }
-                    return celdas;
-                  })()}
-                </div>
-              </div>
-              <div className="bg-slate-50 p-2 text-[8px] text-center text-slate-500 font-bold uppercase border-t border-blue-50">
-                💡 Azul: Disponible / Gris: Cerrado
-              </div>
+        <div className="space-y-6">
+          {/* --- 📅 1. CALENDARIO VISUAL INTELIGENTE --- */}
+          <div className="bg-white border-2 border-blue-50 rounded-3xl overflow-hidden shadow-sm">
+            <div className="bg-slate-800 p-3 text-white flex justify-between items-center px-5">
+              <span className="text-[10px] font-black uppercase tracking-widest">Paso 1: Elige el día</span>
+              <span className="text-[10px] font-bold uppercase bg-blue-600 px-3 py-1 rounded-full">Temporada 2026</span>
             </div>
+            
+            <div className="p-4">
+              {/* Días de la semana */}
+              <div className="grid grid-cols-7 gap-1 mb-2">
+                {['Lu', 'Ma', 'Mi', 'Ju', 'Vi', 'Sá', 'Do'].map(d => (
+                  <div key={d} className="text-center text-[9px] font-black text-slate-400 uppercase">{d}</div>
+                ))}
+              </div>
 
-            {/* --- 🕒 2. TURNOS DE HORA --- */}
-            {fecha && (
-              <div className="animate-in fade-in slide-in-from-bottom-4 bg-blue-50/50 p-4 rounded-3xl border-2 border-blue-100">
-                <label className="block text-[10px] font-black text-blue-900 uppercase tracking-widest mb-3 text-center">
-                  Paso 2: Elige hora para el {fecha.split('-').reverse().join('/')}
-                </label>
-                <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
-                  {franjas.map(f => {
-                    const ocupados = ocupacion[f] || 0;
-                    const estaLleno = ocupados >= 2;
-                    return (
+              {/* Rejilla de días con lógica de meses */}
+              <div className="grid grid-cols-7 gap-1">
+                {(() => {
+                  const celdas = [];
+                  const hoy = new Date();
+                  const startOffset = (hoy.getDay() === 0 ? 7 : hoy.getDay()) - 1;
+                  
+                  for (let i = 0; i < 63; i++) {
+                    const dLoop = new Date();
+                    dLoop.setDate(hoy.getDate() - startOffset + i);
+                    
+                    const iso = dLoop.toISOString().split('T')[0];
+                    const diaMes = dLoop.getDate();
+                    const mesNum = dLoop.getMonth() + 1;
+                    const diaSemana = dLoop.getDay(); // 1=L, 3=X
+                    const esPasado = dLoop < new Date().setHours(0,0,0,0);
+
+                    // REGLAS DE ORO CSB
+                    let permitido = false;
+                    if (!esPasado) {
+                      if (mesNum === 6 || mesNum === 9) {
+                        if (mesNum === 9 && diaMes < 14) permitido = false; 
+                        else if (diaSemana === 1 || diaSemana === 3) permitido = true; 
+                      } else if (mesNum === 7 || mesNum === 8) {
+                        permitido = false;
+                      } else {
+                        if (diaSemana === 1) permitido = true; 
+                      }
+                    }
+
+                    celdas.push(
                       <button
-                        key={f}
+                        key={iso}
                         type="button"
-                        disabled={estaLleno}
-                        onClick={() => setHora(f)}
-                        className={`p-2 rounded-xl text-xs font-bold border-2 transition-all ${
-                          estaLleno ? 'bg-gray-100 text-gray-300 border-gray-100' : 
-                          hora === f ? 'bg-emerald-500 text-white border-emerald-500 scale-105 shadow-md' : 
-                          'bg-white text-blue-600 border-blue-50 hover:border-blue-500'
-                        }`}
+                        disabled={!permitido}
+                        onClick={() => seleccionarDiaPrueba(iso)}
+                        className={`h-12 w-full rounded-xl text-xs font-bold transition-all flex flex-col items-center justify-center relative
+                          ${!permitido ? 'text-slate-200 cursor-not-allowed' : 
+                            fecha === iso ? 'bg-blue-600 text-white shadow-lg scale-105 z-10' : 'bg-blue-50 text-blue-700 hover:bg-blue-100'}
+                        `}
                       >
-                        {f}
+                        {/* Pequeño indicador de mes si es día 1 */}
+                        {diaMes === 1 && (
+                          <span className="absolute -top-1 bg-slate-700 text-white text-[5px] px-1 rounded uppercase">
+                            {dLoop.toLocaleString('es-ES', { month: 'short' })}
+                          </span>
+                        )}
+                        <span>{diaMes}</span>
+                        {permitido && (
+                          <span className={`text-[6px] font-black uppercase ${fecha === iso ? 'text-blue-100' : 'text-blue-400'}`}>
+                            {mesNum === 6 || mesNum === 9 ? '17:00' : '16:00'}
+                          </span>
+                        )}
                       </button>
                     );
-                  })}
-                </div>
+                  }
+                  return celdas;
+                })()}
               </div>
-            )}
+            </div>
+            <div className="bg-slate-50 p-2 text-[8px] text-center text-slate-500 font-bold uppercase border-t border-blue-50">
+              💡 Lunes {new Date().getMonth()+1 <= 9 && "y Miércoles"} en azul disponibles
+            </div>
           </div>
-        </div>
 
-        {/* --- PIE DEL MODAL --- */}
-        <div className="p-4 bg-gray-50 border-t flex flex-col items-center gap-3">
-          <p className="text-[10px] font-black text-orange-600 uppercase tracking-tighter">
-            ⚠️ Debes seleccionar una hora para completar el registro
-          </p>
-
-          <button 
-            onClick={confirmarReserva}
-            disabled={loading || !hora}
-            className="w-full py-4 bg-blue-600 text-white rounded-2xl font-black shadow-xl disabled:bg-gray-200 disabled:text-gray-400 transition-all transform active:scale-95"
-          >
-            {loading ? 'Procesando reserva...' : 'FINALIZAR Y CONFIRMAR CITA'}
-          </button>
+          {/* --- 🕒 2. TURNOS DE HORA --- */}
+          {fecha && (
+            <div className="animate-in fade-in slide-in-from-bottom-4 bg-blue-50/50 p-5 rounded-3xl border-2 border-blue-100">
+              <div className="flex flex-col items-center mb-4">
+                  <span className="bg-blue-600 text-white text-[9px] font-black px-2 py-0.5 rounded-full mb-1">PASO 2</span>
+                  <label className="text-[11px] font-black text-blue-900 uppercase tracking-widest">
+                    Horas para el {fecha.split('-').reverse().join('/')}
+                  </label>
+              </div>
+              <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
+                {franjas.map(f => {
+                  const ocupados = ocupacion[f] || 0;
+                  const estaLleno = ocupados >= 2;
+                  return (
+                    <button
+                      key={f}
+                      type="button"
+                      disabled={estaLleno}
+                      onClick={() => setHora(f)}
+                      className={`p-2 rounded-xl text-xs font-bold border-2 transition-all ${
+                        estaLleno ? 'bg-gray-100 text-gray-300 border-gray-100' : 
+                        hora === f ? 'bg-emerald-500 text-white border-emerald-500 scale-105 shadow-md' : 
+                        'bg-white text-blue-600 border-blue-50 hover:border-blue-500'
+                      }`}
+                    >
+                      {f}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
       </div>
+
+      {/* --- PIE DEL MODAL --- */}
+      <div className="p-4 bg-gray-50 border-t flex flex-col items-center gap-3 shrink-0">
+        <button 
+          onClick={confirmarReserva}
+          disabled={loading || !hora}
+          className="w-full py-4 bg-blue-600 text-white rounded-2xl font-black shadow-xl disabled:bg-gray-200 disabled:text-gray-400 transition-all transform active:scale-95 flex items-center justify-center gap-2"
+        >
+          {loading ? 'Procesando...' : (hora ? '✅ CONFIRMAR CITA' : 'ESPERANDO HORA...')}
+        </button>
+        <p className="text-[9px] font-bold text-gray-400 uppercase tracking-tighter italic">
+          * Al confirmar, recibirás un email con los detalles
+        </p>
+      </div>
     </div>
-  );
+  </div>
+);
 };
 
 // ==========================================
