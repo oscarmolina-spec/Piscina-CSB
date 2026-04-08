@@ -3974,21 +3974,17 @@ const confirmarReserva = async () => {
       citaFecha: fecha,
       citaHora: hora,
 
-      // 🚩 AQUÍ ESTÁ EL TRUCO: Engañamos al sistema para que crea que 
-      // la solicitud se hizo directamente para octubre.
-      fechaSolicitud: soloFechaOctubre, 
-      createdAt: fechaFijaOctubre, // Por si mira la fecha de creación
-
+      // 🚩 LIMPIEZA TOTAL: Borramos fechaSolicitud y fechaAlta de aquí.
+      // Así el cartel azul de "Plaza Confirmada" no aparecerá todavía.
+      
       actividad: alumno.actividad || '', 
       actividadId: alumno.actividadId || '',
       dias: alumno.dias || '',
       horario: alumno.horario || '',
       
-      // 🚀 FORZAMOS EL INICIO EN TODOS LOS CAMPOS POSIBLES
-      inicioDeseado: soloFechaOctubre, 
-      fechaAlta: soloFechaOctubre,
+      // 🎯 GUARDAMOS SOLO LA PREFERENCIA (Sin confirmar nada aún)
+      inicioDeseado: "2026-10-01", 
       mesInicio: 'octubre',
-      fechaInicio: soloFechaOctubre,
       
       grupo: (alumno.dias && alumno.horario) ? `${alumno.dias} ${alumno.horario}` : ''
     });
