@@ -3984,73 +3984,70 @@ const PantallaPruebaNivel = ({ alumno, close, onSuccess, user, refresh }) => {
     consultarAforo();
   }, [fecha]);
 
-  // 4. FUNCIÓN GUARDAR RESERVA (CON CONTROL DE ALTA EN OCTUBRE)
-  const confirmarReserva = async () => {
-    if (!fecha || !hora) return alert("⚠️ Selecciona un lunes y una hora.");
+// 4. FUNCIÓN GUARDAR RESERVA (BLOQUEANDO ALTA HASTA OCTUBRE)
+const confirmarReserva = async () => {
+  if (!fecha || !hora) return alert("⚠️ Selecciona un lunes y una hora.");
+  
+  const citaTexto = `${fecha.split('-').reverse().join('/')} a las ${hora}`;
+  if (citaTexto.includes('undefined') || !citaTexto) return alert("⚠️ Error al generar la cita.");
+
+  setLoading(true);
+  try {
+    const alumnoRef = doc(db, 'students', alumno.id);
     
-    const citaTexto = `${fecha.split('-').reverse().join('/')} a las ${hora}`;
-    if (citaTexto.includes('undefined') || !citaTexto) return alert("⚠️ Error al generar la cita.");
+    // --- LÓGICA DE FECHAS INTELIGENTE ---
+    const hoy = new Date();
+    const octubre2026 = new Date('2026-10-01');
+    let fechaAltaFinal;
 
-    setLoading(true);
-    try {
-      const alumnoRef = doc(db, 'students', alumno.id);
-
-      // 🕒 Calculamos cuándo debe ser el alta
-      const hoy = new Date();
-      const octubre2026 = new Date('2026-10-01');
-      let fechaAltaFinal;
-
-      if (hoy < octubre2026) {
-        // 🎯 Si estamos antes de octubre (como ahora), alta fija el 1 de Octubre
-        fechaAltaFinal = '2026-10-01';
-      } else {
-        // 🎯 Si ya es octubre o más tarde, usa la elección del usuario
-        fechaAltaFinal = alumno.inicioDeseado || 'proximo';
-      }
-
-      await updateDoc(alumnoRef, {
-        estado: 'prueba_reservada',
-        citaNivel: citaTexto, 
-        citaFecha: fecha,
-        citaHora: hora,
-        fechaSolicitud: hoy.toISOString(),
-        actividad: alumno.actividad || '', 
-        actividadId: alumno.actividadId || '',
-        dias: alumno.dias || '',
-        horario: alumno.horario || '',
-        
-        // 🚀 APLICAMOS LA FECHA DE ALTA CORRECTA:
-        inicioDeseado: fechaAltaFinal, 
-        
-        grupo: (alumno.dias && alumno.horario) ? `${alumno.dias} ${alumno.horario}` : ''
-      });
-
-      if (user?.email) {
-        enviarEmailConfirmacion(
-          user.email, 
-          alumno.nombre, 
-          citaTexto, 
-          'cita'
-        ).catch(e => console.error(e));
-      }
-
-      if (typeof refresh === 'function') {
-        await refresh(user.uid);
-      }
-
-      close(); 
-
-      setTimeout(() => {
-        alert(`✅ Cita confirmada.\nPrueba: ${citaTexto}\nAlta del alumno: 1 de Octubre`);
-      }, 300);
-
-    } catch (e) {
-      console.error("Error crítico en reserva:", e);
-      alert("❌ Hubo un error al guardar.");
-    } finally {
-      setLoading(false);
+    if (hoy < octubre2026) {
+      // 🎯 Si estamos antes de octubre, forzamos el 1 de Octubre
+      fechaAltaFinal = '2026-10-01';
+    } else {
+      // 🎯 Si ya es octubre, usamos lo que el usuario elija
+      fechaAltaFinal = alumno.inicioDeseado || 'proximo';
     }
-  };
+
+    await updateDoc(alumnoRef, {
+      estado: 'prueba_reservada',
+      citaNivel: citaTexto, 
+      citaFecha: fecha,
+      citaHora: hora,
+      fechaSolicitud: hoy.toISOString(),
+      actividad: alumno.actividad || '', 
+      actividadId: alumno.actividadId || '',
+      dias: alumno.dias || '',
+      horario: alumno.horario || '',
+      
+      // 🚀 ESTO ES LO QUE ARREGLA TU CAPTURA:
+      inicioDeseado: fechaAltaFinal, 
+      fechaAlta: fechaAltaFinal, // También lo ponemos aquí por si acaso
+      
+      grupo: (alumno.dias && alumno.horario) ? `${alumno.dias} ${alumno.horario}` : ''
+    });
+
+    if (user?.email) {
+      enviarEmailConfirmacion(user.email, alumno.nombre, citaTexto, 'cita')
+        .catch(e => console.error(e));
+    }
+
+    if (typeof refresh === 'function') {
+      await refresh(user.uid);
+    }
+
+    close(); 
+
+    setTimeout(() => {
+      alert(`✅ Cita confirmada.\n\nPrueba: ${citaTexto}\nAlta oficial: 1 de Octubre`);
+    }, 300);
+
+  } catch (e) {
+    console.error("Error crítico en reserva:", e);
+    alert("❌ Hubo un error al guardar.");
+  } finally {
+    setLoading(false);
+  }
+};
 
   // 5. BLOQUEOS PARA ANTIGUOS ALUMNOS
   if (!alumno) return null;
