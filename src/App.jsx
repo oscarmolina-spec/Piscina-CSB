@@ -1199,7 +1199,7 @@ const confirmarInscripcion = async (alumnoId) => {
   }, []);
 
   // --- 3. FUNCIONES ---
-  // 🎯 FUNCIÓN PARA ACEPTAR DESDE PRUEBAS DE NIVEL (BLINDADA CONTRA EL 31/03)
+  // 🎯 FUNCIÓN PARA ACEPTAR DESDE PRUEBAS DE NIVEL (INTELIGENTE: RESERVA VS CURSO)
   const aceptarAlumnoDirecto = async (e, alumno) => {
     if (e && e.stopPropagation) e.stopPropagation();
 
@@ -1211,106 +1211,75 @@ const confirmarInscripcion = async (alumnoId) => {
     try {
       const alumnoRef = doc(db, 'students', alumno.id);
       
-// --- 🚩 BLOQUE DE FECHA REPARADO (DIRECTO AL ALUMNO) ---
-const hoy = new Date();
-const diaActual = hoy.getDate();
-const mesActual = hoy.getMonth() + 1;
-const añoActual = hoy.getFullYear();
+      const hoy = new Date();
+      const fechaCorteOctubre = new Date('2026-10-01');
+      let fechaParaDB = "";
 
-// 🎯 CAMBIO CLAVE: Leemos la preferencia directamente del objeto 'alumno'
-// Si no existe en el alumno, ponemos 'proximo' por defecto (porque ya es día 19/20)
-const preferencia = String(alumno.inicioDeseado || 'proximo').toLowerCase(); 
+      // 1. 🛡️ COMPROBACIÓN DE TEMPORADA (Si hoy es antes de Octubre)
+      if (hoy < fechaCorteOctubre) {
+        fechaParaDB = "2026-10-01"; // Modo Reserva: Todo al estreno del curso
+      } 
+      // 2. 🏊‍♂️ MODO CURSO ACTIVO (Si ya es Octubre o más tarde)
+      else {
+        const diaActual = hoy.getDate();
+        const mesActual = hoy.getMonth() + 1;
+        const añoActual = hoy.getFullYear();
+        const preferencia = String(alumno.inicioDeseado || 'proximo').toLowerCase();
 
-let fechaParaDB = "";
+        if (diaActual >= 20 || preferencia.includes('prox')) {
+          let mSig = mesActual + 1; let aSig = añoActual;
+          if (mSig > 12) { mSig = 1; aSig++; }
+          fechaParaDB = `${aSig}-${String(mSig).padStart(2, '0')}-01`;
+        } else {
+          fechaParaDB = hoy.toISOString().split('T')[0];
+        }
+      }
 
-// 2. REGLA DE ORO
-if (diaActual >= 20) {
-    // Si ha pasado el día 20, siempre vamos al día 1 del mes que viene
-    let mSig = mesActual + 1; let aSig = añoActual;
-    if (mSig > 12) { mSig = 1; aSig++; }
-    fechaParaDB = `${aSig}-${String(mSig).padStart(2, '0')}-01`; 
-} else {
-    // Si estamos a día 19 o 20 (como hoy):
-    if (preferencia.includes('prox')) {
-        // El usuario eligió el mes que viene
-        let mSig = mesActual + 1; let aSig = añoActual;
-        if (mSig > 12) { mSig = 1; aSig++; }
-        fechaParaDB = `${aSig}-${String(mSig).padStart(2, '0')}-01`;
-    } else {
-        // El usuario eligió inmediato
-        fechaParaDB = `${añoActual}-${String(mesActual).padStart(2, '0')}-${String(diaActual).padStart(2, '0')}`;
-    }
-}
-
-// Consola para tu control (puedes borrar los alerts antiguos)
-console.log("Preferencia leída:", preferencia, "Resultado:", fechaParaDB);
-
-// 2. REGLA DEL DÍA 20
-if (diaActual >= 20) {
-    let mSig = mesActual + 1; let aSig = añoActual;
-    if (mSig > 12) { mSig = 1; aSig++; }
-    fechaParaDB = `${aSig}-${String(mSig).padStart(2, '0')}-01`; 
-} else {
-    // Si detecta "prox", "mes" o "sig"
-    if (preferencia.includes('prox') || preferencia.includes('mes') || preferencia.includes('sig')) {
-        let mSig = mesActual + 1; let aSig = añoActual;
-        if (mSig > 12) { mSig = 1; aSig++; }
-        fechaParaDB = `${aSig}-${String(mSig).padStart(2, '0')}-01`;
-    } else {
-        fechaParaDB = `${añoActual}-${String(mesActual).padStart(2, '0')}-${String(diaActual).padStart(2, '0')}`;
-    }
-}
-
-// 🚩 ESTE ALERT ES TU RESPUESTA FINAL
-alert(`RESULTADO:\nPreferencia: ${preferencia}\nFecha asignada: ${fechaParaDB}`);
-      // 1. Actualizamos al alumno
+      // Actualizamos al alumno blindando todos los campos para el cartel azul
       await updateDoc(alumnoRef, {
         estado: 'inscrito',
         grupo: grupoDestino,
-        fechaValidacion: new Date().toISOString(),
-        fechaAlta: fechaParaDB, // 🎯 Guardará "2026-03-11" o "2026-04-01"
-        fecha_alta: fechaParaDB, // Refuerzo por si la ficha lee este campo
+        fechaValidacion: hoy.toISOString(),
+        fechaAlta: fechaParaDB, 
+        fecha_alta: fechaParaDB,
+        inicioDeseado: fechaParaDB,
+        fechaSolicitud: fechaParaDB, // 🚩 Esto es vital para el visor
         revisadoAdmin: true,
         validadoAdmin: true 
       });
 
-      // 2. ACTUALIZAMOS EL AFORO
+      // ACTUALIZAMOS EL AFORO
       const grupoRef = doc(db, 'clases', grupoDestino); 
       try {
-        await updateDoc(grupoRef, { cupo: increment(-1) });
-      } catch (errAforo) {
-        console.warn("No se pudo descontar la plaza.");
-      }
+        // await updateDoc(grupoRef, { cupo: increment(-1) });
+      } catch (errAforo) { console.warn("Aforo no actualizado"); }
 
-      // 📧 3. ENVÍO DE EMAIL (Actualizado con fecha confirmada)
+      // 📧 ENVÍO DE EMAIL
       const padreId = alumno.parentId || alumno.user;
       const emailPadre = padres[padreId]?.email || alumno.email;
-
       if (emailPadre) {
         const detalleGrupoCompleto = `${alumno.actividad} — ${alumno.dias} a las ${alumno.horario}`;
-        
-        // Pasamos 'fechaParaDB' como último argumento
         await enviarEmailConfirmacion(emailPadre, alumno.nombre, detalleGrupoCompleto, 'alta', fechaParaDB);
       }
 
-      // 🚩 4. LOG DE AUDITORÍA
+      // 🚩 LOG DE AUDITORÍA
       await addDoc(collection(db, 'logs'), {
-        fecha: new Date().getTime(),
+        fecha: hoy.getTime(),
         alumnoId: alumno.id,
         alumnoNombre: alumno.nombre,
         accion: "ACEPTAR_PRUEBA",
-        detalles: `Prueba superada. Fecha Alta: ${fechaParaDB}`,
+        detalles: `Alta confirmada para: ${fechaParaDB}`,
         adminEmail: userEmail || 'admin' 
       });
 
-      alert(`✅ ${alumno.nombre} aceptado.\n📅 Fecha de Alta grabada: ${fechaParaDB}`);
+      alert(`✅ ¡Perfecto!\nLa ficha de ${alumno.nombre} se ha activado para el: ${fechaParaDB.split('-').reverse().join('/')}`);
       window.location.reload();
 
     } catch (error) {
       console.error("Error al aceptar:", error);
       alert("No se pudo procesar: " + error.message);
     }
-};
+  };
   
   // Abrir Ficha: Combina datos del alumno con los del padre
   const abrirFicha = (alumno) => {
