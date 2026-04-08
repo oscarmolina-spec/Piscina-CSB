@@ -1857,31 +1857,34 @@ const listadoBajas = alumnos.filter(a => a.estado === 'baja_pendiente' || a.esta
      );
   })}
 </div>
-     {/* 📊 MATRIZ DE OCUPACIÓN DIARIA (CORREGIDA) */}
+     {/* 📊 MATRIZ DE OCUPACIÓN DIARIA (INTELIGENTE TEMPORADA OCTUBRE) */}
 {tab === 'ocupacion' && (
   <div className="space-y-4 animate-fade-in">
     <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
       <div className="p-4 bg-slate-800 text-white flex justify-between items-center">
-  <h3 className="text-xs font-black uppercase tracking-widest flex items-center gap-2">
-    <span>🏊‍♂️</span> Control de Aforo Diario
-  </h3>
-  
-  {/* Selector de Mes */}
-  <div className="flex bg-slate-700 p-1 rounded-lg">
-    <button 
-      onClick={() => setVistaMes('actual')}
-      className={`px-3 py-1 rounded text-[9px] font-black uppercase transition-all ${vistaMes === 'actual' ? 'bg-emerald-500 text-white' : 'text-slate-400'}`}
-    >
-      {new Date().toLocaleString('es-ES', { month: 'long' })}
-    </button>
-    <button 
-      onClick={() => setVistaMes('proximo')}
-      className={`px-3 py-1 rounded text-[9px] font-black uppercase transition-all ${vistaMes === 'proximo' ? 'bg-blue-500 text-white' : 'text-slate-400'}`}
-    >
-      {new Date(new Date().setMonth(new Date().getMonth() + 1)).toLocaleString('es-ES', { month: 'long' })}
-    </button>
-  </div>
-</div>
+        <h3 className="text-xs font-black uppercase tracking-widest flex items-center gap-2">
+          <span>🏊‍♂️</span> Control de Aforo Diario
+        </h3>
+        
+        {/* Selector de Mes Inteligente */}
+        <div className="flex bg-slate-700 p-1 rounded-lg">
+          <button 
+            onClick={() => setVistaMes('actual')}
+            className={`px-3 py-1 rounded text-[9px] font-black uppercase transition-all ${vistaMes === 'actual' ? 'bg-emerald-500 text-white' : 'text-slate-400'}`}
+          >
+            {new Date().toLocaleString('es-ES', { month: 'long' })} (Ahora)
+          </button>
+          <button 
+            onClick={() => setVistaMes('proximo')}
+            className={`px-3 py-1 rounded text-[9px] font-black uppercase transition-all ${vistaMes === 'proximo' ? 'bg-blue-500 text-white' : 'text-slate-400'}`}
+          >
+            {/* 🚩 CAMBIO CLAVE: Si hoy es antes de Octubre, forzamos el nombre a Octubre */}
+            {new Date() < new Date('2026-10-01') 
+              ? 'PREVISIÓN OCTUBRE' 
+              : new Date(new Date().setMonth(new Date().getMonth() + 1)).toLocaleString('es-ES', { month: 'long' })}
+          </button>
+        </div>
+      </div>
       
       <div className="overflow-x-auto">
         <table className="w-full text-left">
@@ -1912,78 +1915,71 @@ const listadoBajas = alumnos.filter(a => a.estado === 'baja_pendiente' || a.esta
                   <p className="text-[9px] text-gray-400 font-bold uppercase mt-0.5">Límite: {g.m}</p>
                 </td>
                 {['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'].map(dia => {
-    const ocupados = alumnos.filter(a => {
-  const coincideId = a.actividadId === g.id;
-  const coincideDia = a.dias?.toLowerCase().includes(dia.toLowerCase());
-  const listaCursos = g.cursosRelacionados || g.cursos;
-  const coincideCurso = listaCursos ? listaCursos.includes(a.curso) : true;
-  
-  if (!coincideId || !coincideDia || !coincideCurso) return false;
+                  const ocupados = alumnos.filter(a => {
+                    const coincideId = a.actividadId === g.id;
+                    const coincideDia = a.dias?.toLowerCase().includes(dia.toLowerCase());
+                    const listaCursos = g.cursosRelacionados || g.cursos;
+                    const coincideCurso = listaCursos ? listaCursos.includes(a.curso) : true;
+                    
+                    if (!coincideId || !coincideDia || !coincideCurso) return false;
 
-  // --- LÓGICA TEMPORAL 100% DINÁMICA ---
-  const hoy = new Date();
-  const proximo = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 1);
-  const mesSiguienteISO = `${proximo.getFullYear()}-${String(proximo.getMonth() + 1).padStart(2, '0')}`;
-  
-  // Limpiamos la fecha del alumno para comparar
-  const fechaAlumno = (a.fechaAlta || a.fechaInscripcion || "").toString();
-  const esAltaMesSiguiente = fechaAlumno.includes(mesSiguienteISO);
+                    // --- 🧠 NUEVA LÓGICA TEMPORAL PARA TEMPORADA DE RESERVA ---
+                    const hoy = new Date();
+                    const fechaAlu = (a.fechaAlta || a.fechaInscripcion || "").toString();
+                    const esAltaOctubre = fechaAlu.includes('2026-10');
 
-  if (vistaMes === 'actual') {
-    // VISTA ACTUAL: 
-    // 1. Solo mostramos si está inscrito o tiene baja pendiente
-    // 2. EXCLUIMOS a los que tienen fecha de alta del mes que viene (altas futuras)
-    return (a.estado === 'inscrito' || a.estado === 'baja_pendiente') && !esAltaMesSiguiente;
-  } else {
-    // PREVISIÓN MES SIGUIENTE:
-    const esBajaSolicitada = a.estado === 'baja_pendiente';
-    
-    // Si tiene baja pendiente, para el mes que viene ya no ocupa plaza (false)
-    if (esBajaSolicitada) return false; 
-    // Ocupan plaza los inscritos de siempre + los que empiezan nuevos el mes que viene
-    return a.estado === 'inscrito' || esAltaMesSiguiente;
-  }
-}).length;
+                    if (vistaMes === 'actual') {
+                      // VISTA ABRIL: Solo inscritos actuales. EXCLUIMOS a los de Octubre.
+                      return (a.estado === 'inscrito' || a.estado === 'baja_pendiente') && !esAltaOctubre;
+                    } else {
+                      // VISTA OCTUBRE (PREVISIÓN):
+                      if (hoy < new Date('2026-10-01')) {
+                        // Si estamos en pre-inscripción: Contamos los que están (y no son baja) + los de Octubre
+                        if (a.estado === 'baja_pendiente' || a.estado === 'baja_finalizada') return false;
+                        return a.estado === 'inscrito' || esAltaOctubre;
+                      } else {
+                        // Si ya pasamos Octubre: Lógica de mes siguiente normal
+                        const proximo = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 1);
+                        const mesSiguienteISO = `${proximo.getFullYear()}-${String(proximo.getMonth() + 1).padStart(2, '0')}`;
+                        if (a.estado === 'baja_pendiente') return false;
+                        return a.estado === 'inscrito' || fechaAlu.includes(mesSiguienteISO);
+                      }
+                    }
+                  }).length;
 
-// 🚩 DETECTAR SI HAY BAJAS (Para el color naranja)
-// Solo se activa en la vista actual para avisarte de huecos que se van a liberar
-const tieneBajasProximas = alumnos.some(a => {
-  const coincideId = a.actividadId === g.id;
-  const coincideDia = a.dias?.toLowerCase().includes(dia.toLowerCase());
-  const listaCursos = g.cursosRelacionados || g.cursos;
-  const coincideCurso = listaCursos ? listaCursos.includes(a.curso) : true;
-  return coincideId && coincideDia && coincideCurso && a.estado === 'baja_pendiente';
-});
-            
-const critico = ocupados >= g.m;
+                  const tieneBajasProximas = alumnos.some(a => {
+                    const coincideId = a.actividadId === g.id;
+                    const coincideDia = a.dias?.toLowerCase().includes(dia.toLowerCase());
+                    const listaCursos = g.cursosRelacionados || g.cursos;
+                    const coincideCurso = listaCursos ? listaCursos.includes(a.curso) : true;
+                    return coincideId && coincideDia && coincideCurso && a.estado === 'baja_pendiente';
+                  });
+                              
+                  const critico = ocupados >= g.m;
 
-return (
-<td key={dia} className="p-2">
-  <div 
-    onClick={() => ocupados > 0 && setFiltroRadar({ 
-      id: g.id, 
-      nombre: g.n, 
-      dia: dia, 
-      cursos: g.cursosRelacionados || g.cursos,
-      mesVista: vistaMes // Pasamos el mes para que el radar sepa qué nombres filtrar
-    })}
-    className={`h-12 rounded-xl flex flex-col items-center justify-center border-2 transition-all cursor-pointer hover:shadow-inner active:scale-95 ${
-      ocupados === 0 ? 'border-dashed border-gray-100 text-gray-200' :
-      // Prioridad 1: Naranja si hay bajas próximas (solo en vista actual)
-      (vistaMes === 'actual' && tieneBajasProximas) ? 'bg-orange-500 border-orange-600 text-white font-black shadow-md' :
-      // Prioridad 2: Rojo si está lleno
-      critico ? 'bg-red-500 border-red-600 text-white font-black shadow-md' :
-      // Prioridad 3: Ámbar si está casi lleno (>70%)
-      ocupados > (g.m * 0.7) ? 'bg-amber-50 border-amber-200 text-amber-600' : 
-      // Prioridad 4: Verde (Hueco disponible)
-      'bg-emerald-50 border-emerald-100 text-emerald-600 font-bold'
-    }`}
-  >
-    <span className="text-sm leading-none">{ocupados > 0 ? ocupados : '-'}</span>
-    {ocupados > 0 && <span className="text-[8px] mt-1 opacity-60">/{g.m}</span>}
-  </div>
-</td>
-);
+                  return (
+                    <td key={dia} className="p-2">
+                      <div 
+                        onClick={() => ocupados > 0 && setFiltroRadar({ 
+                          id: g.id, 
+                          nombre: g.n, 
+                          dia: dia, 
+                          cursos: g.cursosRelacionados || g.cursos,
+                          mesVista: vistaMes
+                        })}
+                        className={`h-12 rounded-xl flex flex-col items-center justify-center border-2 transition-all cursor-pointer hover:shadow-inner active:scale-95 ${
+                          ocupados === 0 ? 'border-dashed border-gray-100 text-gray-200' :
+                          (vistaMes === 'actual' && tieneBajasProximas) ? 'bg-orange-500 border-orange-600 text-white font-black shadow-md' :
+                          critico ? 'bg-red-500 border-red-600 text-white font-black shadow-md' :
+                          ocupados > (g.m * 0.7) ? 'bg-amber-50 border-amber-200 text-amber-600' : 
+                          'bg-emerald-50 border-emerald-100 text-emerald-600 font-bold'
+                        }`}
+                      >
+                        <span className="text-sm leading-none">{ocupados > 0 ? ocupados : '-'}</span>
+                        {ocupados > 0 && <span className="text-[8px] mt-1 opacity-60">/{g.m}</span>}
+                      </div>
+                    </td>
+                  );
                 })}
               </tr>
             ))}
