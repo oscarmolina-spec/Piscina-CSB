@@ -4078,13 +4078,14 @@ setTimeout(() => {
   alert(`✅ Cita confirmada.\nPrueba: ${citaTexto}\nGrupo: ${alumno.actividad} (${alumno.dias})`);
 }, 300);
 
-    } catch (e) {
-      console.error("Error crítico en reserva:", e);
-      alert("❌ Hubo un error al guardar.");
-    } finally {
-      setLoading(false);
-    }
-};
+} catch (e) {
+  console.error("Error crítico en reserva:", e);
+  alert("❌ Hubo un error al guardar.");
+} finally {
+  setLoading(false);
+}
+}; // <--- ¡Añade esta llave aquí para cerrar la función confirmarReserva!
+
 // 🚀 ATAJO PARA ANTIGUOS ALUMNOS (PASE VIP) - CORREGIDO
 if (alumno.natacionPasado === 'si' || alumno.esAntiguoAlumno === true) {
   return (
