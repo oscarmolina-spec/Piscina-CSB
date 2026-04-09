@@ -1273,7 +1273,10 @@ const confirmarInscripcion = async (alumnoId) => {
       });
 
       alert(`✅ ¡Perfecto!\nLa ficha de ${alumno.nombre} se ha activado para el: ${fechaParaDB.split('-').reverse().join('/')}`);
-      window.location.reload();
+      
+      // ✨ ¡MAGIA! Hemos quitado window.location.reload();
+      // Si tienes el radar de nombres abierto abajo, lo cerramos para limpiar la vista:
+      if (typeof setFiltroRadar === 'function') setFiltroRadar(null);
 
     } catch (error) {
       console.error("Error al aceptar:", error);
