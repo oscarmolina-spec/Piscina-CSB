@@ -1652,38 +1652,50 @@ const archivarBaja = async (alumno) => {
 
   // --- 4. LISTAS FILTRADAS ---
   const gruposUnicos = [...new Set(alumnos.map(a => a.actividad).filter(g => g))].sort();
-// --- 📈 LÓGICA DE PREVISIÓN + DINERO REAL (ACTUALIZADO) ---
+// --- 📈 LÓGICA DE PREVISIÓN INTELIGENTE (REPARADA) ---
 const hoyD = new Date();
-const proximoMesDate = new Date(hoyD.getFullYear(), hoyD.getMonth() + 1, 1);
-const mesSigNom = proximoMesDate.toLocaleString('es-ES', { month: 'long' });
+const mesActualNum = hoyD.getMonth() + 1; 
 
-const añoActual = hoyD.getFullYear();
-const mesSiguiente = String(proximoMesDate.getMonth() + 1).padStart(2, '0');
-const patronMesSig = `${añoActual}-${mesSiguiente}`;
+// 🎯 DETECTOR DE TEMPORADA: De Marzo a Septiembre, la previsión SIEMPRE mira a Octubre
+const esTemporadaReserva = mesActualNum >= 3 && mesActualNum <= 9;
+
+let mesSigNom = "";
+let patronMesSig = "";
+
+if (esTemporadaReserva) {
+    // 🚀 MODO RESERVA: Forzamos la vista al estreno del curso
+    mesSigNom = "octubre";
+    patronMesSig = "2026-10";
+} else {
+    // 🏊 MODO CURSO: Lógica normal de mes siguiente
+    const proximoMesDate = new Date(hoyD.getFullYear(), hoyD.getMonth() + 1, 1);
+    mesSigNom = proximoMesDate.toLocaleString('es-ES', { month: 'long' });
+    const añoRef = proximoMesDate.getFullYear();
+    const mesRef = String(proximoMesDate.getMonth() + 1).padStart(2, '0');
+    patronMesSig = `${añoRef}-${mesRef}`;
+}
 
 // 1. Limpiamos la base
 const alumnosReales = alumnos.filter(a => a.nombre && a.estado);
 
-// 2. ALTAS: Solo si su fecha de ALTA es el mes que viene
+// 2. ALTAS: Solo si su fecha de ALTA coincide con el patrón (ej: "2026-10")
 const previsAltas = alumnosReales.filter(a => 
   a.fechaAlta && String(a.fechaAlta).startsWith(patronMesSig)
 );
 
-// 3. BAJAS: Salen si su fecha de BAJA es el mes que viene
+// 3. BAJAS: Salen si su fecha de BAJA coincide con el patrón
 const previsBajas = alumnosReales.filter(a => {
   const coincideFecha = a.fechaBaja && String(a.fechaBaja).startsWith(patronMesSig);
   const esEstadoBaja = ['baja_pendiente', 'baja_finalizada'].includes(a.estado);
   return coincideFecha && esEstadoBaja;
 });
 
-// 💰 FUNCIÓN PARA BUSCAR PRECIO REAL EN TU OFERTA_ACTIVIDADES
+// 💰 FUNCIÓN PARA BUSCAR PRECIO REAL (Tu lógica original intacta)
 const obtenerPrecioReal = (alumno) => {
   if (alumno.precio) return parseInt(alumno.precio);
-
   const actividadMatch = OFERTA_ACTIVIDADES.find(act => 
     act.nombre === alumno.actividad || act.id === alumno.actividadId
   );
-
   if (actividadMatch) {
     const opcionMatch = actividadMatch.opciones?.find(op => op.dias === alumno.dias);
     if (opcionMatch) return parseInt(opcionMatch.precio);
@@ -1692,7 +1704,7 @@ const obtenerPrecioReal = (alumno) => {
   return 0;
 };
 
-// 📊 CÁLCULOS TOTALES
+// 📊 CÁLCULOS TOTALES (Basados en el mes inteligente)
 const ingresosAltas = previsAltas.reduce((total, a) => total + obtenerPrecioReal(a), 0);
 const perdidasBajas = previsBajas.reduce((total, a) => total + obtenerPrecioReal(a), 0);
 const balanceNeto = previsAltas.length - previsBajas.length;
