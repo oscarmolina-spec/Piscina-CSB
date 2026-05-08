@@ -3376,16 +3376,21 @@ const FormularioHijo = ({ close, user, refresh, alumnoAEditar = null }) => {
       <div className="bg-white p-6 rounded-2xl shadow-xl w-full max-w-md">
         <h2 className="text-xl font-bold text-blue-900 mb-4">👶 Añadir Estudiante</h2>
         
-        <div className="space-y-4">
-          <input 
-            className="w-full border p-3 rounded-lg" 
-            placeholder="Nombre y Apellidos *" 
-            onChange={e => setData({...data, nombre: e.target.value})} 
-          />
+        <div className="space-y-4 text-left">
+          {/* 1. NOMBRE */}
+          <div>
+            <label className="block text-[10px] font-black text-blue-600 uppercase mb-1 ml-1">Nombre y Apellidos *</label>
+            <input 
+              className="w-full border p-3 rounded-lg bg-gray-50 focus:bg-white outline-none" 
+              placeholder="Nombre completo" 
+              value={data.nombre}
+              onChange={e => setData({...data, nombre: e.target.value})} 
+            />
+          </div>
 
-          {/* PREGUNTA DE NATACIÓN */}
+          {/* 2. PREGUNTA DE NATACIÓN */}
           <div className="bg-blue-50 p-4 rounded-xl border border-blue-100">
-            <p className="text-sm font-bold text-blue-800 mb-2">¿Estuvo en la extraescolar de natación el curso pasado?</p>
+            <p className="text-xs font-bold text-blue-800 mb-2">¿Estuvo en la extraescolar el curso pasado?</p>
             <div className="flex gap-6">
               <label className="flex items-center gap-2 cursor-pointer">
                 <input 
@@ -3408,31 +3413,45 @@ const FormularioHijo = ({ close, user, refresh, alumnoAEditar = null }) => {
             </div>
           </div>
 
+          {/* 3. CURSO Y LETRA */}
           <div className="grid grid-cols-2 gap-2">
-            <select className="border p-3 rounded-lg" value={data.curso} onChange={e => setData({...data, curso: e.target.value})}>
-              {LISTA_CURSOS.map(c => <option key={c.val} value={c.val}>{c.label}</option>)}
-            </select>
-            <select className="border p-3 rounded-lg" value={data.letra} onChange={e => setData({...data, letra: e.target.value})}>
-              <option>A</option><option>B</option><option>C</option>
-            </select>
+            <div>
+              <label className="block text-[10px] font-black text-blue-600 uppercase mb-1 ml-1">Curso</label>
+              <select className="w-full border p-3 rounded-lg bg-gray-50" value={data.curso} onChange={e => setData({...data, curso: e.target.value})}>
+                {LISTA_CURSOS.map(c => <option key={c.val} value={c.val}>{c.label}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-[10px] font-black text-blue-600 uppercase mb-1 ml-1">Letra</label>
+              <select className="w-full border p-3 rounded-lg bg-gray-50" value={data.letra} onChange={e => setData({...data, letra: e.target.value})}>
+                <option>A</option><option>B</option><option>C</option>
+              </select>
+            </div>
           </div>
 
-          <input 
-            type="date" 
-            className="w-full border p-3 rounded-lg" 
-            onChange={e => setData({...data, fechaNacimiento: e.target.value})} 
-          />
+          {/* 4. FECHA DE NACIMIENTO */}
+          <div>
+            <label className="block text-[10px] font-black text-blue-600 uppercase mb-1 ml-1">Fecha de Nacimiento *</label>
+            <input 
+              type="date" 
+              className="w-full border p-3 rounded-lg bg-gray-50" 
+              value={data.fechaNacimiento}
+              onChange={e => setData({...data, fechaNacimiento: e.target.value})} 
+            />
+          </div>
 
-          <label className="flex items-center gap-2 text-xs text-gray-600">
-            <input type="checkbox" onChange={e => setData({...data, aceptaNormas: e.target.checked})} />
+          {/* 5. NORMAS */}
+          <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer">
+            <input type="checkbox" checked={data.aceptaNormas} onChange={e => setData({...data, aceptaNormas: e.target.checked})} />
             Acepto las normas de funcionamiento *
           </label>
 
+          {/* 6. BOTONES */}
           <div className="flex gap-3 mt-4">
-            <button onClick={close} className="flex-1 py-3 text-gray-500 font-bold">Cancelar</button>
+            <button onClick={close} className="flex-1 py-3 text-gray-500 font-bold hover:bg-gray-100 rounded-xl transition">Cancelar</button>
             <button 
               onClick={validarYGuardarAlumno} 
-              className="flex-1 bg-blue-600 text-white py-3 rounded-xl font-bold shadow-lg hover:bg-blue-700"
+              className="flex-1 bg-blue-600 text-white py-3 rounded-xl font-bold shadow-lg hover:bg-blue-700 active:scale-95 transition-all"
             >
               Guardar
             </button>
