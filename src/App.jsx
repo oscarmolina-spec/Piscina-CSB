@@ -4394,67 +4394,83 @@ const Login = ({ setView }) => {
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4 relative">
       <button onClick={() => setView('landing')} className="absolute top-4 left-4 font-bold text-gray-500 hover:text-black flex items-center gap-2">⬅ Volver al Inicio</button>
       <div className="bg-white p-8 rounded-xl shadow-xl w-full max-w-3xl mt-10 animate-fade-in-up">
-        <h2 className="text-2xl font-bold text-blue-900 text-center mb-2">Registro de Familia</h2>
-        <p className="text-center text-gray-500 text-sm mb-6">Rellena los datos para crear tu cuenta</p>
+        <h2 className="text-2xl font-black text-blue-900 text-center mb-2 uppercase tracking-tighter">Registro de Familia</h2>
+        <p className="text-center text-gray-500 text-sm mb-6 font-medium">Crea tu cuenta para gestionar las inscripciones</p>
         
         <form onSubmit={validateAndRegister} className="space-y-6">
           
           {/* 1. TIPO DE ALUMNO */}
-          <div className="flex gap-4 p-1 bg-gray-100 rounded-lg">
-            <button type="button" onClick={() => setRegData({ ...regData, tipo: 'interno' })} className={`flex-1 py-3 rounded-md font-bold text-sm transition ${regData.tipo === 'interno' ? 'bg-white shadow text-blue-900' : 'text-gray-500'}`}>🎓 Alumno del Colegio</button>
-            <button type="button" onClick={() => setRegData({ ...regData, tipo: 'externo' })} className={`flex-1 py-3 rounded-md font-bold text-sm transition ${regData.tipo === 'externo' ? 'bg-white shadow text-blue-900' : 'text-gray-500'}`}>🌍 Alumno Externo</button>
+          <div className="flex gap-4 p-1 bg-gray-100 rounded-xl">
+            <button type="button" onClick={() => setRegData({ ...regData, tipo: 'interno' })} className={`flex-1 py-3 rounded-lg font-bold text-sm transition-all ${regData.tipo === 'interno' ? 'bg-white shadow-md text-blue-900 scale-[1.02]' : 'text-gray-500 hover:text-gray-700'}`}>🎓 Alumno del Colegio</button>
+            <button type="button" onClick={() => setRegData({ ...regData, tipo: 'externo' })} className={`flex-1 py-3 rounded-lg font-bold text-sm transition-all ${regData.tipo === 'externo' ? 'bg-white shadow-md text-blue-900 scale-[1.02]' : 'text-gray-500 hover:text-gray-700'}`}>🌍 Alumno Externo</button>
           </div>
          
-
           {/* 2. DATOS CONTACTO / PAGO (SEGÚN TIPO) */}
-{/* 2. DATOS CONTACTO / PAGO (SEGÚN TIPO) */}
-{regData.tipo === 'externo' ? (
-            <div className="bg-orange-50 p-5 rounded-xl border border-orange-200 animate-fade-in">
-                <h3 className="font-bold text-orange-900 mb-3 border-b border-orange-200 pb-1">👤 Datos Completos del Pagador</h3>
+          {regData.tipo === 'externo' ? (
+            <div className="bg-orange-50 p-6 rounded-2xl border border-orange-200 animate-fade-in text-left">
+                <h3 className="font-black text-orange-900 mb-4 border-b border-orange-200 pb-2 uppercase text-xs tracking-widest">👤 Datos del Titular del Pago</h3>
                 <div className="grid md:grid-cols-2 gap-4">
-                    <input className="border p-2 rounded bg-white" placeholder="Nombre y apellidos del Titular *" onChange={e => setRegData({ ...regData, nombrePagador: e.target.value })} />
-                    <input className="border p-2 rounded bg-white" placeholder="DNI / NIE *" onChange={e => setRegData({ ...regData, dniPagador: e.target.value })} />
-                    
-                    <input className="border p-2 rounded bg-white font-bold text-blue-600" placeholder="Teléfono 1 (9 cifras) *" onChange={e => setRegData({ ...regData, telefono1: e.target.value })} />
-                    <input className="border p-2 rounded bg-white" placeholder="Teléfono 2" onChange={e => setRegData({ ...regData, telefono2: e.target.value })} />
-                    
-                    <input className="border p-2 rounded bg-white md:col-span-2" placeholder="Dirección Postal Completa *" onChange={e => setRegData({ ...regData, direccion: e.target.value })} />
-                    <div className="grid grid-cols-2 gap-2 md:col-span-2">
-                        <input className="border p-2 rounded bg-white" placeholder="CP *" onChange={e => setRegData({ ...regData, cp: e.target.value })} />
-                        <input className="border p-2 rounded bg-white" placeholder="Población *" onChange={e => setRegData({ ...regData, poblacion: e.target.value })} />
+                    <div className="md:col-span-2">
+                        <label className="block text-[10px] font-black text-orange-700 uppercase mb-1 ml-1 tracking-wider">Nombre y apellidos del Titular *</label>
+                        <input className="w-full border-2 border-orange-100 p-2.5 rounded-xl bg-white focus:border-orange-400 outline-none transition-all" placeholder="Ej: Padre/Madre/Tutor" onChange={e => setRegData({ ...regData, nombrePagador: e.target.value })} />
                     </div>
                     
-                    <input 
-  className="border p-2 rounded bg-white md:col-span-2 font-mono border-orange-300 uppercase" 
-  placeholder="IBAN (ES + 22 números) *" 
-  maxLength={24}
-  value={regData.iban || ''}
-  onChange={e => {
-    // 1. Convertimos a mayúsculas
-    // 2. Quitamos cualquier cosa que no sea letra o número
-    // 3. Quitamos espacios
-    const valor = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
-    setRegData({ ...regData, iban: valor });
-  }} 
-/>                    
+                    <div>
+                        <label className="block text-[10px] font-black text-orange-700 uppercase mb-1 ml-1 tracking-wider">DNI / NIE *</label>
+                        <input className="w-full border-2 border-orange-100 p-2.5 rounded-xl bg-white focus:border-orange-400 outline-none transition-all" placeholder="12345678X" onChange={e => setRegData({ ...regData, dniPagador: e.target.value })} />
+                    </div>
+
+                    <div>
+                        <label className="block text-[10px] font-black text-orange-700 uppercase mb-1 ml-1 tracking-wider">Teléfono Principal *</label>
+                        <input className="w-full border-2 border-orange-100 p-2.5 rounded-xl bg-white font-bold text-blue-600 focus:border-orange-400 outline-none transition-all" placeholder="600000000" onChange={e => setRegData({ ...regData, telefono1: e.target.value })} />
+                    </div>
+
+                    <div className="md:col-span-2">
+                        <label className="block text-[10px] font-black text-orange-700 uppercase mb-1 ml-1 tracking-wider">Dirección Postal Completa *</label>
+                        <input className="w-full border-2 border-orange-100 p-2.5 rounded-xl bg-white focus:border-orange-400 outline-none transition-all" placeholder="Calle, número, piso..." onChange={e => setRegData({ ...regData, direccion: e.target.value })} />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 md:col-span-2">
+                        <div>
+                            <label className="block text-[10px] font-black text-orange-700 uppercase mb-1 ml-1 tracking-wider">Código Postal *</label>
+                            <input className="w-full border-2 border-orange-100 p-2.5 rounded-xl bg-white focus:border-orange-400 outline-none transition-all" placeholder="280XX" onChange={e => setRegData({ ...regData, cp: e.target.value })} />
+                        </div>
+                        <div>
+                            <label className="block text-[10px] font-black text-orange-700 uppercase mb-1 ml-1 tracking-wider">Población *</label>
+                            <input className="w-full border-2 border-orange-100 p-2.5 rounded-xl bg-white focus:border-orange-400 outline-none transition-all" placeholder="Madrid" onChange={e => setRegData({ ...regData, poblacion: e.target.value })} />
+                        </div>
+                    </div>
+                    
+                    <div className="md:col-span-2">
+                        <label className="block text-[10px] font-black text-red-700 uppercase mb-1 ml-1 tracking-wider">IBAN Cuenta Bancaria (Para recibos) *</label>
+                        <input 
+                          className="w-full border-2 border-red-100 p-2.5 rounded-xl bg-white font-mono uppercase focus:border-red-400 outline-none transition-all" 
+                          placeholder="ES00 0000 0000 0000 0000 0000" 
+                          maxLength={24}
+                          value={regData.iban || ''}
+                          onChange={e => {
+                            const valor = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+                            setRegData({ ...regData, iban: valor });
+                          }} 
+                        />
+                    </div>
+                    
                     <div className="md:col-span-2 mt-2">
-                        <label className="text-xs font-bold text-orange-800 uppercase">Email del Pagador (Será tu Usuario) *</label>
-                        <input type="email" className="w-full border p-2 rounded bg-white font-bold text-blue-900" placeholder="ejemplo@correo.com" onChange={e => setRegData({ ...regData, emailPagador: e.target.value })} />
+                        <label className="block text-[10px] font-black text-blue-800 uppercase mb-1 ml-1 tracking-wider">Email del Pagador (Será tu Usuario) *</label>
+                        <input type="email" className="w-full border-2 border-blue-200 p-2.5 rounded-xl bg-white font-bold text-blue-900 outline-none" placeholder="ejemplo@correo.com" onChange={e => setRegData({ ...regData, emailPagador: e.target.value })} />
                     </div>
                 </div>
             </div>
           ) : (
-            <div className="bg-blue-50 p-5 rounded-xl border border-blue-100 animate-fade-in">
-                <h3 className="font-bold text-blue-900 mb-3 border-b border-blue-200 pb-1">👤 Datos de Contacto</h3>
-                <p className="text-sm text-blue-800 mb-3">Al ser alumno del centro, usaremos la cuenta bancaria que consta en secretaría.</p>
+            <div className="bg-blue-50 p-6 rounded-2xl border border-blue-100 animate-fade-in text-left">
+                <h3 className="font-black text-blue-900 mb-4 border-b border-blue-200 pb-2 uppercase text-xs tracking-widest">👤 Datos de Contacto (Interno)</h3>
+                <p className="text-xs text-blue-700 mb-4 font-medium italic">Al ser alumno del centro, usaremos la cuenta bancaria que consta en secretaría.</p>
                 <div className="space-y-4">
-                    
-                    {/* 🚩 NUEVO: Persona de contacto */}
                     <div>
-                        <label className="text-xs font-bold text-blue-800 uppercase">Persona de Contacto *</label>
+                        <label className="block text-[10px] font-black text-blue-700 uppercase mb-1 ml-1 tracking-wider">Nombre de la Persona de Contacto *</label>
                         <input 
                             type="text" 
-                            className="w-full border p-2 rounded bg-white font-bold text-blue-900" 
+                            className="w-full border-2 border-blue-100 p-2.5 rounded-xl bg-white font-bold text-blue-900 focus:border-blue-400 outline-none transition-all" 
                             placeholder="Nombre y apellidos del responsable" 
                             value={regData.personaContacto || ''}
                             onChange={e => setRegData({ ...regData, personaContacto: e.target.value })} 
@@ -4462,15 +4478,15 @@ const Login = ({ setView }) => {
                     </div>
         
                     <div>
-                        <label className="text-xs font-bold text-blue-800 uppercase">Tu Email de Contacto (Será tu Usuario) *</label>
-                        <input type="email" className="w-full border p-2 rounded bg-white font-bold text-blue-900" placeholder="ejemplo@correo.com" onChange={e => setRegData({ ...regData, emailContacto: e.target.value })} />
+                        <label className="block text-[10px] font-black text-blue-700 uppercase mb-1 ml-1 tracking-wider">Tu Email de Usuario *</label>
+                        <input type="email" className="w-full border-2 border-blue-100 p-2.5 rounded-xl bg-white font-bold text-blue-900 focus:border-blue-400 outline-none transition-all" placeholder="ejemplo@correo.com" onChange={e => setRegData({ ...regData, emailContacto: e.target.value })} />
                     </div>
         
                     <div>
-                        <label className="text-xs font-bold text-blue-800 uppercase">Teléfono Móvil (9 cifras) *</label>
+                        <label className="block text-[10px] font-black text-blue-700 uppercase mb-1 ml-1 tracking-wider">Teléfono Móvil (9 cifras) *</label>
                         <input 
                             type="tel" 
-                            className="w-full border p-2 rounded bg-white font-bold text-blue-600" 
+                            className="w-full border-2 border-blue-100 p-2.5 rounded-xl bg-white font-bold text-blue-600 focus:border-blue-400 outline-none transition-all" 
                             placeholder="600000000" 
                             value={regData.telefono1 || ''} 
                             onChange={e => setRegData(prev => ({ ...prev, telefono1: e.target.value }))} 
@@ -4478,23 +4494,28 @@ const Login = ({ setView }) => {
                     </div>
                 </div>
             </div>
-        )
-        } {/* 🚩 RECUERDA: Esta es la llave que cierra el condicional y quita el error de la contraseña */}
+          )}
 
-          {/* 4. CONTRASEÑA (SIEMPRE AL FINAL) */}
-          <div className="border-t pt-4">
-            <h3 className="font-bold text-gray-700 mb-2">🔐 Seguridad</h3>
+          {/* 4. CONTRASEÑA */}
+          <div className="border-t border-gray-100 pt-6 text-left">
+            <h3 className="font-black text-gray-700 mb-4 uppercase text-[10px] tracking-[0.2em] ml-1">🔐 Seguridad de acceso</h3>
             <div className="grid md:grid-cols-2 gap-4">
-                <input className="w-full border p-3 bg-white rounded-lg" type="password" placeholder="Contraseña *" onChange={e => setRegData({ ...regData, password: e.target.value })} />
-                <input className="w-full border p-3 bg-white rounded-lg" type="password" placeholder="Repetir Contraseña *" onChange={e => setConfirmPassword(e.target.value)} />
+                <div>
+                    <label className="block text-[10px] font-black text-gray-500 uppercase mb-1 ml-1 tracking-wider">Crea una Contraseña *</label>
+                    <input className="w-full border-2 border-gray-100 p-3 bg-white rounded-xl focus:border-blue-500 outline-none transition-all" type="password" placeholder="Mínimo 6 caracteres" onChange={e => setRegData({ ...regData, password: e.target.value })} />
+                </div>
+                <div>
+                    <label className="block text-[10px] font-black text-gray-500 uppercase mb-1 ml-1 tracking-wider">Repite la Contraseña *</label>
+                    <input className="w-full border-2 border-gray-100 p-3 bg-white rounded-xl focus:border-blue-500 outline-none transition-all" type="password" placeholder="Confirma tu clave" onChange={e => setConfirmPassword(e.target.value)} />
+                </div>
             </div>
-            <p className="text-xs text-gray-400 pl-1 mt-1">* Mínimo 6 caracteres.</p>
+            <p className="text-[9px] text-gray-400 font-bold uppercase mt-3 ml-1 tracking-widest">* Por seguridad, usa una clave que no uses en otros sitios.</p>
           </div>
 
-          <button className="w-full bg-blue-900 text-white p-4 rounded-lg font-bold hover:bg-blue-800 shadow-lg transition transform hover:scale-[1.01]">Registrar Familia</button>
+          <button className="w-full bg-blue-900 text-white p-4 rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-blue-100 hover:bg-blue-800 transition-all transform active:scale-95">Registrar Familia</button>
         </form>
         
-        <button onClick={() => setIsRegister(false)} className="w-full mt-6 text-gray-500 hover:text-blue-600 font-medium text-sm">¿Ya tienes cuenta? Inicia Sesión aquí</button>
+        <button onClick={() => setIsRegister(false)} className="w-full mt-6 text-gray-500 hover:text-blue-600 font-bold text-xs uppercase tracking-widest transition-colors">¿Ya tienes cuenta? Inicia Sesión aquí</button>
       </div>
     </div>
   );
