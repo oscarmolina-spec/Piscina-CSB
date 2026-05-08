@@ -1566,7 +1566,7 @@ const archivarBaja = async (alumno) => {
       cabecera = ['Alumno,Curso,Letra,Tipo,Actividad,Días,Horario,Fecha Alta\n'];
     }
     
-    // 2. Mapeo de datos
+    // 2. Mapeo de datos con CÁLCULO DE PRECIO REAL
     const filas = listadoGlobal.map(a => {
       const p = padres[a.parentId] || {}; 
       
@@ -1575,13 +1575,26 @@ const archivarBaja = async (alumno) => {
       const dias = (a.dias || '-').replace(/"/g, '""');
       const horario = (a.horario || '-').replace(/"/g, '""');
       const fAlta = (a.fechaAlta || '-').replace(/"/g, '""');
-      const estadoExcel = (a.estado === 'lista_espera') ? 'EN ESPERA' : 'INSCRITO';
-      // --- LÓGICA BASADA EN TU regData.tipo ---
-      // Usamos toUpperCase para que en el Excel quede profesional: "EXTERNO" o "INTERNO"
       const tipoAlumno = (p.tipo === 'externo') ? 'EXTERNO' : 'INTERNO';
 
+      // 💰 LÓGICA DE PRECIO INTELIGENTE PARA EL EXCEL
+      let precioFinal = '0';
+      if (a.precio && parseInt(a.precio) > 0) {
+        precioFinal = a.precio;
+      } else {
+        // Si es 0 o está vacío, buscamos en el catálogo de actividades
+        const actividadMatch = OFERTA_ACTIVIDADES.find(act => 
+          act.nombre === a.actividad || act.id === a.actividadId
+        );
+        if (actividadMatch) {
+          const opcionMatch = actividadMatch.opciones?.find(op => op.dias === a.dias);
+          precioFinal = opcionMatch ? opcionMatch.precio : actividadMatch.precioResumen;
+        }
+      }
+      // Limpiamos el símbolo € por si acaso para que en el Excel sea un número puro
+      precioFinal = String(precioFinal).replace('€', '').trim();
+
       if (soySuperAdmin) {
-        const precio = a.precio || '0';
         const pagador = (p.nombrePagador || '').replace(/"/g, '""');
         const iban = (p.iban || '').replace(/"/g, '""');
         const direccion = (p.direccion || '').replace(/"/g, '""');
@@ -1591,7 +1604,7 @@ const archivarBaja = async (alumno) => {
         const cp = (p.cp || '').replace(/"/g, '""');
         const pob = (p.poblacion || '').replace(/"/g, '""');
 
-        return `"${nombre}","${a.curso}","${a.letra}","${tipoAlumno}","${actividad}","${dias}","${horario}","${fAlta}","${precio}","${pagador}","${dni}","${mail}","${cp}","${pob}","${direccion}","${iban}","${tel}"`;
+        return `"${nombre}","${a.curso}","${a.letra}","${tipoAlumno}","${actividad}","${dias}","${horario}","${fAlta}","${precioFinal}","${pagador}","${dni}","${mail}","${cp}","${pob}","${direccion}","${iban}","${tel}"`;
       } else {
         return `"${nombre}","${a.curso}","${a.letra}","${tipoAlumno}","${actividad}","${dias}","${horario}","${fAlta}"`;
       }
