@@ -436,7 +436,7 @@ const LandingPage = ({ setView }) => {
         <div className="max-w-6xl mx-auto px-6">
 
           
-{/* VISTA ACTIVIDADES (CORREGIDA) */}
+{/* VISTA ACTIVIDADES (CORREGIDA Y SIN ERRORES) */}
 {tab === 'actividades' && (
   <div className="flex flex-col animate-fade-in w-full">
     
@@ -479,12 +479,22 @@ const LandingPage = ({ setView }) => {
           return true;
         })
         .map((act) => (
-          /* TARJETA CON EFECTO CRISTAL */
-          <div key={act.id} className="bg-white/70 backdrop-blur-md rounded-2xl shadow-lg overflow-hidden border border-white/40 flex flex-col hover:shadow-2xl hover:bg-white/90 transition-all duration-500 group">
+          /* 🚀 CADA TARJETA AHORA LLEVA AL LOGIN */
+          <div 
+            key={act.id} 
+            onClick={() => setView('login')}
+            className="bg-white/70 backdrop-blur-md rounded-2xl shadow-lg overflow-hidden border border-white/40 flex flex-col hover:shadow-2xl hover:bg-white/90 transition-all duration-500 group cursor-pointer transform hover:-translate-y-1"
+          >
             
             {/* Encabezado Azul con degradado cristalino */}
-            <div className="bg-gradient-to-br from-blue-600/90 to-blue-700/90 p-4 relative">
-              <h3 className="text-white font-black text-lg pr-8 text-left uppercase tracking-tight">{act.nombre}</h3>
+            <div className="bg-gradient-to-br from-blue-600/90 to-blue-700/90 p-4 relative text-left">
+              <h3 className="text-white font-black text-lg pr-8 uppercase tracking-tight">{act.nombre}</h3>
+              
+              {/* ✨ Aviso que sale al pasar el ratón */}
+              <div className="absolute top-4 right-4 text-white opacity-0 group-hover:opacity-100 transition-opacity">
+                <span className="text-[10px] font-black bg-blue-900/40 px-2 py-1 rounded-lg">ENTRAR ➔</span>
+              </div>
+
               <div className="flex flex-wrap gap-2 mt-2">
                 <span className="bg-blue-900/30 backdrop-blur-sm text-white text-[10px] px-2 py-1 rounded border border-white/10 font-mono">
                   📅 {act.diasResumen}
@@ -494,7 +504,7 @@ const LandingPage = ({ setView }) => {
                 </span>
                 {act.requierePrueba && (
                   <span className="bg-red-500 text-white text-[10px] px-2 py-1 rounded font-bold shadow-sm animate-pulse whitespace-nowrap">
-                    ❗ Requiere Prueba de Nivel
+                    ❗ Requiere Prueba
                   </span>
                 )}
               </div>
@@ -523,6 +533,11 @@ const LandingPage = ({ setView }) => {
                       {act.precioResumen}
                     </p>
                  </div>
+              </div>
+
+              {/* ✨ Botón visual extra para que quede claro que se pulsa */}
+              <div className="mt-4 py-2 bg-blue-50 text-blue-600 text-[10px] font-black uppercase tracking-widest rounded-xl text-center group-hover:bg-blue-600 group-hover:text-white transition-all border border-blue-100">
+                Inscribirme / Reservar Prueba
               </div>
             </div>
           </div>
