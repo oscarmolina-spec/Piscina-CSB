@@ -1158,7 +1158,20 @@ const AdminDashboard = ({ userRole, logout, userEmail }) => {
   const [alumnoSeleccionado, setAlumnoSeleccionado] = useState(null);
   const [vistaMes, setVistaMes] = useState('actual');
   const [radarHueco, setRadarHueco] = useState(null);
-  const soySuperAdmin = userRole === 'admin';
+  // --- 👑 JERARQUÍA DE PODERES ---
+const emailJefe = 'extraescolares@sanbuenaventura.org';
+const emailCoordinador = 'extraescolarespiscina@sanbuenaventura.org'; 
+
+const soySuperAdmin = userEmail === emailJefe;
+const soyCoordinador = userEmail === emailCoordinador;
+
+// Ambos pueden crear monitores y ver datos sensibles
+const puedeGestionarTodo = soySuperAdmin || soyCoordinador;
+
+// --- 🏊‍♂️ IDENTIFICACIÓN DEL MONITOR ---
+// Buscamos si el que ha entrado está en la lista de equipo como monitor
+const datosMonitor = equipo.find(m => m.email === userEmail);
+const soyMonitor = datosMonitor?.rol === 'monitor';
   // --- 🔔 SISTEMA DE NOTIFICACIONES PUSH (CEREBRO) ---
   const solicitarPermisoNotificaciones = async () => {
     if (!("Notification" in window)) {
@@ -1194,25 +1207,48 @@ const confirmarInscripcion = async (alumnoId) => {
 };
   // --- 2. CARGA DE DATOS (EFECTOS) ---
   useEffect(() => {
-    // Alumnos
-    const unsubStudents = onSnapshot(query(collection(db, 'students')), (s) => setAlumnos(s.docs.map(d => ({ id: d.id, ...d.data() }))));
+    // 1. Radar de Alumnos (Intacto)
+    const unsubStudents = onSnapshot(query(collection(db, 'students')), (s) => 
+      setAlumnos(s.docs.map(d => ({ id: d.id, ...d.data() })))
+    );
     
-    // Usuarios (Padres y Profes)
+    // 2. Radar de Padres (Ahora solo para familias)
     const unsubUsers = onSnapshot(query(collection(db, 'users')), (s) => {
-        const p = {}, t = [];
-        s.forEach(d => { 
-            const data = d.data();
-            p[d.id] = data; 
-            if (data.role === 'admin' || data.role === 'profe') t.push({ id: d.id, ...data });
-        });
-        setPadres(p); setEquipo(t);
+        const p = {};
+        s.forEach(d => { p[d.id] = d.data(); });
+        setPadres(p); 
     });
 
-    // Avisos
-    const unsubAvisos = onSnapshot(query(collection(db, 'avisos'), orderBy('fecha', 'desc')), (s) => setAvisos(s.docs.map(d => ({ id: d.id, ...d.data() }))));
-    return () => { unsubStudents(); unsubUsers(); unsubAvisos(); };
-  }, []);
+    // 3. 🚀 NUEVO: Radar de Equipo (Monitores y Coordinadores)
+    // Solo se activa si el usuario tiene permisos de gestión
+    let unsubEquipo = () => {};
+    if (puedeGestionarTodo) {
+      unsubEquipo = onSnapshot(query(collection(db, 'equipo'), orderBy('nombre', 'asc')), (s) => {
+        setEquipo(s.docs.map(d => ({ id: d.id, ...d.data() })));
+      });
+    }
 
+    // 4. Radar de Avisos (Intacto)
+    const unsubAvisos = onSnapshot(query(collection(db, 'avisos'), orderBy('fecha', 'desc')), (s) => 
+      setAvisos(s.docs.map(d => ({ id: d.id, ...d.data() })))
+    );
+
+    // 🧹 Limpieza al salir
+    return () => { 
+      unsubStudents(); 
+      unsubUsers(); 
+      unsubEquipo(); 
+      unsubAvisos(); 
+    };
+  }, [puedeGestionarTodo]); // 🚩 IMPORTANTE: Añadimos esto para que se refresque si cambian los permisos
+// 🏊‍♂️ FILTRO DE ALUMNOS PARA EL MONITOR (NUEVO)
+  // ---------------------------------------------------------
+  const alumnosAsignados = alumnos.filter(alumno => {
+    if (!soyMonitor) return false; // Si no es monitor, la lista está vacía
+    const susGrupos = datosMonitor?.gruposAsignados || [];
+    return susGrupos.includes(alumno.actividad) && alumno.estado === 'inscrito';
+  });
+ 
   // --- 3. FUNCIONES ---
   // 🎯 FUNCIÓN PARA ACEPTAR DESDE PRUEBAS DE NIVEL (INTELIGENTE: RESERVA VS CURSO)
   const aceptarAlumnoDirecto = async (e, alumno) => {
@@ -1874,28 +1910,33 @@ const listadoBajas = alumnos.filter(a => a.estado === 'baja_pendiente' || a.esta
           `}
         >
             <span className="text-sm">
-              {t === 'global' && '👥'}
-              {t === 'ocupacion' && '📊'}
-              {t === 'pruebas' && '🎯'}
-              {t === 'espera' && '⏳'}
-              {t === 'prevision' && '📈'} {/* 🚩 Icono de Previsión */}
-              {t === 'bajas' && '📉'}
-              {t === 'equipo' && '🛡️'}
-              {t === 'avisos' && '📢'}
-            </span>
+  {t === 'global' && '👥'}
+  {t === 'ocupacion' && '📊'}
+  {t === 'pruebas' && '🎯'}
+  {t === 'espera' && '⏳'}
+  {t === 'prevision' && '📈'} 
+  {t === 'bajas' && '📉'}
+  {t === 'equipo' && '🛡️'}
+  {t === 'avisos' && '📢'}
+  {t === 'mis_clases' && '🏊‍♂️'} {/* 👈 AÑADE ESTA LÍNEA */}
+</span>
             
-            <span>
-              {t === 'ocupacion' ? 'PLAZAS' : t === 'espera' ? 'ESPERA' : t === 'prevision' ? 'PREVISIÓN' : t.toUpperCase()}
-            </span>
+<span>
+  {t === 'ocupacion' ? 'PLAZAS' : 
+   t === 'espera' ? 'ESPERA' : 
+   t === 'prevision' ? 'PREVISIÓN' : 
+   t === 'mis_clases' ? 'MIS CLASES' : // 👈 Esta es la "traducción"
+   t.toUpperCase()}
+</span>
 
-            {count > 0 && (
-              <span className={`
-                text-white text-[9px] px-1.5 py-0.5 rounded-full shadow-sm
-                ${t === 'espera' ? 'bg-amber-500' : t === 'prevision' ? 'bg-indigo-600' : 'bg-red-500'}
-              `}>
-                {count}
-              </span>
-            )}
+{count > 0 && (
+  <span className={`
+    text-white text-[9px] px-1.5 py-0.5 rounded-full shadow-sm
+    ${t === 'espera' ? 'bg-amber-500' : t === 'prevision' ? 'bg-indigo-600' : 'bg-red-500'}
+  `}>
+    {count}
+  </span>
+)}
         </button>
      );
   })}
@@ -2560,12 +2601,204 @@ const listadoBajas = alumnos.filter(a => a.estado === 'baja_pendiente' || a.esta
 )}
 
       {/* TABS EXTRA */}
-      {tab === 'equipo' && userRole === 'admin' && (
-          <div className="grid md:grid-cols-2 gap-4">
-              <div className="bg-white p-4 rounded shadow"><h3 className="font-bold mb-2">Crear Usuario</h3><p className="text-sm text-gray-500">Para añadir coordinadores o profesores, usa la consola de Firebase Authentication.</p></div>
-              <div className="bg-white p-4 rounded shadow"><h3 className="font-bold mb-2">Equipo Actual</h3>{equipo.map(u => (<div key={u.id} className="flex justify-between items-center border-b py-2"><span>{u.email} <small className="text-gray-500">({u.role})</small></span><button onClick={() => borrarMiembroEquipo(u)} className="text-red-500">🗑️</button></div>))}</div>
-          </div>
+      {/* 👥 PESTAÑA DE EQUIPO Y MONITORES (VERSIÓN PRO) */}
+{tab === 'equipo' && puedeGestionarTodo && (
+  <div className="animate-fade-in space-y-6">
+    
+    {/* 1. PANEL DE ALTA RÁPIDA */}
+    <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 text-left">
+      <h2 className="text-xl font-black text-blue-900 uppercase tracking-tighter mb-4 flex items-center gap-2">
+        <span>🚀</span> Registro de Monitores
+      </h2>
+      
+      <form onSubmit={async (e) => {
+    e.preventDefault();
+    const nombre = e.target.nombre.value;
+    const email = e.target.email.value.toLowerCase().trim();
+    const password = e.target.password.value; // 👈 Capturamos la clave que tú inventes
+    
+    if(!nombre || !email || !password) return alert("⚠️ ¡Ups! Falta información. Nombre, email y clave son obligatorios.");
+    if(password.length < 6) return alert("⚠️ La contraseña debe tener al menos 6 caracteres.");
+
+    try {
+      await addDoc(collection(db, 'equipo'), {
+        nombre,
+        email,
+        password, // 👈 Se guarda en la ficha del monitor
+        rol: 'monitor',
+        gruposAsignados: [],
+        fechaAlta: new Date().toISOString(),
+        creadoPor: userEmail
+      });
+      alert(`✅ ¡Monitor creado!\n\nEmail: ${email}\nContraseña: ${password}`);
+      e.target.reset();
+    } catch (err) {
+      alert("❌ Error al guardar: " + err.message);
+    }
+  }} className="grid md:grid-cols-4 gap-4 items-end"> {/* 👈 Ahora son 4 columnas */}
+    <div>
+      <label className="block text-[10px] font-black text-blue-600 uppercase mb-1 ml-1 tracking-widest">Nombre del Profesor</label>
+      <input name="nombre" className="w-full border-2 border-gray-50 p-3 rounded-xl bg-gray-50 focus:bg-white outline-none focus:border-blue-500 transition-all" placeholder="Ej: Manuel García" />
+    </div>
+    <div>
+      <label className="block text-[10px] font-black text-blue-600 uppercase mb-1 ml-1 tracking-widest">Email de Acceso</label>
+      <input name="email" type="email" className="w-full border-2 border-gray-50 p-3 rounded-xl bg-gray-50 focus:bg-white outline-none focus:border-blue-500 transition-all" placeholder="profe@escuela.com" />
+    </div>
+    <div>
+      <label className="block text-[10px] font-black text-blue-600 uppercase mb-1 ml-1 tracking-widest">Contraseña Privada</label>
+      <input name="password" type="text" className="w-full border-2 border-gray-50 p-3 rounded-xl bg-gray-50 focus:bg-white outline-none focus:border-blue-500 transition-all" placeholder="Escribe una clave" />
+    </div>
+    <button type="submit" className="bg-blue-600 text-white p-4 rounded-xl font-black uppercase text-[10px] tracking-widest shadow-lg hover:bg-blue-700 transition-all active:scale-95">
+      Crear Monitor
+    </button>
+</form>
+    </div>
+
+    {/* 2. TABLA DE GESTIÓN Y ASIGNACIÓN */}
+    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+      <div className="p-4 border-b border-gray-50 bg-gray-50/50 flex justify-between items-center">
+        <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Miembros del Equipo</h3>
+        <span className="bg-blue-100 text-blue-600 text-[9px] font-black px-2 py-1 rounded-full uppercase">
+          {equipo.length} Personas
+        </span>
+      </div>
+      
+      <div className="divide-y divide-gray-50">
+        {/* 👑 1. TÚ (SUPER ADMIN) */}
+  <div className="p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gray-900 border-l-4 border-amber-500 mb-1 rounded-r-xl">
+    <div className="text-left">
+      <div className="flex items-center gap-2">
+        <p className="font-bold text-white text-sm">Director de Extraescolares</p>
+        <span className="bg-amber-500 text-white text-[8px] font-black px-1.5 py-0.5 rounded uppercase">Super Admin</span>
+      </div>
+      <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-0.5">extraescolares@sanbuenaventura.org</p>
+    </div>
+    <div className="text-xl">👑</div>
+  </div>
+
+  {/* 🛡️ 2. TU MANO DERECHA (EL COORDINADOR) */}
+  <div className="p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-blue-50 border-l-4 border-blue-600 mb-1 rounded-r-xl">
+    <div className="text-left">
+      <div className="flex items-center gap-2">
+        <p className="font-bold text-blue-900 text-sm">Coordinador de Piscina</p>
+        <span className="bg-blue-600 text-white text-[8px] font-black px-1.5 py-0.5 rounded">MANO DERECHA</span>
+      </div>
+      <p className="text-[10px] text-blue-400 font-bold uppercase mt-0.5">
+        extraescolarespiscina@sanbuenaventura.org <span className="text-amber-600 ml-2">🔑 CSB123456</span>
+      </p>
+    </div>
+    <div className="text-xl">⭐</div>
+  </div>
+        {equipo.length === 0 ? (
+          <div className="p-10 text-center text-gray-400 italic text-sm">No hay nadie en el equipo... ¡Añade al primero arriba!</div>
+        ) : (
+          equipo.map((miembro) => (
+            <div key={miembro.id} className="p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:bg-gray-50/50 transition-colors">
+              <div className="text-left min-w-[200px]">
+                <p className="font-bold text-gray-800">{miembro.nombre || 'Sin nombre'}</p>
+                <p className="text-[10px] text-gray-400 font-bold uppercase tracking-tighter">{miembro.email}</p>
+              </div>
+              
+              {/* 🏊 CLASES ASIGNADAS */}
+              <div className="flex-1 flex flex-wrap gap-1.5 justify-start">
+                {miembro.gruposAsignados?.length > 0 ? (
+                  miembro.gruposAsignados.map(g => (
+                    <span key={g} className="bg-blue-50 text-blue-600 text-[8px] font-black px-2 py-1 rounded-md border border-blue-100 uppercase">
+                      {g}
+                    </span>
+                  ))
+                ) : (
+                  <span className="text-[10px] text-gray-300 italic">Sin clases asignadas</span>
+                )}
+                
+                <button 
+                  onClick={() => {
+                    const grupo = prompt("Escribe el nombre del grupo para este monitor (Ej: Primaria 16:15 L-M):");
+                    if (grupo) {
+                      const actuales = miembro.gruposAsignados || [];
+                      updateDoc(doc(db, 'equipo', miembro.id), { gruposAsignados: [...actuales, grupo] });
+                    }
+                  }}
+                  className="text-[9px] font-black text-blue-500 hover:bg-blue-50 px-2 py-1 rounded-md border border-dashed border-blue-200 transition-colors"
+                >
+                  + ASIGNAR GRUPO
+                </button>
+              </div>
+
+              <button 
+                onClick={() => borrarMiembroEquipo(miembro)} 
+                className="text-gray-300 hover:text-red-500 transition-colors p-2 text-xl"
+                title="Eliminar del equipo"
+              >
+                🗑️
+              </button>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  </div>
+)}
+{/* 🏊‍♂️ PESTAÑA: MIS CLASES (PARA EL MONITOR) */}
+{tab === 'mis_clases' && (
+  <div className="animate-fade-in space-y-6">
+    {/* Cabecera */}
+    <div className="text-left bg-gradient-to-r from-blue-600 to-blue-400 p-6 rounded-3xl shadow-lg">
+      <h2 className="text-2xl font-black text-white uppercase tracking-tighter">🌊 Mis Clases</h2>
+      <p className="text-blue-100 text-sm font-medium">Panel de control para monitores de natación</p>
+    </div>
+
+    {/* Lista de Grupos */}
+    <div className="grid gap-6">
+      {datosMonitor?.gruposAsignados?.length > 0 ? (
+        datosMonitor.gruposAsignados.map(nombreGrupo => {
+          // Filtramos los alumnos que tienen esta actividad asignada
+          const alumnosDelGrupo = alumnos.filter(a => a.actividad === nombreGrupo && a.estado === 'inscrito');
+
+          return (
+            <div key={nombreGrupo} className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden text-left">
+              <div className="bg-gray-50 p-4 border-b border-gray-100 flex justify-between items-center">
+                <h3 className="font-black text-blue-900 uppercase text-xs tracking-widest">
+                  {nombreGrupo}
+                </h3>
+                <span className="bg-blue-100 text-blue-700 text-[10px] font-black px-3 py-1 rounded-full">
+                  {alumnosDelGrupo.length} ALUMNOS
+                </span>
+              </div>
+              
+              <div className="divide-y divide-gray-50">
+
+                {alumnosDelGrupo.length > 0 ? (
+                  alumnosDelGrupo.map(al => (
+                    <div key={al.id} className="p-4 flex justify-between items-center hover:bg-blue-50/50 transition-colors">
+                      <div>
+                        <p className="font-bold text-gray-800">{al.nombre}</p>
+                        <p className="text-[10px] text-gray-400 font-black uppercase tracking-tighter">
+                          {al.curso} {al.letra} | {al.tipo === 'interno' ? '🏫 COLEGIO' : '🌍 EXTERNO'}
+                        </p>
+                      </div>
+                      <div className="flex gap-2">
+                         {/* Aquí en el futuro podrías añadir un botón de "Pasar lista" */}
+                         <span className="text-[9px] font-black text-blue-500 border border-blue-200 px-2 py-1 rounded uppercase">Vigente</span>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <p className="p-8 text-center text-gray-400 italic text-sm">No hay alumnos todavía en este grupo.</p>
+                )}
+              </div>
+            </div>
+          );
+        })
+      ) : (
+        <div className="bg-amber-50 p-12 rounded-3xl border-2 border-dashed border-amber-200 text-center">
+          <p className="text-amber-700 font-black uppercase tracking-widest">⚠️ Sin clases asignadas</p>
+          <p className="text-amber-600 text-xs mt-2">Dile al coordinador que te asigne grupos en el panel de equipo.</p>
+        </div>
       )}
+    </div>
+  </div>
+)}
       {tab === 'avisos' && (<div className="p-4 bg-white rounded shadow"><form onSubmit={agregarAviso} className="flex gap-2 mb-4"><input className="border p-2 flex-1 rounded" value={nuevoAviso} onChange={e => setNuevoAviso(e.target.value)} placeholder="Escribe un aviso..." /><button className="bg-blue-600 text-white px-4 rounded font-bold">Publicar</button></form>{avisos.map(a => (<div key={a.id} className="bg-yellow-50 p-2 mb-2 border border-yellow-200 flex justify-between rounded"><span>{a.texto}</span>{userRole === 'admin' && <button onClick={() => borrarAviso(a.id)} className="text-red-500 font-bold ml-2">x</button>}</div>))}</div>)}
 
       {/* COMPONENTE VISUAL: LA FICHA QUE SE ABRE */}
@@ -4399,11 +4632,45 @@ const Login = ({ setView }) => {
     }
   };
 
-  const handleAuth = async (e) => { 
-      e.preventDefault(); 
-      try { await signInWithEmailAndPassword(auth, loginData.email, loginData.password); } 
-      catch (e) { alert("Error: Usuario o contraseña incorrectos."); } 
-  };
+  const handleAuth = async (e) => {
+    e.preventDefault();
+    const email = loginData.email?.toLowerCase().trim();
+    const pass = loginData.password;
+
+    if (!email || !pass) return alert("⚠️ Escribe tu email y contraseña");
+
+    try {
+      await signInWithEmailAndPassword(auth, email, pass);
+    } catch (error) {
+      if (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential') {
+        
+        let miembro = null;
+
+        // 1. REGLA PARA TU COORDINADOR (CON TU NUEVA CLAVE)
+        if (email === 'extraescolarespiscina@sanbuenaventura.org' && pass === 'CSB123456') {
+          miembro = { nombre: 'Coordinador Piscina', email: email };
+        } 
+        
+        // 2. REGLA PARA TUS MONITORES (SIGUE FUNCIONANDO IGUAL)
+        if (!miembro) {
+          miembro = equipo.find(m => m.email === email && m.password === pass);
+        }
+
+        if (miembro) {
+          try {
+            await createUserWithEmailAndPassword(auth, email, pass);
+            return;
+          } catch (regError) {
+            alert("Error al activar acceso: " + regError.message);
+          }
+        } else {
+          alert("⚠️ Email o contraseña incorrectos.");
+        }
+      } else {
+        alert("⚠️ Error: " + error.message);
+      }
+    }
+};
 
   if (isRegister) return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4 relative">
@@ -4616,15 +4883,19 @@ function AppContent() {
       if (u) {
         console.log("Usuario detectado:", u.email); // Para depurar
 
-        // 👑 1. BACKDOOR DEL SUPER ADMIN (Prioridad Máxima)
-        // Comprobamos el email directamente ANTES de llamar a la base de datos
-        // Usamos toLowerCase() para evitar errores de mayúsculas
-        if (u.email && u.email.toLowerCase() === ADMIN_EMAIL.toLowerCase()) {
-            console.log("👑 Acceso Super Admin concedido por Email Directo");
+        // 👑 1. BACKDOOR DE JEFES (Super Admin y Coordinador)
+        const emailLimpio = u.email ? u.email.toLowerCase() : "";
+        
+        // Emails que tienen permiso total
+        const emailJefe = 'extraescolares@sanbuenaventura.org';
+        const emailManoDerecha = 'extraescolarespiscina@sanbuenaventura.org';
+
+        if (emailLimpio === emailJefe || emailLimpio === emailManoDerecha) {
+            console.log("🚀 Acceso de Gestión concedido por Email Directo");
             setUser(u);
-            setUserRole('admin');
-            setView('admin');
-            return; // ¡Entramos y cortamos aquí! No leemos DB para evitar errores.
+            setUserRole('admin'); // Le damos el carnet de admin
+            setView('admin');      // Lo mandamos a la habitación de los jefes
+            return; // ¡Listo! No seguimos buscando
         }
 
         try {
@@ -4640,12 +4911,12 @@ function AppContent() {
             setUserRole(role);
 
             // 3. Redirección según rol encontrado en BD
-            if (role === 'admin' || role === 'profe') {
-                setView('admin');
-            } else {
-                await cargarHijos(u.uid);
-                setView('dashboard');
-            }
+        if (role === 'admin' || role === 'profe' || role === 'monitor') { // 👈 Añadimos 'monitor'
+          setView('admin');
+      } else {
+          await cargarHijos(u.uid);
+          setView('dashboard');
+      }
 
         } catch (error) {
             console.error("Error al leer perfil:", error);
