@@ -1534,27 +1534,74 @@ const validarPlaza = async (alumno) => {
   // 📉 GESTIÓN DE BAJAS (LÓGICA CORREGIDA)
   // ---------------------------------------------------------
 
-  // A) TRAMITAR: Calcula fecha y la deja en la lista (Estado GRIS)
-  const tramitarBaja = async (alumno) => {
-    if (userRole !== 'admin') return alert("⛔ Solo coordinadores.");
-    
-    // 1. Calcular fecha (Regla día 25)
-    const hoy = new Date();
-    const mesesASumar = hoy.getDate() > 25 ? 2 : 1;
-    const fechaObj = new Date(hoy.getFullYear(), hoy.getMonth() + mesesASumar, 1);
-    
-    const y = fechaObj.getFullYear();
-    const m = String(fechaObj.getMonth() + 1).padStart(2, '0');
-    const d = String(fechaObj.getDate()).padStart(2, '0');
-    const fechaCalculada = `${y}-${m}-${d}`;
+ // A) TRAMITAR: Calcula fecha y la deja en la lista (Estado GRIS)
+ const tramitarBaja = async (alumno) => {
+  if (userRole !== 'admin') return alert("⛔ Solo coordinadores.");
+  
+  // 1. Calcular fecha (Regla día 25)
+  const hoy = new Date();
+  const mesesASumar = hoy.getDate() > 25 ? 2 : 1;
+  const fechaObj = new Date(hoy.getFullYear(), hoy.getMonth() + mesesASumar, 1);
+  
+  const y = fechaObj.getFullYear();
+  const m = String(fechaObj.getMonth() + 1).padStart(2, '0');
+  const d = String(fechaObj.getDate()).padStart(2, '0');
+  const fechaCalculada = `${y}-${m}-${d}`;
 
-    // 2. Confirmar y Guardar (NO BORRAMOS, SOLO CAMBIAMOS ESTADO)
-    if (confirm(`📉 ¿Aceptar baja de ${alumno.nombre}?\n\n📅 Fecha efectiva: ${fechaCalculada}\n\n(Se quedará en la lista como "TRAMITADA" para que tengas constancia)`)) {
-        await updateDoc(doc(db, 'students', alumno.id), {
-            estado: 'baja_finalizada', // 👈 ESTO ES LO QUE LA MANTIENE VISIBLE
-            fechaBaja: fechaCalculada
-        });
-    }
+  // 2. Confirmar y Guardar (NO BORRAMOS, SOLO CAMBIAMOS ESTADO)
+  if (confirm(`📉 ¿Aceptar baja de ${alumno.nombre}?\n\n📅 Fecha efectiva: ${fechaCalculada}\n\n(Se quedará en la lista como "TRAMITADA" para que tengas constancia)`)) {
+      try {
+          // Guardamos en la base de datos del alumno
+          await updateDoc(doc(db, 'students', alumno.id), {
+              estado: 'baja_finalizada', 
+              fechaBaja: fechaCalculada
+          });
+
+          // 📧 ENVIAR CORREO AUTOMÁTICO DE BAJA CONFIRMADA
+          // Buscamos el email de la familia (sea interno o externo)
+          const emailDestino = alumno.emailContacto || alumno.emailPagador;
+
+          if (emailDestino) {
+              await addDoc(collection(db, 'mail'), {
+                  to: emailDestino,
+                  message: {
+                      subject: 'Confirmación de baja - Extraescolares Piscina San Buenaventura 🏊‍♂️',
+                      html: `
+                          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e5e7eb; border-radius: 12px;">
+                              <h2 style="color: #1e3a8a; margin-top: 0;">Hola,</h2>
+                              <p style="font-size: 14px; color: #374151; line-height: 1.5;">
+                                  Te escribimos para confirmarte que hemos tramitado correctamente la solicitud de baja en la actividad de natación para el alumno: 
+                                  <strong>${alumno.nombre}</strong>.
+                              </p>
+                              <div style="background-color: #f3f4f6; padding: 15px; border-radius: 8px; margin: 20px 0;">
+                                  <p style="margin: 0; font-size: 11px; color: #4b5563; font-weight: bold; text-transform: uppercase; tracking-wider: 0.05em;">Detalles del trámite:</p>
+                                  <p style="margin: 5px 0 0 0; font-size: 14px; color: #1f2937;"><strong>Actividad:</strong> Piscina Extraescolar</p>
+                                  <p style="margin: 5px 0 0 0; font-size: 14px; color: #1f2937;"><strong>Fecha de efecto:</strong> ${fechaCalculada}</p>
+                                  <p style="margin: 5px 0 0 0; font-size: 14px; color: #1f2937;"><strong>Estado:</strong> Baja Tramitada Correctamente</p>
+                              </div>
+                              <p style="font-size: 14px; color: #374151; line-height: 1.5;">
+                                  Sentimos mucho que no puedas continuar con nosotros esta vez. ¡Esperamos volver a verte muy pronto en el agua! 🌊
+                              </p>
+                              <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;" />
+                              <p style="font-size: 11px; color: #9ca3af; font-weight: bold; text-transform: uppercase;">
+                                  Coordinación de Actividades Extraescolares - Colegio San Buenaventura
+                              </p>
+                          </div>
+                      `
+                  }
+              });
+              console.log("📧 ¡Correo de baja enviado a la cola con éxito!");
+          } else {
+              console.log("⚠️ No se envió correo porque el alumno no tiene emailContacto ni emailPagador.");
+          }
+
+          alert("✅ Baja tramitada y correo de confirmación enviado a la familia.");
+
+      } catch (error) {
+          console.error("❌ Error en el proceso de baja:", error);
+          alert("❌ Hubo un error al tramitar la baja: " + error.message);
+      }
+  }
 };
 
 // B) ARCHIVAR: Borrar definitivamente de la lista
