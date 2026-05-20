@@ -1534,11 +1534,10 @@ const validarPlaza = async (alumno) => {
   // 📉 GESTIÓN DE BAJAS (LÓGICA CORREGIDA)
   // ---------------------------------------------------------
 
-// A) TRAMITAR: Calcula fecha y la deja en la lista (Estado GRIS) con Email Corregido
+// A) TRAMITAR: Calcula fecha, lee datos frescos de la DB y envía el Email
 const tramitarBaja = async (alumno) => {
   if (userRole !== 'admin') return alert("⛔ Solo coordinadores.");
   
-  // 1. Calcular fecha (Regla día 25)
   const hoy = new Date();
   const mesesASumar = hoy.getDate() > 25 ? 2 : 1;
   const fechaObj = new Date(hoy.getFullYear(), hoy.getMonth() + mesesASumar, 1);
@@ -1547,24 +1546,31 @@ const tramitarBaja = async (alumno) => {
   const m = String(fechaObj.getMonth() + 1).padStart(2, '0');
   const d = String(fechaObj.getDate()).padStart(2, '0');
   const fechaCalculada = `${y}-${m}-${d}`;
-  const fechaFormateada = `${d}/${m}/${y}`; // Fecha bonita para el correo
+  const fechaFormateada = `${d}/${m}/${y}`;
 
-  // 2. Confirmar y Guardar (NO BORRAMOS, SOLO CAMBIAMOS ESTADO)
   if (confirm(`📉 ¿Aceptar baja de ${alumno.nombre}?\n\n📅 Fecha efectiva: ${fechaCalculada}\n\n(Se enviará un correo de confirmación a la familia)`)) {
       try {
-          // Guardamos en la base de datos del alumno
+          // 🏠 1. Forzamos la actualización del estado del alumno
           await updateDoc(doc(db, 'students', alumno.id), {
               estado: 'baja_finalizada', 
               fechaBaja: fechaCalculada
           });
 
-          // 📧 ENVIAR CORREO AUTOMÁTICO DE BAJA CONFIRMADA
-          // Buscamos el email de la familia en las 3 opciones posibles
-          const emailDestino = alumno.emailContacto || alumno.emailPagador || alumno.email;
+          // 🔍 2. ¡OPERACIÓN RESCATE! Nos traemos la ficha completa del alumno directa de Firestore
+          const alumnoDoc = await getDoc(doc(db, 'students', alumno.id));
+          let emailDestino = null;
 
+          if (alumnoDoc.exists()) {
+              const datosFrescos = alumnoDoc.data();
+              // Buscamos el email en los datos recién descargados de la base de datos
+              emailDestino = datosFrescos.emailContacto || datosFrescos.emailPagador || datosFrescos.email;
+              console.log("🎯 Email recuperado de la base de datos:", emailDestino);
+          }
+
+          // 📧 3. SI TENEMOS EMAIL, ENVIAMOS A LA COLA DE FIREBASE
           if (emailDestino) {
               await addDoc(collection(db, 'mail'), {
-                  to: [emailDestino], // 👈 ¡AHORA SÍ CON LOS CORCHETES QUE PIDE FIREBASE!
+                  to: [emailDestino],
                   message: {
                       subject: `📉 Confirmación de Baja: ${alumno.nombre}`,
                       html: `
@@ -1573,24 +1579,18 @@ const tramitarBaja = async (alumno) => {
                                  🏊 Tramitación de Baja Efectiva
                               </h2>
                               <p>Hola familia de <strong>${alumno.nombre}</strong>,</p>
-                              
                               <p>Te escribimos para confirmarte que hemos procesado correctamente la solicitud de baja en la actividad de natación extraescolar.</p>
 
                               <div style="background: #FEF2F2; padding: 15px; border-radius: 10px; margin: 20px 0; border: 1px solid #FCA5A5;">
-                                  <p style="margin: 0; color: #991B1B; font-weight: bold;">
-                                      📍 Detalles del Trámite:
-                                  </p>
+                                  <p style="margin: 0; color: #991B1B; font-weight: bold;">📍 Detalles del Trámite:</p>
                                   <p style="margin: 10px 0 0 0; font-size: 16px;"><strong>Alumno:</strong> ${alumno.nombre}</p>
-                                  <p style="margin: 5px 0 0 0; font-size: 16px; color: #b91c1c;">
-                                      <strong>📅 Fecha de efecto:</strong> ${fechaFormateada}
-                                  </p>
+                                  <p style="margin: 5px 0 0 0; font-size: 16px; color: #b91c1c;"><strong>📅 Fecha de efecto:</strong> ${fechaFormateada}</p>
                                   <p style="margin: 5px 0 0 0; font-size: 14px; color: #4b5563;"><strong>Estado:</strong> Baja Tramitada Correctamente</p>
                               </div>
 
                               <p style="font-size: 14px; color: #374151; line-height: 1.5;">
                                   Sentimos mucho que no puedas continuar con nosotros este trimestre. ¡Esperamos volver a verte muy pronto con las gafas de bucear puestas! 🌊
                               </p>
-
                               <p style="margin-top: 25px;">Saludos,<br><strong>Coordinación de Extraescolares CSB</strong></p>
                               <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;" />
                               <p style="font-size: 11px; color: #999;">Este es un mensaje automático generado por el sistema de gestión de piscina.</p>
@@ -1598,9 +1598,9 @@ const tramitarBaja = async (alumno) => {
                       `
                   }
               });
-              console.log("📧 ¡Correo de baja enviado a la cola con éxito!");
+              console.log("📧 ¡Documento inyectado en la colección 'mail' de Firebase con éxito!");
           } else {
-              console.log("⚠️ No se envió correo porque el alumno no tiene ningún email válido.");
+              console.log("⚠️ No se creó el documento en 'mail' porque el alumno no posee un correo electrónico en su documento de Firestore.");
           }
 
           alert("✅ Baja tramitada y correo de confirmación enviado a la familia.");
