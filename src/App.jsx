@@ -1534,8 +1534,8 @@ const validarPlaza = async (alumno) => {
   // 📉 GESTIÓN DE BAJAS (LÓGICA CORREGIDA)
   // ---------------------------------------------------------
 
- // A) TRAMITAR: Calcula fecha y la deja en la lista (Estado GRIS)
- const tramitarBaja = async (alumno) => {
+// A) TRAMITAR: Calcula fecha y la deja en la lista (Estado GRIS) con Email Corregido
+const tramitarBaja = async (alumno) => {
   if (userRole !== 'admin') return alert("⛔ Solo coordinadores.");
   
   // 1. Calcular fecha (Regla día 25)
@@ -1547,9 +1547,10 @@ const validarPlaza = async (alumno) => {
   const m = String(fechaObj.getMonth() + 1).padStart(2, '0');
   const d = String(fechaObj.getDate()).padStart(2, '0');
   const fechaCalculada = `${y}-${m}-${d}`;
+  const fechaFormateada = `${d}/${m}/${y}`; // Fecha bonita para el correo
 
   // 2. Confirmar y Guardar (NO BORRAMOS, SOLO CAMBIAMOS ESTADO)
-  if (confirm(`📉 ¿Aceptar baja de ${alumno.nombre}?\n\n📅 Fecha efectiva: ${fechaCalculada}\n\n(Se quedará en la lista como "TRAMITADA" para que tengas constancia)`)) {
+  if (confirm(`📉 ¿Aceptar baja de ${alumno.nombre}?\n\n📅 Fecha efectiva: ${fechaCalculada}\n\n(Se enviará un correo de confirmación a la familia)`)) {
       try {
           // Guardamos en la base de datos del alumno
           await updateDoc(doc(db, 'students', alumno.id), {
@@ -1558,41 +1559,48 @@ const validarPlaza = async (alumno) => {
           });
 
           // 📧 ENVIAR CORREO AUTOMÁTICO DE BAJA CONFIRMADA
-          // Buscamos el email de la familia (sea interno o externo)
-          const emailDestino = alumno.emailContacto || alumno.emailPagador;
+          // Buscamos el email de la familia en las 3 opciones posibles
+          const emailDestino = alumno.emailContacto || alumno.emailPagador || alumno.email;
 
           if (emailDestino) {
               await addDoc(collection(db, 'mail'), {
-                  to: emailDestino,
+                  to: [emailDestino], // 👈 ¡AHORA SÍ CON LOS CORCHETES QUE PIDE FIREBASE!
                   message: {
-                      subject: 'Confirmación de baja - Extraescolares Piscina San Buenaventura 🏊‍♂️',
+                      subject: `📉 Confirmación de Baja: ${alumno.nombre}`,
                       html: `
-                          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e5e7eb; border-radius: 12px;">
-                              <h2 style="color: #1e3a8a; margin-top: 0;">Hola,</h2>
-                              <p style="font-size: 14px; color: #374151; line-height: 1.5;">
-                                  Te escribimos para confirmarte que hemos tramitado correctamente la solicitud de baja en la actividad de natación para el alumno: 
-                                  <strong>${alumno.nombre}</strong>.
-                              </p>
-                              <div style="background-color: #f3f4f6; padding: 15px; border-radius: 8px; margin: 20px 0;">
-                                  <p style="margin: 0; font-size: 11px; color: #4b5563; font-weight: bold; text-transform: uppercase; tracking-wider: 0.05em;">Detalles del trámite:</p>
-                                  <p style="margin: 5px 0 0 0; font-size: 14px; color: #1f2937;"><strong>Actividad:</strong> Piscina Extraescolar</p>
-                                  <p style="margin: 5px 0 0 0; font-size: 14px; color: #1f2937;"><strong>Fecha de efecto:</strong> ${fechaCalculada}</p>
-                                  <p style="margin: 5px 0 0 0; font-size: 14px; color: #1f2937;"><strong>Estado:</strong> Baja Tramitada Correctamente</p>
+                          <div style="font-family: sans-serif; padding: 20px; color: #333; border: 1px solid #ddd; border-radius: 15px; max-width: 600px;">
+                              <h2 style="color: #dc2626; border-bottom: 2px solid #dc2626; padding-bottom: 10px; margin-top: 0;">
+                                 🏊 Tramitación de Baja Efectiva
+                              </h2>
+                              <p>Hola familia de <strong>${alumno.nombre}</strong>,</p>
+                              
+                              <p>Te escribimos para confirmarte que hemos procesado correctamente la solicitud de baja en la actividad de natación extraescolar.</p>
+
+                              <div style="background: #FEF2F2; padding: 15px; border-radius: 10px; margin: 20px 0; border: 1px solid #FCA5A5;">
+                                  <p style="margin: 0; color: #991B1B; font-weight: bold;">
+                                      📍 Detalles del Trámite:
+                                  </p>
+                                  <p style="margin: 10px 0 0 0; font-size: 16px;"><strong>Alumno:</strong> ${alumno.nombre}</p>
+                                  <p style="margin: 5px 0 0 0; font-size: 16px; color: #b91c1c;">
+                                      <strong>📅 Fecha de efecto:</strong> ${fechaFormateada}
+                                  </p>
+                                  <p style="margin: 5px 0 0 0; font-size: 14px; color: #4b5563;"><strong>Estado:</strong> Baja Tramitada Correctamente</p>
                               </div>
+
                               <p style="font-size: 14px; color: #374151; line-height: 1.5;">
-                                  Sentimos mucho que no puedas continuar con nosotros esta vez. ¡Esperamos volver a verte muy pronto en el agua! 🌊
+                                  Sentimos mucho que no puedas continuar con nosotros este trimestre. ¡Esperamos volver a verte muy pronto con las gafas de bucear puestas! 🌊
                               </p>
-                              <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;" />
-                              <p style="font-size: 11px; color: #9ca3af; font-weight: bold; text-transform: uppercase;">
-                                  Coordinación de Actividades Extraescolares - Colegio San Buenaventura
-                              </p>
+
+                              <p style="margin-top: 25px;">Saludos,<br><strong>Coordinación de Extraescolares CSB</strong></p>
+                              <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;" />
+                              <p style="font-size: 11px; color: #999;">Este es un mensaje automático generado por el sistema de gestión de piscina.</p>
                           </div>
                       `
                   }
               });
               console.log("📧 ¡Correo de baja enviado a la cola con éxito!");
           } else {
-              console.log("⚠️ No se envió correo porque el alumno no tiene emailContacto ni emailPagador.");
+              console.log("⚠️ No se envió correo porque el alumno no tiene ningún email válido.");
           }
 
           alert("✅ Baja tramitada y correo de confirmación enviado a la familia.");
