@@ -1534,7 +1534,7 @@ const validarPlaza = async (alumno) => {
   // 📉 GESTIÓN DE BAJAS (LÓGICA CORREGIDA)
   // ---------------------------------------------------------
 
-// A) TRAMITAR: Calcula fecha, lee datos frescos de la DB y envía el Email
+// A) TRAMITAR: Busca el email en el usuario Padre y envía el correo con éxito
 const tramitarBaja = async (alumno) => {
   if (userRole !== 'admin') return alert("⛔ Solo coordinadores.");
   
@@ -1550,24 +1550,36 @@ const tramitarBaja = async (alumno) => {
 
   if (confirm(`📉 ¿Aceptar baja de ${alumno.nombre}?\n\n📅 Fecha efectiva: ${fechaCalculada}\n\n(Se enviará un correo de confirmación a la familia)`)) {
       try {
-          // 🏠 1. Forzamos la actualización del estado del alumno
+          // 1. Actualizamos el estado del alumno a baja
           await updateDoc(doc(db, 'students', alumno.id), {
               estado: 'baja_finalizada', 
               fechaBaja: fechaCalculada
           });
 
-          // 🔍 2. ¡OPERACIÓN RESCATE! Nos traemos la ficha completa del alumno directa de Firestore
-          const alumnoDoc = await getDoc(doc(db, 'students', alumno.id));
           let emailDestino = null;
 
+          // 2. ¡OPERACIÓN RESCATE DEL PADRE! 
+          // Buscamos primero en el alumno por si acaso
+          const alumnoDoc = await getDoc(doc(db, 'students', alumno.id));
           if (alumnoDoc.exists()) {
-              const datosFrescos = alumnoDoc.data();
-              // Buscamos el email en los datos recién descargados de la base de datos
-              emailDestino = datosFrescos.emailContacto || datosFrescos.emailPagador || datosFrescos.email;
-              console.log("🎯 Email recuperado de la base de datos:", emailDestino);
+              const datosAlumno = alumnoDoc.data();
+              emailDestino = datosAlumno.emailContacto || datosAlumno.emailPagador || datosAlumno.email;
+              
+              // 3. Si el alumno no lo tiene, lo buscamos en la cuenta del Padre usando su parentId
+              if (!emailDestino && datosAlumno.parentId) {
+                  console.log("🔍 Buscando email en la cuenta del padre con UID:", datosAlumno.parentId);
+                  const padreDoc = await getDoc(doc(db, 'users', datosAlumno.parentId));
+                  if (padreDoc.exists()) {
+                      const datosPadre = padreDoc.data();
+                      // Buscamos cualquier campo de email que tenga el padre guardado
+                      emailDestino = datosPadre.emailContacto || datosPadre.emailPagador || datosPadre.email;
+                  }
+              }
           }
 
-          // 📧 3. SI TENEMOS EMAIL, ENVIAMOS A LA COLA DE FIREBASE
+          console.log("🎯 Email final encontrado para enviar:", emailDestino);
+
+          // 4. SI YA TENEMOS EL EMAIL, CREAMOS EL PAPELITO EN FIREBASE
           if (emailDestino) {
               await addDoc(collection(db, 'mail'), {
                   to: [emailDestino],
@@ -1598,12 +1610,12 @@ const tramitarBaja = async (alumno) => {
                       `
                   }
               });
-              console.log("📧 ¡Documento inyectado en la colección 'mail' de Firebase con éxito!");
+              console.log("🚀 ¡Perfecto! Documento de correo creado en la colección 'mail'.");
           } else {
-              console.log("⚠️ No se creó el documento en 'mail' porque el alumno no posee un correo electrónico en su documento de Firestore.");
+              console.log("⚠️ Alerta: No se encontró ningún email ni en el alumno ni en el usuario padre.");
           }
 
-          alert("✅ Baja tramitada y correo de confirmación enviado a la familia.");
+          alert("✅ Baja tramitada correctamente.");
 
       } catch (error) {
           console.error("❌ Error en el proceso de baja:", error);
