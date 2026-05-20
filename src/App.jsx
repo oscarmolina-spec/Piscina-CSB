@@ -2331,6 +2331,27 @@ const listadoBajas = alumnos.filter(a => a.estado === 'baja_pendiente' || a.esta
                 <p className="text-[10px] text-red-600 font-black uppercase tracking-tight">
                   {a.actividad} <span className="text-gray-400 mx-1">•</span> {a.dias || 'Día no indicado'}
                 </p>
+
+                {/* 📅 CONTROL DE FECHAS SEGURO (NUEVO) */}
+                <div className="mt-2 grid grid-cols-2 gap-2 bg-gray-50 p-1.5 rounded-lg border border-gray-200/60 w-56">
+                  <div>
+                    <span className="block text-[8px] font-black text-gray-400 uppercase">📩 Solicitada:</span>
+                    <span className="text-[10px] font-bold text-blue-900">
+                      {a.fechaSolicitudBaja 
+                        ? a.fechaSolicitudBaja.split('-').reverse().join('/') 
+                        : 'No marcada'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="block text-[8px] font-black text-gray-400 uppercase">📅 Efectiva:</span>
+                    <span className="text-[10px] font-bold text-red-600">
+                      {a.fechaBaja 
+                        ? a.fechaBaja.split('-').reverse().join('/') 
+                        : 'Por tramitar'}
+                    </span>
+                  </div>
+                </div>
+
               </div>
               <div className="text-right">
                 <p className="text-red-500 font-bold text-xs">-{obtenerPrecioReal(a)}€</p>
@@ -2467,7 +2488,7 @@ const listadoBajas = alumnos.filter(a => a.estado === 'baja_pendiente' || a.esta
     </div>
 )}
 
-     {/* TAB: BAJAS (AHORA SE PUEDE ABRIR LA FICHA) */}
+     {/* TAB: BAJAS (AHORA SE PUEDE ABRIR LA FICHA CON FECHAS SEGURAS) */}
      {tab === 'bajas' && (
           <div className="bg-white rounded shadow overflow-hidden">
               <table className="w-full text-sm text-left">
@@ -2475,7 +2496,7 @@ const listadoBajas = alumnos.filter(a => a.estado === 'baja_pendiente' || a.esta
                       <tr>
                           <th className="p-3">Alumno</th>
                           <th className="p-3">Estado</th>
-                          <th className="p-3">Fecha Baja</th>
+                          <th className="p-3">Fecha Baja Efectiva</th>
                           <th className="p-3 text-right">Acción</th>
                       </tr>
                   </thead>
@@ -2493,6 +2514,15 @@ const listadoBajas = alumnos.filter(a => a.estado === 'baja_pendiente' || a.esta
                               <td className="p-3 font-bold">
                                   {a.nombre}
                                   <div className="text-xs font-normal opacity-75">{a.actividad}</div>
+                                  
+                                  {/* 📩 NUEVO: Fecha en la que la familia pulsó el botón */}
+                                  <div className="text-[11px] text-blue-700 font-medium mt-0.5">
+                                    📩 Solicitada: {a.fechaSolicitudBaja 
+  ? (a.fechaSolicitudBaja.includes('T') 
+      ? a.fechaSolicitudBaja.split('T')[0].split('-').reverse().join('/') 
+      : a.fechaSolicitudBaja.split('-').reverse().join('/'))
+  : 'No registrada'}
+                                  </div>
                               </td>
                               <td className="p-3">
                                   {a.estado === 'baja_pendiente' 
@@ -2501,7 +2531,9 @@ const listadoBajas = alumnos.filter(a => a.estado === 'baja_pendiente' || a.esta
                                   }
                               </td>
                               <td className="p-3 font-mono text-xs font-bold">
-                                  {a.fechaBaja || '-'}
+                                  {a.fechaBaja 
+                                    ? a.fechaBaja.split('-').reverse().join('/') 
+                                    : 'Por calcular'}
                               </td>
                               <td className="p-3 text-right">
                                   {a.estado === 'baja_pendiente' ? (
