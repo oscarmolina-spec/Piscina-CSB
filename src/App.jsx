@@ -417,8 +417,7 @@ const LandingPage = ({ setView }) => {
       {/* NAV TABS */}
       <div className="sticky top-0 z-40 bg-white shadow-md border-b">
         <div className="max-w-4xl mx-auto flex">
-          {['actividades', 'info', 'instalaciones'].map(t => (
-            <button
+{['actividades', 'info', 'instalaciones', 'tutorial'].map(t => (            <button
               key={t}
               onClick={() => setTab(t)}
               className={`flex-1 py-4 font-bold text-sm uppercase border-b-4 transition-colors ${
@@ -434,7 +433,33 @@ const LandingPage = ({ setView }) => {
       {/* CONTENT AREA */}
       <div className="flex-1 bg-gray-50 py-10">
         <div className="max-w-6xl mx-auto px-6">
+{/* 📹 NUEVA VISTA: REPRODUCTOR DEL VIDEOTUTORIAL DE INSCRIPCIÓN */}
+          {tab === 'tutorial' && (
+            <div className="max-w-3xl mx-auto animate-fade-in text-center space-y-6">
+              <div>
+                <h3 className="text-2xl font-black text-gray-800 flex items-center justify-center gap-2">
+                  📹 Videotutorial de Inscripción
+                </h3>
+                <p className="text-sm text-gray-500 mt-1">
+                  Te guiamos paso a paso para que puedas inscribir a tus hijos de forma fácil y rápida.
+                </p>
+              </div>
 
+              {/* REPRODUCTOR DE VÍDEO CONECTADO A STORAGE */}
+              <div className="bg-white p-4 rounded-3xl shadow-xl border border-gray-100 overflow-hidden">
+                <video 
+                  src="https://firebasestorage.googleapis.com/v0/b/piscina-sanbuenaventura.firebasestorage.app/o/Inscripci%C3%B3n%20piscina.mp4?alt=media&token=5e916f7d-52b0-4a1c-90cb-a969bd7836fd" 
+                  controls 
+                  className="w-full rounded-2xl shadow-inner border border-gray-100"
+                  poster="https://firebasestorage.googleapis.com/v0/b/piscina-sanbuenaventura.firebasestorage.app/o/colegio%20buena%20-%20Editad apng?alt=media&token=707d9103-533f-4460-b719-1274b2004031" // Imagen de fondo sutil antes de dar al play
+                />
+              </div>
+
+              <div className="bg-blue-50 border border-blue-100 p-4 rounded-2xl text-xs text-blue-900 font-medium max-w-xl mx-auto">
+                💡 <strong>¿Tienes alguna duda extra?</strong> Si tras ver el vídeo sigues necesitando ayuda, puedes acudir a la pestaña de "Información" para ver los teléfonos de contacto. ¡Al agua patos!
+              </div>
+            </div>
+          )}
           
 {/* VISTA ACTIVIDADES (CORREGIDA Y SIN ERRORES) */}
 {tab === 'actividades' && (
