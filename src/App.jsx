@@ -294,6 +294,28 @@ const OFERTA_ACTIVIDADES = [
 // 📧 UTILIDADES Y FUNCIONES DE AYUDA
 // ==========================================
 
+// Ayudante dinámico para obtener el año académico actual/siguiente
+const getDynamicAcademicYear = () => {
+  const today = new Date();
+  const currentYear = today.getFullYear();
+  // El año académico de natación comienza el 1 de octubre.
+  // Si estamos antes de octubre (meses 0 a 8 en JS), la temporada comienza el 1 de octubre de este año.
+  // Si estamos en octubre o después (meses 9 a 11 en JS), comienza el 1 de octubre del año que viene.
+  const startYear = today.getMonth() < 9 ? currentYear : currentYear + 1;
+  return {
+    startYear,
+    isoStartDate: `${startYear}-10-01`,
+    formattedStartDate: `01/10/${startYear}`,
+    rawPattern: `${startYear}-10`
+  };
+};
+
+// Sistema global de Toasts Premium
+let globalShowToast = (msg, type) => { console.log("Toast: ", msg, type); };
+const showToast = (message, type = 'success') => {
+  globalShowToast(message, type);
+};
+
 // Calcular los próximos 4 lunes para las pruebas de nivel
 const getNextMondays = () => {
   const d = new Date();
@@ -391,11 +413,10 @@ const LandingPage = ({ setView }) => {
         </div>
         <div className="relative z-20 text-center px-4 max-w-4xl mx-auto flex flex-col items-center">
         <img src={IMG_ESCUDO_BLANCO} className="h-28 mx-auto mb-6 drop-shadow-2xl" alt="Escudo" />
-        <h1 className="text-4xl md:text-6xl font-black mb-4 text-white leading-tight
-  [text-shadow:_2px_2px_0_#2563eb,_-2px_-2px_0_#2563eb,_2px_-2px_0_#2563eb,_-2px_2px_0_#2563eb,_0_4px_6px_rgba(0,0,0,0.3)]">
-  Natación colegio <br /> 
-  <span className="tracking-tight">San Buenaventura</span>
-</h1>
+        <h1 className="text-4xl md:text-6xl font-black mb-4 text-white leading-tight [text-shadow:_2px_2px_0_#2563eb,_-2px_-2px_0_#2563eb,_2px_-2px_0_#2563eb,_-2px_2px_0_#2563eb,_0_4px_6px_rgba(0,0,0,0.3)]">
+          Natación colegio <br /> 
+          <span className="tracking-tight">San Buenaventura</span>
+        </h1>
           
           {/* 👇 AQUÍ ESTÁN LAS FRASES QUE FALTABAN 👇 */}
           <p className="text-xl md:text-2xl font-light mb-2 drop-shadow-sm opacity-90">
@@ -1200,7 +1221,7 @@ const soyMonitor = datosMonitor?.rol === 'monitor';
   // --- 🔔 SISTEMA DE NOTIFICACIONES PUSH (CEREBRO) ---
   const solicitarPermisoNotificaciones = async () => {
     if (!("Notification" in window)) {
-      alert("Este navegador no soporta notificaciones de escritorio.");
+      showToast("Este navegador no soporta notificaciones de escritorio.", "warning");
       return;
     }
     const permiso = await Notification.requestPermission();
@@ -1227,7 +1248,7 @@ const confirmarInscripcion = async (alumnoId) => {
     await updateDoc(alumnoRef, { revisadoAdmin: true });
   } catch (error) {
     console.error("Error al confirmar:", error);
-    alert("No se pudo confirmar el grupo.");
+    showToast("No se pudo confirmar el grupo.", "error");
   }
 };
   // --- 2. CARGA DE DATOS (EFECTOS) ---
@@ -1280,7 +1301,7 @@ const confirmarInscripcion = async (alumnoId) => {
     if (e && e.stopPropagation) e.stopPropagation();
 
     const grupoDestino = alumno.actividad || 'Sin asignar';
-    if (grupoDestino === 'Sin asignar') return alert("⚠️ El alumno no tiene un grupo asignado.");
+    if (grupoDestino === 'Sin asignar') return showToast("El alumno no tiene un grupo asignado.", "warning");
 
     if (!confirm(`¿Inscribir a ${alumno.nombre} en ${grupoDestino}?`)) return;
 
@@ -1288,21 +1309,22 @@ const confirmarInscripcion = async (alumnoId) => {
       const alumnoRef = doc(db, 'students', alumno.id);
       
       const hoy = new Date();
-      const fechaCorteOctubre = new Date('2026-10-01');
+      const mesActual = hoy.getMonth() + 1; // 1-12
+      const esPeriodoReserva = mesActual >= 6 && mesActual <= 9;
+      const academicInfo = getDynamicAcademicYear();
       let fechaParaDB = "";
 
-      // 1. 🛡️ COMPROBACIÓN DE TEMPORADA (Si hoy es antes de Octubre)
-      if (hoy < fechaCorteOctubre) {
-        fechaParaDB = "2026-10-01"; // Modo Reserva: Todo al estreno del curso
+      // 1. 🛡️ COMPROBACIÓN DE TEMPORADA (Si hoy es periodo de reserva de junio a septiembre)
+      if (esPeriodoReserva) {
+        fechaParaDB = academicInfo.isoStartDate; // Modo Reserva: Todo al estreno del curso
       } 
-      // 2. 🏊‍♂️ MODO CURSO ACTIVO (Si ya es Octubre o más tarde)
+      // 2. 🏊‍♂️ MODO CURSO ACTIVO (Si ya es Octubre a Mayo)
       else {
         const diaActual = hoy.getDate();
-        const mesActual = hoy.getMonth() + 1;
         const añoActual = hoy.getFullYear();
         const preferencia = String(alumno.inicioDeseado || 'proximo').toLowerCase();
 
-        if (diaActual >= 20 || preferencia.includes('prox')) {
+        if (diaActual > 20 || preferencia.includes('prox')) {
           let mSig = mesActual + 1; let aSig = añoActual;
           if (mSig > 12) { mSig = 1; aSig++; }
           fechaParaDB = `${aSig}-${String(mSig).padStart(2, '0')}-01`;
@@ -1348,7 +1370,7 @@ const confirmarInscripcion = async (alumnoId) => {
         adminEmail: userEmail || 'admin' 
       });
 
-      alert(`✅ ¡Perfecto!\nLa ficha de ${alumno.nombre} se ha activado para el: ${fechaParaDB.split('-').reverse().join('/')}`);
+      showToast(`¡Perfecto! La ficha de ${alumno.nombre} se ha activado para el: ${fechaParaDB.split('-').reverse().join('/')}`, "success");
       
       // ✨ ¡MAGIA! Hemos quitado window.location.reload();
       // Si tienes el radar de nombres abierto abajo, lo cerramos para limpiar la vista:
@@ -1356,7 +1378,7 @@ const confirmarInscripcion = async (alumnoId) => {
 
     } catch (error) {
       console.error("Error al aceptar:", error);
-      alert("No se pudo procesar: " + error.message);
+      showToast("No se pudo procesar: " + error.message, "error");
     }
   };
   
@@ -1452,7 +1474,11 @@ const obtenerInfoAlta = () => {
   const mesSiguienteNom = proximoMesDate.toLocaleString('es-ES', { month: 'long' });
   const fechaTecnicaProximoMes = proximoMesDate.toISOString().split('T')[0];
 
+  const mesActualNum = hoy.getMonth() + 1; // 1-12
+  const esPeriodoReserva = mesActualNum >= 6 && mesActualNum <= 9;
+
   return {
+    esPeriodoReserva,
     diaCortePasado: diaActual > 20,
     mesActual: mesActualNom,
     mesSiguiente: mesSiguienteNom,
@@ -1463,7 +1489,7 @@ const obtenerInfoAlta = () => {
   };
 };
 const validarPlaza = async (alumno) => {
-  if (userRole !== 'admin') return alert("⛔ Solo coordinadores.");
+  if (userRole !== 'admin') return showToast("Solo coordinadores.", "error");
   
   // 1. 🔍 BUSCADOR DE IDs (Limpiado)
   let actId = alumno.actividadId;
@@ -1486,13 +1512,17 @@ const validarPlaza = async (alumno) => {
   let fechaParaDB = "";
   let textoInicioReal = "";
 
-  if (info.diaCortePasado) {
+  if (info.esPeriodoReserva) {
+      const academicInfo = getDynamicAcademicYear();
+      fechaParaDB = academicInfo.isoStartDate;
+      textoInicioReal = `Inicio de Curso (${academicInfo.formattedStartDate})`;
+  } else if (info.diaCortePasado) {
       // CASO A: Día 21 al 31 -> Siempre 1 del mes que viene
       const proximo = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 1);
       fechaParaDB = `${proximo.getFullYear()}-${String(proximo.getMonth() + 1).padStart(2, '0')}-01`;
       textoInicioReal = info.fechaInicioSiguiente;
   } else {
-      // CASO B: Día 1 al 20 (Hoy es 6 de marzo)
+      // CASO B: Día 1 al 20
       if (alumno.inicioDeseado === 'inmediato') {
           fechaParaDB = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-${String(hoy.getDate()).padStart(2, '0')}`;
           textoInicioReal = `Inmediato (Mes de ${info.mesActual})`;
@@ -1527,14 +1557,14 @@ const validarPlaza = async (alumno) => {
       // 📧 4. EMAIL
       if (emailPadre) {
         try {
-          await addDoc(collection(db, 'mail'), {
-            to: emailPadre,
-            message: {
-              subject: `✅ Alta confirmada - Natación: ${alumno.nombre}`,
-              html: `<p>Hola, el alta de <strong>${alumno.nombre}</strong> es efectiva para: <strong>${textoInicioReal}</strong>.</p>`
-            }
-          });
-        } catch (e) { console.warn("Email falló"); }
+          await enviarEmailConfirmacion(
+            emailPadre, 
+            alumno.nombre, 
+            `${alumno.actividad || 'Natación'} — ${alumno.dias || ''} ${alumno.horario || ''}`, 
+            'alta', 
+            fechaParaDB
+          );
+        } catch (e) { console.warn("Email falló: ", e); }
       }
 
       // 📜 5. LOGS
@@ -1547,11 +1577,11 @@ const validarPlaza = async (alumno) => {
         adminEmail: userEmail || 'admin'
       });
 
-      alert(`✅ GUARDADO CON ÉXITO\n\nFecha Alta: ${fechaParaDB}`);
-      window.location.reload(); 
+      showToast(`GUARDADO CON ÉXITO. Fecha Alta: ${fechaParaDB}`, "success");
+      // La recarga ya no es necesaria gracias al listener en tiempo real onSnapshot
 
   } catch (error) {
-      alert("❌ Error: " + error.message);
+      showToast("Error: " + error.message, "error");
   }
 };
 
@@ -1561,7 +1591,7 @@ const validarPlaza = async (alumno) => {
 
 // A) TRAMITAR: Busca el email en el usuario Padre y envía el correo con éxito
 const tramitarBaja = async (alumno) => {
-  if (userRole !== 'admin') return alert("⛔ Solo coordinadores.");
+  if (userRole !== 'admin') return showToast("Solo coordinadores.", "error");
   
   const hoy = new Date();
   const mesesASumar = hoy.getDate() > 25 ? 2 : 1;
@@ -1581,26 +1611,9 @@ const tramitarBaja = async (alumno) => {
               fechaBaja: fechaCalculada
           });
 
-          let emailDestino = null;
-
-          // 2. ¡OPERACIÓN RESCATE DEL PADRE! 
-          // Buscamos primero en el alumno por si acaso
-          const alumnoDoc = await getDoc(doc(db, 'students', alumno.id));
-          if (alumnoDoc.exists()) {
-              const datosAlumno = alumnoDoc.data();
-              emailDestino = datosAlumno.emailContacto || datosAlumno.emailPagador || datosAlumno.email;
-              
-              // 3. Si el alumno no lo tiene, lo buscamos en la cuenta del Padre usando su parentId
-              if (!emailDestino && datosAlumno.parentId) {
-                  console.log("🔍 Buscando email en la cuenta del padre con UID:", datosAlumno.parentId);
-                  const padreDoc = await getDoc(doc(db, 'users', datosAlumno.parentId));
-                  if (padreDoc.exists()) {
-                      const datosPadre = padreDoc.data();
-                      // Buscamos cualquier campo de email que tenga el padre guardado
-                      emailDestino = datosPadre.emailContacto || datosPadre.emailPagador || datosPadre.email;
-                  }
-              }
-          }
+          // 2. BÚSQUEDA OPTIMIZADA A COSTE CERO DEL EMAIL DEL PADRE
+          const padreId = alumno.parentId || alumno.user;
+          const emailDestino = padres[padreId]?.email || padres[padreId]?.emailContacto || padres[padreId]?.emailPagador || alumno.emailContacto || alumno.emailPagador || alumno.email || null;
 
           console.log("🎯 Email final encontrado para enviar:", emailDestino);
 
@@ -1640,11 +1653,11 @@ const tramitarBaja = async (alumno) => {
               console.log("⚠️ Alerta: No se encontró ningún email ni en el alumno ni en el usuario padre.");
           }
 
-          alert("✅ Baja tramitada correctamente.");
+          showToast("✅ Baja tramitada correctamente.", "success");
 
       } catch (error) {
           console.error("❌ Error en el proceso de baja:", error);
-          alert("❌ Hubo un error al tramitar la baja: " + error.message);
+          showToast("❌ Hubo un error al tramitar la baja: " + error.message, "error");
       }
   }
 };
@@ -1656,7 +1669,9 @@ const archivarBaja = async (alumno) => {
         await updateDoc(doc(db, 'students', alumno.id), {
             estado: 'sin_inscripcion', // Aquí desaparece de la lista
             actividad: null, dias: null, horario: null, precio: null,
-            citaId: null, validadoAdmin: null, fechaSolicitudBaja: null
+            citaId: null, citaNivel: null, citaFecha: null, citaHora: null,
+            validadoAdmin: null, fechaSolicitudBaja: null,
+            fechaAlta: null, fechaBaja: null, grupo: null, revisadoAdmin: null
         });
     }
 };
@@ -1674,7 +1689,7 @@ const archivarBaja = async (alumno) => {
     e.preventDefault(); 
     
     // 1. Comprobamos que eres admin
-    if (userRole !== 'admin') return alert("⛔ Solo coordinadores pueden crear usuarios.");
+    if (userRole !== 'admin') return showToast("⛔ Solo coordinadores pueden crear usuarios.", "error");
     
     setLoadingStaff(true); 
     try { 
@@ -1688,17 +1703,17 @@ const archivarBaja = async (alumno) => {
             createdAt: new Date().toISOString()
         });
 
-        alert(`✅ Usuario ${newStaff.email} creado.\n⚠️ IMPORTANTE: Firebase ha iniciado sesión con el nuevo usuario automáticamente. Cierra sesión y vuelve a entrar como Admin.`);
+        showToast(`✅ Usuario ${newStaff.email} creado. Cierra sesión y entra como Admin.`, "success");
         setNewStaff({ email: '', password: '', role: 'profe' }); 
 
     } catch (error) { 
         console.error(error);
-        alert("❌ Error: " + error.message); 
+        showToast("❌ Error: " + error.message, "error"); 
     } finally { 
         setLoadingStaff(false); 
     } 
 };
-  const borrarMiembroEquipo = async (miembro) => { if (miembro.email === userEmail) return alert("No puedes borrarte a ti mismo"); if (confirm("¿Borrar usuario?")) await deleteDoc(doc(db, 'users', miembro.id)); };
+  const borrarMiembroEquipo = async (miembro) => { if (miembro.email === userEmail) return showToast("No puedes borrarte a ti mismo", "warning"); if (confirm("¿Borrar usuario?")) await deleteDoc(doc(db, 'users', miembro.id)); };
   
   const descargarExcel = () => {
     // 1. Cabeceras
@@ -1803,7 +1818,7 @@ const archivarBaja = async (alumno) => {
     });
 
     await Promise.all(promesas);
-    alert("¡Sincronización de IDs y Días completada!");
+    showToast("¡Sincronización de IDs y Días completada!", "success");
 };
 
   // --- 4. LISTAS FILTRADAS ---
@@ -1834,9 +1849,9 @@ if (esTemporadaReserva) {
 // 1. Limpiamos la base
 const alumnosReales = alumnos.filter(a => a.nombre && a.estado);
 
-// 2. ALTAS: Solo si su fecha de ALTA coincide con el patrón (ej: "2026-10")
+// 2. ALTAS: Solo si su fecha de ALTA coincide con el patrón (ej: "2026-10") y están inscritos
 const previsAltas = alumnosReales.filter(a => 
-  a.fechaAlta && String(a.fechaAlta).startsWith(patronMesSig)
+  a.estado === 'inscrito' && a.fechaAlta && String(a.fechaAlta).startsWith(patronMesSig)
 );
 
 // 3. BAJAS: Salen si su fecha de BAJA coincide con el patrón
@@ -1971,18 +1986,15 @@ const listadoBajas = alumnos.filter(a => a.estado === 'baja_pendiente' || a.esta
   </div>
 </div>
 
-{/* PESTAÑAS AJUSTADAS (RESPONSIVE) - CON PREVISIÓN INTEGRADA */}
-<div className="flex gap-1 mb-6 border-b pb-1 overflow-x-auto scrollbar-hide bg-white sticky top-0 z-10">
+{/* PESTAÑAS AJUSTADAS ESTILO CHIPS FLOTANTES GLASSMORPHIC */}
+<div className="flex gap-2 p-1.5 mb-8 overflow-x-auto scrollbar-hide bg-white/80 backdrop-blur-md border border-gray-100 rounded-2xl sticky top-2 z-40 shadow-sm">
   {['global', 'ocupacion', 'pruebas', 'espera', 'prevision', 'bajas', 'equipo', 'avisos'].map(t => {
-     // Añadimos 'prevision' a la restricción de admin
      if ((t === 'equipo' || t === 'bajas' || t === 'prevision') && userRole !== 'admin') return null;
      
      let count = 0; 
      if (t === 'pruebas') count = listadoPruebas.length; 
      if (t === 'bajas') count = listadoBajas.length;
      if (t === 'espera') count = alumnos.filter(a => a.estado === 'lista_espera').length;
-     
-     // 🚩 LÓGICA DEL CONTADOR PARA PREVISIÓN (Usa las variables del Paso 1)
      if (t === 'prevision') count = previsAltas.length + previsBajas.length;
 
      return (
@@ -1990,14 +2002,13 @@ const listadoBajas = alumnos.filter(a => a.estado === 'baja_pendiente' || a.esta
           key={t} 
           onClick={() => setTab(t)} 
           className={`
-            px-3 py-3 font-bold uppercase text-[10px] md:text-xs whitespace-nowrap 
-            flex flex-col md:flex-row items-center justify-center gap-1 flex-1 min-w-[90px]
-            transition-all duration-200
+            px-4 py-3 font-bold uppercase text-[9px] md:text-xs whitespace-nowrap 
+            flex items-center justify-center gap-2 rounded-xl transition-all duration-300 transform active:scale-95 flex-1 min-w-[100px]
             ${tab === t 
-              ? (t === 'espera' ? 'text-amber-600 border-b-4 border-amber-600 bg-amber-50/50' : 
-                 t === 'prevision' ? 'text-indigo-600 border-b-4 border-indigo-600 bg-indigo-50/50' :
-                 'text-blue-600 border-b-4 border-blue-600 bg-blue-50/50')
-              : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'
+              ? (t === 'espera' ? 'bg-amber-500 text-white shadow-lg shadow-amber-500/25 border border-amber-500 font-extrabold' : 
+                 t === 'prevision' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/25 border border-indigo-600 font-extrabold' :
+                 'bg-blue-600 text-white shadow-lg shadow-blue-600/25 border border-blue-600 font-extrabold')
+              : 'text-slate-500 hover:text-slate-800 hover:bg-slate-100/70 border border-transparent'
             }
           `}
         >
@@ -2023,8 +2034,11 @@ const listadoBajas = alumnos.filter(a => a.estado === 'baja_pendiente' || a.esta
 
 {count > 0 && (
   <span className={`
-    text-white text-[9px] px-1.5 py-0.5 rounded-full shadow-sm
-    ${t === 'espera' ? 'bg-amber-500' : t === 'prevision' ? 'bg-indigo-600' : 'bg-red-500'}
+    text-[9px] px-2 py-0.5 rounded-full font-black font-mono shadow-sm transition-colors duration-300
+    ${tab === t 
+      ? 'bg-white text-slate-900 shadow-inner' 
+      : (t === 'espera' ? 'bg-amber-100 text-amber-800' : t === 'prevision' ? 'bg-indigo-100 text-indigo-800' : 'bg-red-100 text-red-800')
+    }
   `}>
     {count}
   </span>
@@ -2055,7 +2069,7 @@ const listadoBajas = alumnos.filter(a => a.estado === 'baja_pendiente' || a.esta
             className={`px-3 py-1 rounded text-[9px] font-black uppercase transition-all ${vistaMes === 'proximo' ? 'bg-blue-500 text-white' : 'text-slate-400'}`}
           >
             {/* 🚩 CAMBIO CLAVE: Si hoy es antes de Octubre, forzamos el nombre a Octubre */}
-            {new Date() < new Date('2026-10-01') 
+            {new Date() < new Date(`${getDynamicAcademicYear().startYear}-10-01`) 
               ? 'PREVISIÓN OCTUBRE' 
               : new Date(new Date().setMonth(new Date().getMonth() + 1)).toLocaleString('es-ES', { month: 'long' })}
           </button>
@@ -2099,17 +2113,18 @@ const listadoBajas = alumnos.filter(a => a.estado === 'baja_pendiente' || a.esta
                     
                     if (!coincideId || !coincideDia || !coincideCurso) return false;
 
-                    // --- 🧠 NUEVA LÓGICA TEMPORAL PARA TEMPORADA DE RESERVA ---
+                     // --- 🧠 NUEVA LÓGICA TEMPORAL PARA TEMPORADA DE RESERVA ---
                     const hoy = new Date();
+                    const academicInfo = getDynamicAcademicYear();
                     const fechaAlu = (a.fechaAlta || a.fechaInscripcion || "").toString();
-                    const esAltaOctubre = fechaAlu.includes('2026-10');
+                    const esAltaOctubre = fechaAlu.includes(academicInfo.rawPattern);
 
                     if (vistaMes === 'actual') {
                       // VISTA ABRIL: Solo inscritos actuales. EXCLUIMOS a los de Octubre.
                       return (a.estado === 'inscrito' || a.estado === 'baja_pendiente') && !esAltaOctubre;
                     } else {
                       // VISTA OCTUBRE (PREVISIÓN):
-                      if (hoy < new Date('2026-10-01')) {
+                      if (hoy < new Date(academicInfo.isoStartDate)) {
                         // Si estamos en pre-inscripción: Contamos los que están (y no son baja) + los de Octubre
                         if (a.estado === 'baja_pendiente' || a.estado === 'baja_finalizada') return false;
                         return a.estado === 'inscrito' || esAltaOctubre;
@@ -2403,67 +2418,103 @@ const listadoBajas = alumnos.filter(a => a.estado === 'baja_pendiente' || a.esta
 )}
     {/* TAB: GLOBAL (ACTUALIZADO CON LISTA DE ESPERA) */}
     {tab === 'global' && (
-    <div className="bg-white rounded shadow overflow-hidden">
-        {/* CABECERA CON BUSCADOR MEJORADO */}
-        <div className="p-4 border-b bg-gray-50 flex flex-col md:flex-row gap-4">
-            <div className="relative flex-1">
-                <span className="absolute left-3 top-2.5 text-gray-400">🔍</span>
+    <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden animate-fade-in text-left">
+        {/* CABECERA CON BUSCADOR GLASSMORPHIC MEJORADO */}
+        <div className="p-5 bg-gradient-to-r from-slate-50 to-slate-100/30 border-b border-slate-100 flex flex-col md:flex-row gap-4 items-center">
+            <div className="relative flex-1 w-full">
+                <span className="absolute left-3.5 top-3.5 text-slate-400 text-sm">🔍</span>
                 <input 
-                    className="w-full border p-2 pl-10 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" 
-                    placeholder="Buscar por niño o responsable..." 
+                    className="w-full border border-slate-200 p-3 pl-10 rounded-2xl bg-white outline-none focus:ring-4 focus:ring-blue-100 focus:border-blue-500 transition-all shadow-sm text-sm font-medium text-slate-800" 
+                    placeholder="Buscar por alumno o tutor..." 
                     value={busqueda} 
                     onChange={e => setBusqueda(e.target.value)} 
                 />
+                {busqueda && (
+                  <button 
+                    onClick={() => setBusqueda('')} 
+                    className="absolute right-3 top-3 text-slate-400 hover:text-slate-600 p-1 rounded-full hover:bg-slate-100 transition-colors"
+                  >
+                    ✕
+                  </button>
+                )}
             </div>
-            <select className="border p-2 rounded md:w-1/3 font-bold text-gray-600 bg-white" value={filtroGrupo} onChange={e => setFiltroGrupo(e.target.value)}>
+            <select 
+                className="w-full md:w-1/3 border border-slate-200 p-3 rounded-2xl font-black text-slate-600 bg-white focus:ring-4 focus:ring-blue-100 focus:border-blue-500 outline-none transition-all shadow-sm text-xs tracking-wider uppercase cursor-pointer" 
+                value={filtroGrupo} 
+                onChange={e => setFiltroGrupo(e.target.value)}
+            >
                 <option value="">📂 Todos los Grupos</option>
                 {gruposUnicos.map(g => (<option key={g} value={g}>{g}</option>))}
             </select>
         </div>
 
         <table className="w-full text-sm text-left">
-            <thead className="bg-gray-100 uppercase text-xs">
+            <thead className="bg-slate-50 uppercase text-[10px] font-black tracking-widest text-slate-500 border-b border-slate-100">
                 <tr>
-                    <th className="p-3">Alumno / Responsable</th>
-                    <th className="p-3">Actividad / Alta</th>
-                    <th className="p-3 text-right">Acciones</th>
+                    <th className="p-4">Alumno / Responsable</th>
+                    <th className="p-4">Actividad / Alta</th>
+                    <th className="p-4 text-right">Acciones</th>
                 </tr>
             </thead>
-            <tbody>
+            <tbody className="divide-y divide-slate-100">
                 {listadoGlobal.length > 0 ? listadoGlobal.map(a => (
                     <tr 
                       key={a.id} 
                       onClick={() => abrirFicha(a)} 
-                      className={`border-b cursor-pointer transition ${
-                          a.estado === 'baja_pendiente' ? 'bg-red-50' : 
-                          a.estado === 'lista_espera' ? 'bg-amber-50 hover:bg-amber-100' : 
-                          'hover:bg-blue-50'
+                      className={`cursor-pointer transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md ${
+                          a.estado === 'baja_pendiente' ? 'bg-red-50/40 hover:bg-red-50/70' : 
+                          a.estado === 'lista_espera' ? 'bg-amber-50/40 hover:bg-amber-50/70' : 
+                          'hover:bg-blue-50/40'
                       }`}
                     >
-                        <td className="p-3">
-                          <span className="font-bold text-gray-900 block leading-tight">
-                            {a.estado === 'lista_espera' && '⏳ '}{a.nombre}
-                          </span>
-                          
-                          {/* 👤 NOMBRE DEL PADRE/CONTACTO VISIBLE SIEMPRE */}
-                          <div className="text-[10px] text-gray-500 font-bold uppercase tracking-tight mt-1">
-                             👤 {padres[a.parentId]?.nombre || padres[a.parentId]?.personaContacto || padres[a.parentId]?.nombrePagador || 'Cargando tutor...'}
-                          </div>
-                          
-                          <div className="flex gap-1 mt-1">
-                            {a.estado === 'baja_pendiente' && <span className="text-[10px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded font-black uppercase">BAJA PENDIENTE</span>}
-                            {a.estado === 'lista_espera' && <span className="text-[10px] bg-amber-500 text-white px-1.5 py-0.5 rounded font-black uppercase animate-pulse">EN ESPERA</span>}
-                          </div>
-                          
-                          <div className="text-blue-600 font-bold text-[10px] mt-1 bg-blue-50 w-fit px-2 py-0.5 rounded border border-blue-100">
-                              {a.curso} - {a.letra}
+                        <td className="p-4">
+                          <div className="flex flex-col gap-1.5 items-start">
+                            <span className="font-bold text-slate-800 text-sm leading-tight">
+                              {a.nombre}
+                            </span>
+                            
+                            {/* 👤 NOMBRE DEL TUTOR */}
+                            <div className="text-[9px] text-slate-400 font-extrabold uppercase tracking-widest flex items-center gap-1">
+                               <span>👤</span> {padres[a.parentId]?.nombre || padres[a.parentId]?.personaContacto || padres[a.parentId]?.nombrePagador || 'Cargando tutor...'}
+                            </div>
+                            
+                            {/* BADGES DE ESTADO PREMIUM */}
+                            <div className="flex flex-wrap gap-1.5 mt-1">
+                              <span className="text-[9px] bg-blue-50 text-blue-700 px-2 py-0.5 rounded font-bold border border-blue-100/50 uppercase font-mono tracking-wider">
+                                  {a.curso} - {a.letra}
+                              </span>
+                              
+                              {a.estado === 'inscrito' && (
+                                <span className="text-[8px] bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full font-black border border-emerald-200/40 uppercase tracking-widest leading-none shadow-sm flex items-center gap-1">
+                                  ✅ ACTIVO
+                                </span>
+                              )}
+                              
+                              {a.estado === 'prueba_reservada' && (
+                                <span className="text-[8px] bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-full font-black border border-indigo-200/40 uppercase tracking-widest leading-none shadow-sm flex items-center gap-1">
+                                  🏊‍♂️ PRUEBA NIVEL
+                                </span>
+                              )}
+
+                              {a.estado === 'baja_pendiente' && (
+                                <span className="text-[8px] bg-rose-50 text-rose-700 px-2 py-0.5 rounded-full font-black border border-rose-200/40 uppercase tracking-widest leading-none shadow-sm flex items-center gap-1">
+                                  ⚠️ BAJA PENDIENTE
+                                </span>
+                              )}
+                              
+                              {a.estado === 'lista_espera' && (
+                                <span className="text-[8px] bg-amber-50 text-amber-700 px-2 py-0.5 rounded-full font-black border border-amber-200/40 uppercase tracking-widest leading-none shadow-sm flex items-center gap-1 animate-pulse">
+                                  ⏳ EN ESPERA
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </td>
-                        <td className="p-3">
-                          <div className="font-bold text-gray-800">{a.actividad || '-'}</div>
-                          {a.dias && <div className="text-[10px] text-gray-500 mt-1 font-medium">📅 {a.dias} | ⏰ {a.horario}</div>}
+                        <td className="p-4">
+                          <div className="font-bold text-slate-700 text-sm">{a.actividad || '-'}</div>
+                          {a.dias && <div className="text-[10px] text-slate-400 mt-1 font-medium bg-slate-50 border border-slate-100 rounded px-2 py-0.5 w-fit">📅 {a.dias} | ⏰ {a.horario}</div>}
                           
-                          <div className="text-[10px] mt-1">
+                          <div className="text-[10px] mt-1.5">
                             {(() => {
                               let fechaLimpia = '---';
                               try {
@@ -2479,35 +2530,35 @@ const listadoBajas = alumnos.filter(a => a.estado === 'baja_pendiente' || a.esta
                               } else if (a.fechaAlta || a.fechaInscripcion) {
                                 return <span className="text-green-600 font-bold italic">Alta: {fechaLimpia}</span>;
                               } else {
-                                return <span className="text-gray-400">Sin fecha de alta</span>;
+                                return <span className="text-slate-400">Sin fecha de alta</span>;
                               }
                             })()}
                           </div>
                         </td>
-                        <td className="p-3 text-right">
+                        <td className="p-4 text-right">
                           <div className="flex items-center justify-end gap-2" onClick={(e) => e.stopPropagation()}>
                             <button 
                                 onClick={() => a.estado === 'lista_espera' ? abrirFicha(a) : confirmarInscripcion(a.id)}
-                                className={`px-2 py-1 rounded text-[10px] font-black uppercase shadow-sm border transition ${
+                                className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase shadow-sm border transition duration-300 transform active:scale-95 ${
                                     a.estado === 'lista_espera'
-                                    ? 'bg-amber-500 text-white border-amber-600 hover:bg-amber-600'
+                                    ? 'bg-amber-500 text-white border-amber-600 hover:bg-amber-600 shadow-amber-500/20 shadow-md'
                                     : a.revisadoAdmin 
-                                      ? 'bg-green-100 text-green-700 border-green-200' 
-                                      : 'bg-orange-100 text-orange-700 border-orange-200 hover:bg-orange-200'
+                                      ? 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100' 
+                                      : 'bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100 shadow-orange-500/10 shadow-md'
                                 }`}
                             >
                                 {a.estado === 'lista_espera' ? '🚀 Gestionar' : a.revisadoAdmin ? '✅ OK' : '⏳ Confirmar'}
                             </button>
 
                             {userRole === 'admin' && (
-                                <button onClick={(e) => borrarAlumno(e, a.id)} className="text-red-400 hover:text-red-600 p-2 hover:bg-red-50 rounded-full transition">
+                                <button onClick={(e) => borrarAlumno(e, a.id)} className="text-slate-400 hover:text-red-600 p-2 hover:bg-red-50 rounded-full transition-all duration-200">
                                     🗑️
                                 </button>
                             )}
                           </div>
                         </td>
                     </tr>
-                )) : <tr><td colSpan="3" className="p-8 text-center text-gray-400">No hay resultados.</td></tr>}
+                )) : <tr><td colSpan="3" className="p-8 text-center text-slate-400 font-bold italic">No hay resultados en la búsqueda.</td></tr>}
             </tbody>
         </table>
     </div>
@@ -2741,8 +2792,8 @@ const listadoBajas = alumnos.filter(a => a.estado === 'baja_pendiente' || a.esta
     const email = e.target.email.value.toLowerCase().trim();
     const password = e.target.password.value; // 👈 Capturamos la clave que tú inventes
     
-    if(!nombre || !email || !password) return alert("⚠️ ¡Ups! Falta información. Nombre, email y clave son obligatorios.");
-    if(password.length < 6) return alert("⚠️ La contraseña debe tener al menos 6 caracteres.");
+    if(!nombre || !email || !password) return showToast("⚠️ ¡Ups! Falta información. Nombre, email y clave son obligatorios.", "warning");
+    if(password.length < 6) return showToast("⚠️ La contraseña debe tener al menos 6 caracteres.", "warning");
 
     try {
       await addDoc(collection(db, 'equipo'), {
@@ -2754,10 +2805,10 @@ const listadoBajas = alumnos.filter(a => a.estado === 'baja_pendiente' || a.esta
         fechaAlta: new Date().toISOString(),
         creadoPor: userEmail
       });
-      alert(`✅ ¡Monitor creado!\n\nEmail: ${email}\nContraseña: ${password}`);
+      showToast(`✅ ¡Monitor creado! Email: ${email}`, "success");
       e.target.reset();
     } catch (err) {
-      alert("❌ Error al guardar: " + err.message);
+      showToast("❌ Error al guardar: " + err.message, "error");
     }
   }} className="grid md:grid-cols-4 gap-4 items-end"> {/* 👈 Ahora son 4 columnas */}
     <div>
@@ -2993,6 +3044,7 @@ const listadoBajas = alumnos.filter(a => a.estado === 'baja_pendiente' || a.esta
 // 📄 COMPONENTE FICHA (CON SÚPER BÚSQUEDA DE TELÉFONO)
 // ==========================================
 function FichaAlumno({ alumno, cerrar, userRole }) {
+  const { user } = useAuth();
   if (!alumno) return null;
   const p = alumno.datosPadre || {}; 
 // 📜 FUNCIÓN INTERNA PARA REGISTRAR MOVIMIENTOS
@@ -3019,7 +3071,7 @@ const cambiarFecha = async (campo, e) => {
   const idReal = alumno.id || alumno.uid;
 
   if (!idReal) {
-      return alert("❌ Error: No se encuentra el ID del alumno para guardar.");
+      return showToast("Error: No se encuentra el ID del alumno para guardar", "error");
   }
 
   try {
@@ -3033,15 +3085,13 @@ const cambiarFecha = async (campo, e) => {
       // Registro en el historial
       registrarLog("EDICIÓN FECHA", `Cambio en ${campo}: a ${valorNuevoTexto}`);
       
-      alert("💾 Fecha guardada. La página se recargará para actualizar el Radar.");
+      showToast("Fecha guardada correctamente", "success");
       
-      // 🔄 RECARGA CRÍTICA: Esto hace que el "Sin fecha" desaparezca 
-      // y el Radar de marzo cuente a este alumno.
-      window.location.reload();
+      // La recarga ya no es necesaria gracias al listener en tiempo real onSnapshot
 
   } catch (error) {
       console.error("Error al guardar fecha:", error);
-      alert("❌ Error al guardar: " + error.message);
+      showToast("Error al guardar: " + error.message, "error");
   }
 };
   const camposAlumno = Object.keys(alumno).join(', ');
@@ -3249,17 +3299,17 @@ const Dashboard = ({ user, misHijos, logout, refresh }) => {
   const [isChangingPass, setIsChangingPass] = useState(false);
   const alumnoEnVivo = misHijos.find((h) => h.id === alumnoSeleccionado?.id);
 const handleUpdatePassword = async () => {
-    if (newPass.length < 6) return alert("⚠️ La contraseña debe tener al menos 6 caracteres.");
+    if (newPass.length < 6) return showToast("⚠️ La contraseña debe tener al menos 6 caracteres.", "warning");
     try {
       await updatePassword(auth.currentUser, newPass);
-      alert("✅ Contraseña actualizada correctamente.");
+      showToast("✅ Contraseña actualizada correctamente.", "success");
       setNewPass('');
       setIsChangingPass(false);
     } catch (error) {
       if (error.code === 'auth/requires-recent-login') {
-        alert("🔒 Por seguridad, debes haber iniciado sesión recientemente para cambiar tu contraseña. Por favor, sal y vuelve a entrar.");
+        showToast("🔒 Por seguridad, debes haber iniciado sesión recientemente para cambiar tu contraseña. Por favor, sal y vuelve a entrar.", "error");
       } else {
-        alert("❌ Error: " + error.message);
+        showToast("❌ Error: " + error.message, "error");
       }
     }
   };
@@ -3304,14 +3354,20 @@ const handleUpdatePassword = async () => {
             precio: null,
             citaId: null,
             citaNivel: null,
+            citaFecha: null,
+            citaHora: null,
             fechaInscripcion: null,
             aceptaNormas: false,
-            autorizaFotos: false
+            autorizaFotos: false,
+            fechaAlta: null,
+            fechaBaja: null,
+            grupo: null,
+            revisadoAdmin: null
         });
         refresh(user.uid);
-        alert('✅ Solicitud cancelada correctamente.');
+        showToast('✅ Solicitud cancelada correctamente.', 'success');
     } catch (e) {
-        alert('Error al cancelar: ' + e.message);
+        showToast('Error al cancelar: ' + e.message, 'error');
     }
   };
 
@@ -3330,7 +3386,7 @@ const handleUpdatePassword = async () => {
 
     // Bloqueo después del día 25
     if (diaActual > 25) {
-        return alert('⛔ PLAZO CERRADO.\n\nLas bajas para el mes siguiente deben tramitarse antes del día 25.\n\nContacta con secretaría.');
+        return showToast('⛔ PLAZO CERRADO. Las bajas para el mes siguiente deben tramitarse antes del día 25.', 'error');
     }
 
     // Tramitación de Baja
@@ -3339,8 +3395,46 @@ const handleUpdatePassword = async () => {
         estado: 'baja_pendiente',
         fechaSolicitudBaja: new Date().toISOString()
       });
+
+      // 📧 Encolar email de solicitud de baja recibida
+      if (user?.email) {
+        try {
+          await addDoc(collection(db, 'mail'), {
+            to: [user.email],
+            message: {
+              subject: `📉 Solicitud de Baja Recibida: ${hijo.nombre}`,
+              html: `
+                <div style="font-family: sans-serif; padding: 20px; color: #333; border: 1px solid #ddd; border-radius: 15px; max-width: 600px;">
+                  <h2 style="color: #ea580c; border-bottom: 2px solid #ea580c; padding-bottom: 10px; margin-top: 0;">
+                     🏊 Solicitud de Baja Registrada
+                  </h2>
+                  <p>Hola familia de <strong>${hijo.nombre}</strong>,</p>
+                  <p>Hemos recibido correctamente tu solicitud de baja para la actividad de natación extraescolar.</p>
+                  
+                  <div style="background: #FFF7ED; padding: 15px; border-radius: 10px; margin: 20px 0; border: 1px solid #FED7AA;">
+                    <p style="margin: 0; color: #C2410C; font-weight: bold;">📍 Detalles de la Solicitud:</p>
+                    <p style="margin: 10px 0 0 0; font-size: 16px;"><strong>Alumno:</strong> ${hijo.nombre}</p>
+                    <p style="margin: 5px 0 0 0; font-size: 14px; color: #4b5563;"><strong>Estado:</strong> Baja Pendiente (Tramitando)</p>
+                    <p style="margin: 5px 0 0 0; font-size: 14px; color: #4b5563;"><strong>ℹ️ Nota:</strong> Tu plaza se mantendrá activa hasta final de mes y la baja se hará efectiva antes del día 1 del próximo mes.</p>
+                  </div>
+
+                  <p style="font-size: 14px; color: #374151; line-height: 1.5;">
+                    Si no has realizado esta solicitud o deseas reactivar la plaza, por favor ponte en contacto con la coordinación lo antes posible.
+                  </p>
+                  <p style="margin-top: 25px;">Saludos,<br><strong>Coordinación de Extraescolares CSB</strong></p>
+                  <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;" />
+                  <p style="font-size: 11px; color: #999;">Este es un mensaje automático generado por el sistema de gestión de piscina.</p>
+                </div>
+              `
+            }
+          });
+        } catch (mailError) {
+          console.error("Error al encolar email de solicitud de baja:", mailError);
+        }
+      }
+
       refresh(user.uid);
-      alert('✅ Solicitud de baja registrada.\nTu plaza se mantendrá activa hasta final de mes.');
+      showToast('✅ Solicitud de baja registrada. Tu plaza se mantendrá activa hasta final de mes.', 'success');
     }
   };
 
@@ -3704,15 +3798,15 @@ const FormularioHijo = ({ close, user, refresh, alumnoAEditar = null }) => {
   const validarYGuardarAlumno = async () => {
     // 🚩 BLOQUEO DE SEGURIDAD: Si ya tiene actividad, no se puede editar
     if (alumnoAEditar && alumnoAEditar.actividad) {
-      alert("⛔ Este alumno ya tiene una actividad vinculada. Para cambios de curso o nombre, contacta con secretaría.");
+      showToast("⛔ Este alumno ya tiene una actividad vinculada. Para cambios, contacta con secretaría.", "error");
       close();
       return;
     }    const telefonoLimpio = data?.telefono ? String(data.telefono).trim() : "";
     
     // Validaciones
-    if (!data.nombre || data.nombre.trim() === "") return alert("⚠️ El nombre es obligatorio.");
-    if (!data.fechaNacimiento) return alert("⚠️ La fecha de nacimiento es obligatoria.");
-    if (!data.aceptaNormas) return alert("⚠️ Debes aceptar las normas.");
+    if (!data.nombre || data.nombre.trim() === "") return showToast("⚠️ El nombre es obligatorio.", "warning");
+    if (!data.fechaNacimiento) return showToast("⚠️ La fecha de nacimiento es obligatoria.", "warning");
+    if (!data.aceptaNormas) return showToast("⚠️ Debes aceptar las normas.", "warning");
 
     try {
       const esInfantil = (data.curso || '').toUpperCase().includes('INF');
@@ -3737,7 +3831,7 @@ const FormularioHijo = ({ close, user, refresh, alumnoAEditar = null }) => {
           ...datosFinales,
           ultimaEdicion: new Date().toISOString()
         });
-        alert("✅ Datos actualizados correctamente");
+        showToast("✅ Datos actualizados correctamente", "success");
       } else {
         // MODO CREACIÓN: Creamos uno nuevo
         await addDoc(collection(db, 'students'), {
@@ -3745,14 +3839,14 @@ const FormularioHijo = ({ close, user, refresh, alumnoAEditar = null }) => {
           estado: 'sin_inscripcion',
           fechaCreacion: new Date().toISOString()
         });
-        alert("✅ Alumno registrado correctamente");
+        showToast("✅ Alumno registrado correctamente", "success");
       }
       
       refresh(user.uid);
       close();
     } catch (error) {
       console.error("Error al guardar:", error);
-      alert("No se pudo guardar en la base de datos.");
+      showToast("No se pudo guardar en la base de datos.", "error");
     }
   };
 
@@ -3881,15 +3975,18 @@ const PantallaInscripcion = ({ alumno, close, onRequirePrueba, user, refresh }) 
   // 1. Estado para guardar la ocupación global
   const [todosLosAlumnos, setTodosLosAlumnos] = useState([]);
 
-  // 2. Escuchamos a todos los alumnos para poder contar plazas
+  // 2. Escuchamos solo a los alumnos activos inscritos para poder contar plazas eficientemente
   useEffect(() => {
-    const unsub = onSnapshot(collection(db, 'students'), (s) => {
+    const q = query(collection(db, 'students'), where('estado', '==', 'inscrito'));
+    const unsub = onSnapshot(q, (s) => {
       setTodosLosAlumnos(s.docs.map(doc => ({
         actividadId: doc.data().actividadId,
         estado: doc.data().estado,
         dias: doc.data().dias,
         curso: doc.data().curso
       })));
+    }, (error) => {
+      console.error("Error al escuchar ocupación de plazas:", error);
     });
     return () => unsub();
   }, []);
@@ -3913,7 +4010,7 @@ const PantallaInscripcion = ({ alumno, close, onRequirePrueba, user, refresh }) 
 
     // SI YA ES OCTUBRE, NOVIEMBRE O DICIEMBRE: Lógica normal
     return { 
-      diaCortePasado: dia >= 20, 
+      diaCortePasado: dia > 20, 
       mesActual: hoy.toLocaleString('es-ES', { month: 'long' }), 
       sigMes: new Date(hoy.getFullYear(), hoy.getMonth() + 1, 1).toLocaleString('es-ES', { month: 'long' })
     };
@@ -3980,7 +4077,7 @@ const PantallaInscripcion = ({ alumno, close, onRequirePrueba, user, refresh }) 
   const inscribir = async (act, op) => {
     // 1. Verificación de Normas
     if (normasRef.current !== true) {
-        return alert("⚠️ Es obligatorio aceptar las normas.");
+        return showToast("⚠️ Es obligatorio aceptar las normas.", "warning");
     }
     
     // 🔄 LECTURA DE SEGURIDAD
@@ -4002,13 +4099,13 @@ const PantallaInscripcion = ({ alumno, close, onRequirePrueba, user, refresh }) 
 
     let fechaFinalISO;
 
-    // REGLA: De Marzo a Septiembre siempre es 1 de Octubre
-    if (mesActualNum < 10) {
-        const inicioTemporada = new Date(2026, 9, 1, 12, 0, 0); 
-        fechaFinalISO = inicioTemporada.toISOString();
+    // REGLA: De Junio a Septiembre siempre es 1 de Octubre del próximo curso
+    if (mesActualNum >= 6 && mesActualNum <= 9) {
+        const academicInfo = getDynamicAcademicYear();
+        fechaFinalISO = new Date(`${academicInfo.isoStartDate}T12:00:00.000Z`).toISOString();
     } else {
-        // Temporada activa (Octubre-Diciembre)
-        if (inicioDeseado === 'inmediato' && diaActual < 20) {
+        // Temporada activa (Octubre-Mayo)
+        if (inicioDeseado === 'inmediato' && diaActual <= 20) {
             fechaFinalISO = hoyParaCalculo.toISOString();
         } else {
             const proximoMes = new Date(hoyParaCalculo.getFullYear(), hoyParaCalculo.getMonth() + 1, 1, 12, 0, 0);
@@ -4032,8 +4129,10 @@ const PantallaInscripcion = ({ alumno, close, onRequirePrueba, user, refresh }) 
     };
 
     // CASO A: REQUIERE PRUEBA DE NIVEL (REVISADO)
-    // No piden prueba: Infantiles, VIPs, Adultos o si ya tienen cita/reserva
-    if (act.requierePrueba && !esInfantil && !tienePaseVIP && !d.citaNivel && d.estado !== 'prueba_reservada' && !esAdulto) {
+    // No piden prueba: Infantiles, VIPs, Adultos o si ya tienen cita/reserva activa
+    const tieneCitaValida = d.citaNivel && d.estado !== 'sin_inscripcion' && d.estado !== 'baja_finalizada';
+
+    if (act.requierePrueba && !esInfantil && !tienePaseVIP && !tieneCitaValida && d.estado !== 'prueba_reservada' && !esAdulto) {
       if(!confirm(`⚠️ Esta actividad requiere PRUEBA DE NIVEL.\n\n¿Continuar para elegir hora?`)) return;
       
       close(); 
@@ -4077,7 +4176,12 @@ const PantallaInscripcion = ({ alumno, close, onRequirePrueba, user, refresh }) 
           grupo: grupoFormateado, 
           revisadoAdmin: (estadoFinalReal === 'inscrito'),
           validadoAdmin: (estadoFinalReal === 'inscrito'),
-          fechaInscripcion: new Date().toISOString()
+          fechaInscripcion: new Date().toISOString(),
+          // Limpieza de citas anteriores si se inscribe directamente
+          citaNivel: null,
+          citaFecha: null,
+          citaHora: null,
+          citaId: null
         });
 
         // Envío de Email
@@ -4090,11 +4194,11 @@ const PantallaInscripcion = ({ alumno, close, onRequirePrueba, user, refresh }) 
 
         await refresh(user.uid); 
         close();
-        alert("✅ Proceso completado correctamente.");
+        showToast("✅ Proceso completado correctamente.", "success");
 
     } catch (error) {
         console.error("Error final:", error);
-        alert("Hubo un error al guardar los datos.");
+        showToast("Hubo un error al guardar los datos.", "error");
     }
 };
 
@@ -4219,7 +4323,6 @@ return (
         </span>
     </div>
 </div>
-
 {/* SECCIÓN DE FOTOS (OPCIONAL) */}
 <div 
     onClick={() => setAutorizaFotos(!autorizaFotos)}
@@ -4270,6 +4373,7 @@ return (
                 return (
                     <div key={idx} className="space-y-1">
                         <button 
+                            type="button"
                             onClick={() => inscribir(act, op)} 
                             className={`flex justify-between items-center w-full p-3 rounded-lg border transition-all text-left relative ${
                                 info.lleno 
@@ -4329,6 +4433,7 @@ return (
     </div>
   );
 };
+
 // ==========================================
 // 📅 PANTALLA PRUEBA DE NIVEL (VERSIÓN FINAL BLINDADA)
 // ==========================================
@@ -4350,13 +4455,21 @@ const PantallaPruebaNivel = ({ alumno, close, onSuccess, user, refresh }) => {
     setMesVisual(nuevoMes);
   };
 
-  // 2. GENERAR TURNOS DE 5 MINUTOS
+  // 2. GENERAR TURNOS DE 5 MINUTOS (JUNIO DE 17 A 18 Y SEPTIEMBRE DE 15 A 17)
   const franjas = [];
   if (fecha) {
     const d = new Date(fecha);
     const mesActual = d.getUTCMonth() + 1;
-    const horaInicio = (mesActual === 6 || mesActual === 9) ? 17 : 16;
-    const horaFin = 18;
+    
+    let horaInicio = 16;
+    let horaFin = 18;
+    if (mesActual === 6) {
+      horaInicio = 17;
+      horaFin = 18;
+    } else if (mesActual === 9) {
+      horaInicio = 15;
+      horaFin = 17;
+    }
 
     for (let h = horaInicio; h < horaFin; h++) {
       for (let m = 0; m < 60; m += 5) {
@@ -4388,10 +4501,10 @@ const PantallaPruebaNivel = ({ alumno, close, onSuccess, user, refresh }) => {
 
 // 4. FUNCIÓN GUARDAR RESERVA (BLINDAJE TOTAL OCTUBRE)
 const confirmarReserva = async () => {
-  if (!fecha || !hora) return alert("⚠️ Selecciona un lunes y una hora.");
+  if (!fecha || !hora) return showToast("⚠️ Selecciona un lunes y una hora.", "warning");
   
   const citaTexto = `${fecha.split('-').reverse().join('/')} a las ${hora}`;
-  if (citaTexto.includes('undefined') || !citaTexto) return alert("⚠️ Error al generar la cita.");
+  if (citaTexto.includes('undefined') || !citaTexto) return showToast("⚠️ Error al generar la cita.", "error");
 
   setLoading(true);
   try {
@@ -4440,12 +4553,12 @@ const confirmarReserva = async () => {
 
     setTimeout(() => {
       // 🚩 CAMBIAMOS EL MENSAJE PARA NO DAR FALSAS ESPERANZAS
-      alert(`✅ ¡CITA RESERVADA!\n\nPrueba de nivel: ${citaTexto}\n\nRECUERDA: Tu plaza para el 1 de octubre quedará confirmada en cuanto el coordinador valide la prueba de nivel.`);
+      showToast(`✅ ¡CITA RESERVADA! Prueba de nivel: ${citaTexto}`, "success");
     }, 300);
 
   } catch (e) {
     console.error("Error crítico en reserva:", e);
-    alert("❌ Hubo un error al guardar.");
+    showToast("❌ Hubo un error al guardar.", "error");
   } finally {
     setLoading(false);
   }
@@ -4574,7 +4687,7 @@ const confirmarReserva = async () => {
                           {d}
                           {permitido && (
                             <span className={`text-[5px] font-black ${fecha === iso ? 'text-blue-100' : 'text-blue-400'}`}>
-                              {mNum === 6 || mNum === 9 ? '17:00' : '16:00'}
+                              {mNum === 6 ? '17:00' : mNum === 9 ? '15:00' : '16:00'}
                             </span>
                           )}
                         </button>
@@ -4682,36 +4795,36 @@ const Login = ({ setView }) => {
     e.preventDefault();
     
     // 1. Validaciones de Seguridad
-    if (!regData.password || !confirmPassword) return alert("⛔ Escribe la contraseña dos veces.");
-    if (regData.password !== confirmPassword) return alert("⛔ Las contraseñas NO coinciden.");
-    if (regData.password.length < 6) return alert("⚠️ La contraseña debe tener al menos 6 caracteres.");
+    if (!regData.password || !confirmPassword) return showToast("⛔ Escribe la contraseña dos veces.", "warning");
+    if (regData.password !== confirmPassword) return showToast("⛔ Las contraseñas NO coinciden.", "warning");
+    if (regData.password.length < 6) return showToast("⚠️ La contraseña debe tener al menos 6 caracteres.", "warning");
 
     // 2. Determinar Email de Usuario
     const emailFinal = regData.tipo === 'externo' ? regData.emailPagador : regData.emailContacto;
-    if (!emailFinal) return alert("⚠️ Falta el email para crear tu cuenta.");
+    if (!emailFinal) return showToast("⚠️ Falta el email para crear tu cuenta.", "error");
 
     // 3. Validaciones Específicas
     if (regData.tipo === 'externo') {
-      if (!regData.nombrePagador) return alert('⚠️ Falta: Nombre del Pagador');
-      if (!regData.dniPagador) return alert('⚠️ Falta: DNI del Pagador');
+      if (!regData.nombrePagador) return showToast('⚠️ Falta: Nombre del Pagador', "warning");
+      if (!regData.dniPagador) return showToast('⚠️ Falta: DNI del Pagador', "warning");
       
       const ibanLimpio = (regData.iban || '').replace(/\s/g, '');
       const ibanRegex = /^ES\d{22}$/;
-      if (!ibanRegex.test(ibanLimpio)) return alert('⚠️ IBAN Inválido: Debe empezar por ES y tener 22 números después.');
+      if (!ibanRegex.test(ibanLimpio)) return showToast('⚠️ IBAN Inválido: Debe empezar por ES y tener 22 números después.', "error");
     
       const tel1 = regData.telefono1 ? String(regData.telefono1).trim() : "";
-      if (tel1.length < 9) return alert(`⛔ El teléfono debe tener 9 cifras`);
+      if (tel1.length < 9) return showToast("⛔ El teléfono debe tener 9 cifras", "warning");
       
-      if (!regData.direccion) return alert('⚠️ Falta: Dirección');
-      if (!regData.cp) return alert('⚠️ Falta: Código Postal');
-      if (!regData.iban) return alert('⚠️ Falta: IBAN Bancario');
+      if (!regData.direccion) return showToast("⚠️ Falta: Dirección", "warning");
+      if (!regData.cp) return showToast("⚠️ Falta: Código Postal", "warning");
+      if (!regData.iban) return showToast("⚠️ Falta: IBAN Bancario", "warning");
     } else {
       // VALIDACIÓN REGISTRO INTERNO
-      if (!regData.personaContacto) return alert('⚠️ Falta: Nombre de la persona de contacto');
+      if (!regData.personaContacto) return showToast("⚠️ Falta: Nombre de la persona de contacto", "warning");
       
       const telInterno = regData.telefono1 ? String(regData.telefono1).trim() : ""; 
       if (telInterno && telInterno.length < 9) {
-          return alert(`⛔ El teléfono debe tener 9 cifras`);
+          return showToast("⛔ El teléfono debe tener 9 cifras", "warning");
       }
     }
 
@@ -4747,12 +4860,12 @@ const Login = ({ setView }) => {
       });
 
       // ✅ MENSAJE Y CIERRE DE FUNCIÓN (Sin errores de paréntesis)
-      alert("✅ ¡Cuenta creada con éxito! Ya puedes entrar.");
+      showToast("✅ ¡Cuenta creada con éxito! Ya puedes entrar.", "success");
       setIsRegister(false); 
 
     } catch (e) { 
-        if (e.code === 'auth/email-already-in-use') alert('⛔ Ese correo ya está registrado.');
-        else alert('Error: ' + e.message); 
+        if (e.code === 'auth/email-already-in-use') showToast("⛔ Ese correo ya está registrado.", "error");
+        else showToast("Error: " + e.message, "error"); 
     }
   };
 
@@ -4761,7 +4874,7 @@ const Login = ({ setView }) => {
     const email = loginData.email?.toLowerCase().trim();
     const pass = loginData.password;
 
-    if (!email || !pass) return alert("⚠️ Escribe tu email y contraseña");
+    if (!email || !pass) return showToast("⚠️ Escribe tu email y contraseña", "warning");
 
     try {
       await signInWithEmailAndPassword(auth, email, pass);
@@ -4785,13 +4898,13 @@ const Login = ({ setView }) => {
             await createUserWithEmailAndPassword(auth, email, pass);
             return;
           } catch (regError) {
-            alert("Error al activar acceso: " + regError.message);
+            showToast("Error al activar acceso: " + regError.message, "error");
           }
         } else {
-          alert("⚠️ Email o contraseña incorrectos.");
+          showToast("⚠️ Email o contraseña incorrectos.", "error");
         }
       } else {
-        alert("⚠️ Error: " + error.message);
+        showToast("⚠️ Error: " + error.message, "error");
       }
     }
 };
@@ -4927,13 +5040,13 @@ const Login = ({ setView }) => {
   );
   const handleResetPassword = async () => {
     if (!loginData?.email) {
-      return alert("⚠️ Por favor, escribe tu email en el cuadro de arriba.");
+      return showToast("⚠️ Por favor, escribe tu email en el cuadro de arriba.", "warning");
     }
     try {
       await sendPasswordResetEmail(auth, loginData.email);
-      alert("📧 ¡Enviado! Revisa tu bandeja de entrada o spam.");
+      showToast("📧 ¡Enviado! Revisa tu bandeja de entrada o spam.", "success");
     } catch (error) {
-      alert("❌ Error: No se pudo enviar el correo de recuperación.");
+      showToast("❌ Error: No se pudo enviar el correo de recuperación.", "error");
     }
   };
 
@@ -5001,6 +5114,21 @@ function AppContent() {
   // Este se queda porque es solo para esta pantalla
   const [misHijos, setMisHijos] = useState([]);
 
+  // Escuchamos en tiempo real la lista de hijos cuando el usuario es del tipo familiar
+  useEffect(() => {
+    if (user && userRole === 'user') {
+      const q = query(collection(db, 'students'), where('parentId', '==', user.uid));
+      const unsubscribe = onSnapshot(q, (snapshot) => {
+        setMisHijos(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+      }, (error) => {
+        console.error("Error al escuchar cambios en alumnos familiares:", error);
+      });
+      return () => unsubscribe();
+    } else {
+      setMisHijos([]);
+    }
+  }, [user, userRole]);
+
   useEffect(() => {
     // Escuchamos cambios en la autenticación
     const unsubscribe = onAuthStateChanged(auth, async (u) => {
@@ -5045,7 +5173,7 @@ function AppContent() {
         } catch (error) {
             console.error("Error al leer perfil:", error);
             // Si falla la base de datos pero estás logueado, te avisamos
-            alert("⚠️ Estás logueado, pero hubo un error leyendo tu perfil: " + error.message);
+            showToast("⚠️ Estás logueado, pero hubo un error leyendo tu perfil: " + error.message, "error");
         }
 
       } else {
@@ -5059,9 +5187,8 @@ function AppContent() {
   }, [setUser, setUserRole, setView]); // 🚩 Añadimos las funciones del Contexto aquí
 
   const cargarHijos = async (uid) => {
-    const q = query(collection(db, 'students'), where('parentId', '==', uid));
-    const s = await getDocs(q);
-    setMisHijos(s.docs.map(d => ({ id: d.id, ...d.data() })));
+    // La sincronización de hijos ahora se realiza automáticamente en tiempo real mediante onSnapshot en el useEffect de AppContent.
+    console.log("Real-time onSnapshot sync active for child profiles of parent UID:", uid);
   };
 
   return (
@@ -5076,10 +5203,98 @@ function AppContent() {
 // ==========================================
 // 🚀 PUNTO DE ENTRADA ÚNICO
 // ==========================================
+// ==========================================
+// 🚀 PUNTO DE ENTRADA ÚNICO
+// ==========================================
+function ToastContainer({ toasts, removeToast }) {
+  return (
+    <div className="fixed bottom-5 right-5 z-[9999] flex flex-col gap-2 max-w-sm w-full pointer-events-none">
+      {toasts.map((t) => (
+        <div
+          key={t.id}
+          className={`pointer-events-auto flex items-center justify-between p-4 rounded-2xl shadow-2xl border backdrop-blur-md transition-all duration-300 transform translate-y-0 animate-fade-in-up
+            ${t.type === 'success' ? 'bg-emerald-600/95 border-emerald-500/30 text-white shadow-emerald-500/20' : ''}
+            ${t.type === 'warning' ? 'bg-amber-500/95 border-amber-400/30 text-white shadow-amber-500/20' : ''}
+            ${t.type === 'danger' || t.type === 'error' ? 'bg-rose-600/95 border-rose-500/30 text-white shadow-rose-500/20' : ''}
+          `}
+        >
+          <div className="flex items-center gap-3">
+            <span className="text-xl">
+              {t.type === 'success' && '✅'}
+              {t.type === 'warning' && '⚠️'}
+              {(t.type === 'error' || t.type === 'danger') && '❌'}
+            </span>
+            <p className="text-xs font-black uppercase tracking-wide leading-tight">{t.message}</p>
+          </div>
+          <button
+            onClick={() => removeToast(t.id)}
+            className="ml-4 text-white/70 hover:text-white transition-colors"
+          >
+            ✕
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function App() {
+  const [toasts, setToasts] = useState([]);
+
+  useEffect(() => {
+    // Vincular la función global al estado local de este Punto de Entrada
+    globalShowToast = (message, type = 'success') => {
+      const id = Math.random().toString(36).substring(2, 9);
+      setToasts((prev) => [...prev, { id, message, type }]);
+      setTimeout(() => {
+        setToasts((prev) => prev.filter((t) => t.id !== id));
+      }, 4000);
+    };
+
+    // Inyectar Tipografía Outfit y Clases de Animación Premium en el DOM
+    const link = document.createElement('link');
+    link.href = 'https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800;900&display=swap';
+    link.rel = 'stylesheet';
+    document.head.appendChild(link);
+
+    const style = document.createElement('style');
+    style.innerHTML = `
+      * {
+        font-family: 'Outfit', sans-serif !important;
+      }
+      .glass-card {
+        background: rgba(255, 255, 255, 0.75) !important;
+        backdrop-filter: blur(16px) !important;
+        -webkit-backdrop-filter: blur(16px) !important;
+        border: 1px solid rgba(255, 255, 255, 0.3) !important;
+      }
+      .glass-card-dark {
+        background: rgba(15, 23, 42, 0.7) !important;
+        backdrop-filter: blur(16px) !important;
+        -webkit-backdrop-filter: blur(16px) !important;
+        border: 1px solid rgba(255, 255, 255, 0.08) !important;
+      }
+      .animate-fade-in-up {
+        animation: fadeInUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+      }
+      @keyframes fadeInUp {
+        from {
+          opacity: 0;
+          transform: translateY(16px) scale(0.95);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0) scale(1);
+        }
+      }
+    `;
+    document.head.appendChild(style);
+  }, []);
+
   return (
     <AuthProvider>
       <AppContent />
+      <ToastContainer toasts={toasts} removeToast={(id) => setToasts((prev) => prev.filter((t) => t.id !== id))} />
     </AuthProvider>
   );
 }
