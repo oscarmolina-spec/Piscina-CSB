@@ -3041,7 +3041,7 @@ const listadoBajas = alumnos.filter(a => a.estado === 'baja_pendiente' || a.esta
         <span className="bg-blue-600 text-white text-[8px] font-black px-1.5 py-0.5 rounded">MANO DERECHA</span>
       </div>
       <p className="text-[10px] text-blue-400 font-bold uppercase mt-0.5">
-        extraescolarespiscina@sanbuenaventura.org <span className="text-amber-600 ml-2">🔑 CSB123456</span>
+        extraescolarespiscina@sanbuenaventura.org
       </p>
     </div>
     <div className="text-xl">⭐</div>
@@ -5162,17 +5162,8 @@ const Login = ({ setView }) => {
     } catch (error) {
       if (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential') {
         
-        let miembro = null;
-
-        // 1. REGLA PARA TU COORDINADOR (CON TU NUEVA CLAVE)
-        if (email === 'extraescolarespiscina@sanbuenaventura.org' && pass === 'CSB123456') {
-          miembro = { nombre: 'Coordinador Piscina', email: email };
-        } 
-        
-        // 2. REGLA PARA TUS MONITORES (SIGUE FUNCIONANDO IGUAL)
-        if (!miembro) {
-          miembro = equipo.find(m => m.email === email && m.password === pass);
-        }
+        // 1. REGLA PARA TUS MONITORES (SIGUE FUNCIONANDO IGUAL)
+        let miembro = equipo.find(m => m.email === email && m.password === pass);
 
         if (miembro) {
           try {
