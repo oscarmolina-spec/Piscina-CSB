@@ -3693,10 +3693,17 @@ if (hijo.estado === 'inscrito') {
                         dotBg = 'bg-blue-600 border-blue-600 text-white shadow-[0_0_8px_rgba(37,99,235,0.4)]';
                         labelColor = 'text-blue-800 font-black';
                       } else if (isCurrent) {
-                        dotBg = hijo.estado === 'lista_espera'
-                          ? 'bg-amber-500 border-amber-500 text-white shadow-[0_0_8px_rgba(245,158,11,0.4)] animate-pulse'
-                          : 'bg-yellow-500 border-yellow-500 text-white shadow-[0_0_8px_rgba(234,179,8,0.4)] animate-pulse';
-                        labelColor = hijo.estado === 'lista_espera' ? 'text-amber-700 font-black' : 'text-yellow-700 font-black';
+                        if (estaAdmitido) {
+                          // 🟢 ¡PASO FINAL CONFIRMADO! En verde esmeralda con sombra, sin parpadeo
+                          dotBg = 'bg-green-600 border-green-600 text-white shadow-[0_0_8px_rgba(16,185,129,0.4)]';
+                          labelColor = 'text-green-700 font-black';
+                        } else {
+                          // ⏳ En proceso (amarillo parpadeando)
+                          dotBg = hijo.estado === 'lista_espera'
+                            ? 'bg-amber-500 border-amber-500 text-white shadow-[0_0_8px_rgba(245,158,11,0.4)] animate-pulse'
+                            : 'bg-yellow-500 border-yellow-500 text-white shadow-[0_0_8px_rgba(234,179,8,0.4)] animate-pulse';
+                          labelColor = hijo.estado === 'lista_espera' ? 'text-amber-700 font-black' : 'text-yellow-700 font-black';
+                        }
                       }
 
                       return (
@@ -3710,7 +3717,7 @@ if (hijo.estado === 'inscrito') {
                           
                           {/* Círculo indicador */}
                           <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold border transition-all duration-300 ${dotBg}`}>
-                            {isCompleted ? '✓' : idx + 1}
+                            {isCompleted || (isCurrent && estaAdmitido) ? '✓' : idx + 1}
                           </div>
                           
                           {/* Etiqueta */}
