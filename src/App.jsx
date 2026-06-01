@@ -412,8 +412,8 @@ const LandingPage = ({ setView }) => {
           <img src={IMG_PRINCIPAL} className="w-full h-full object-cover z-0" alt="Piscina" />
         </div>
         <div className="relative z-20 text-center px-4 max-w-4xl mx-auto flex flex-col items-center">
-        <img src={IMG_ESCUDO_BLANCO} className="h-28 mx-auto mb-6 drop-shadow-2xl" alt="Escudo" />
-        <h1 className="text-4xl md:text-6xl font-black mb-4 text-white leading-tight [text-shadow:_2px_2px_0_#2563eb,_-2px_-2px_0_#2563eb,_2px_-2px_0_#2563eb,_-2px_2px_0_#2563eb,_0_4px_6px_rgba(0,0,0,0.3)]">
+        <img src={IMG_ESCUDO_BLANCO} className="h-20 md:h-28 mx-auto mb-6 drop-shadow-2xl object-contain max-w-[85vw]" alt="Escudo" />
+        <h1 className="text-3xl sm:text-4xl md:text-6xl font-black mb-4 text-white leading-tight [text-shadow:_2px_2px_0_#2563eb,_-2px_-2px_0_#2563eb,_2px_-2px_0_#2563eb,_-2px_2px_0_#2563eb,_0_4px_6px_rgba(0,0,0,0.3)]">
           Natación colegio <br /> 
           <span className="tracking-tight">San Buenaventura</span>
         </h1>
@@ -514,7 +514,7 @@ const LandingPage = ({ setView }) => {
     </div>
 
     {/* 3. GRID DE TARJETAS */}
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 justify-center justify-items-center">
     {OFERTA_ACTIVIDADES
         .filter(act => {
           if (filtroEtapa === 'todos') return true;
@@ -1069,13 +1069,16 @@ const LandingPage = ({ setView }) => {
           ];
 
           return stats.map((item, idx) => (
-            <div key={idx} className="relative overflow-hidden bg-white p-6 rounded-3xl border border-slate-100 shadow-sm flex flex-col items-center text-center transition-transform hover:scale-[1.02]">
-              <div className={`absolute -top-4 -right-4 w-16 h-16 ${item.bg} rounded-full blur-2xl opacity-50`}></div>
-              <span className="text-3xl mb-3 relative z-10">{item.icon}</span>
+            <div key={idx} className="relative overflow-hidden bg-white/75 backdrop-blur-md p-6 rounded-3xl border border-white/50 shadow-lg shadow-slate-200/50 flex flex-col items-center text-center transition-all duration-300 hover:scale-[1.03] hover:shadow-xl hover:border-blue-200">
+              <div className={`absolute -top-4 -right-4 w-16 h-16 ${item.bg} rounded-full blur-2xl opacity-60`}></div>
+              <span className="text-3xl mb-3 relative z-10 drop-shadow-sm">{item.icon}</span>
               <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2 relative z-10">{item.label}</p>
-              <p className={`text-2xl font-black ${item.color} leading-none mb-2 relative z-10`}>{item.val}</p>
-              <div className="flex items-center gap-2 bg-slate-50 px-3 py-1 rounded-full relative z-10">
-                <span className="w-1.5 h-1.5 rounded-full animate-pulse bg-emerald-500"></span>
+              <p className={`text-2xl font-black ${item.color} leading-none mb-2 relative z-10 drop-shadow-[0_2px_4px_rgba(0,0,0,0.02)]`}>{item.val}</p>
+              <div className="flex items-center gap-2 bg-slate-50/80 px-3 py-1 rounded-full relative z-10 border border-slate-100/50">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                </span>
                 <span className="text-[8px] font-black text-slate-500 uppercase tracking-tighter">{item.status}</span>
               </div>
             </div>
@@ -1164,8 +1167,9 @@ const LandingPage = ({ setView }) => {
           {/* Texto Central con mayor tracking */}
           <div className="text-center md:text-left flex-1 md:ml-6">
             <p className="text-sm font-medium text-gray-400 tracking-[0.1em]">
-              © 2026 <span className="text-white font-black uppercase ml-1">Colegio San Buenaventura</span> — Natación
+              © {new Date().getFullYear()} <span className="text-white font-black uppercase ml-1">Colegio San Buenaventura</span> — Natación
             </p>
+            <p className="text-xs text-gray-500 mt-1">Calle de El Greco, 16, 28011 Madrid</p>
           </div>
 
           {/* Lado derecho: Un detalle extra de calidad */}
@@ -1416,13 +1420,13 @@ const confirmarInscripcion = async (alumnoId) => {
 const imprimirListaAsistencia = (datos, infoGrupo) => {
   const ventana = window.open('', '_blank');
   
-  // Construimos una tabla HTML sencilla para la impresión
+  // Construimos una tabla HTML sencilla y compacta para la impresión
   const filas = datos.map((a, i) => `
-    <tr style="border-bottom: 1px solid #ddd;">
-      <td style="padding: 8px; text-align: center;">${i + 1}</td>
-      <td style="padding: 8px;"><strong>${a.nombre}</strong></td>
-      <td style="padding: 8px; font-size: 10px;">${a.curso}</td>
-      ${Array(4).fill('<td style="border-left: 1px solid #ddd; width: 40px;"></td>').join('')} 
+    <tr style="border-bottom: 1px solid #e2e8f0; height: 32px;">
+      <td style="padding: 6px 10px; text-align: center; font-size: 11px; font-weight: bold; color: #475569; border-right: 1px solid #e2e8f0;">${i + 1}</td>
+      <td style="padding: 6px 12px; font-size: 12px; font-weight: 700; color: #0f172a; border-right: 1px solid #e2e8f0;">${a.nombre}</td>
+      <td style="padding: 6px 12px; font-size: 10px; font-weight: 600; color: #475569; text-transform: uppercase; border-right: 1px solid #e2e8f0;">${a.curso}</td>
+      ${Array(4).fill('<td style="border-right: 1px solid #cbd5e1; width: 45px;"></td>').join('')} 
     </tr>
   `).join('');
 
@@ -1431,29 +1435,125 @@ const imprimirListaAsistencia = (datos, infoGrupo) => {
       <head>
         <title>Lista de Asistencia - ${infoGrupo.nombre}</title>
         <style>
-          body { font-family: sans-serif; padding: 20px; }
-          table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-          th { background: #f2f2f2; padding: 10px; text-align: left; border: 1px solid #ddd; }
-          td { border: 1px solid #ddd; }
-          .header { text-align: center; margin-bottom: 20px; }
+          @page { size: A4; margin: 15mm; }
+          body { 
+            font-family: -apple-system, system-ui, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
+            color: #0f172a;
+            margin: 0;
+            padding: 0;
+            line-height: 1.4;
+          }
+          .header { 
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid #2563eb;
+            padding-bottom: 12px;
+            margin-bottom: 20px;
+          }
+          .header-left h1 {
+            font-size: 18px;
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: -0.5px;
+            margin: 0;
+            color: #1e3a8a;
+          }
+          .header-left p {
+            font-size: 11px;
+            margin: 3px 0 0 0;
+            color: #475569;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+          }
+          .header-right {
+            text-align: right;
+          }
+          .header-right .badge {
+            background: #f1f5f9;
+            border: 1px solid #e2e8f0;
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-size: 10px;
+            font-weight: 800;
+            color: #1e3a8a;
+            text-transform: uppercase;
+          }
+          table { 
+            width: 100%; 
+            border-collapse: collapse; 
+            margin-top: 15px; 
+            border: 1px solid #cbd5e1;
+          }
+          th { 
+            background: #f8fafc; 
+            color: #1e3a8a;
+            font-size: 10px; 
+            font-weight: 900; 
+            text-transform: uppercase; 
+            letter-spacing: 0.5px;
+            padding: 8px 10px; 
+            text-align: left; 
+            border-bottom: 2px solid #cbd5e1;
+            border-right: 1px solid #cbd5e1;
+          }
+          .footer-signature {
+            margin-top: 40px;
+            display: flex;
+            justify-content: space-between;
+            font-size: 10px;
+            color: #64748b;
+            font-weight: bold;
+          }
+          .signature-box {
+            width: 200px;
+            border-top: 1px dashed #cbd5e1;
+            text-align: center;
+            padding-top: 6px;
+            margin-top: 30px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+          }
         </style>
       </head>
       <body>
         <div class="header">
-          <h2>Lista de Asistencia: ${infoGrupo.nombre}</h2>
-          <p>Día: <strong>${infoGrupo.dia}</strong> | Generado el: ${new Date().toLocaleDateString()}</p>
+          <div class="header-left">
+            <h1>Colegio San Buenaventura</h1>
+            <p>🏊 Control de Asistencia - Natación Extraescolar</p>
+          </div>
+          <div class="header-right">
+            <span class="badge">Natación CSB</span>
+          </div>
         </div>
+        
+        <div style="background: #f8fafc; border: 1px solid #e2e8f0; padding: 12px; border-radius: 12px; display: flex; justify-content: space-between; gap: 15px; font-size: 11px;">
+          <div>Grupo: <strong style="color: #1e3a8a; text-transform: uppercase;">${infoGrupo.nombre}</strong></div>
+          <div>Día de Clase: <strong style="color: #1e3a8a; text-transform: uppercase;">${infoGrupo.dia}</strong></div>
+          <div>Fecha Impresión: <strong style="color: #475569;">${new Date().toLocaleDateString('es-ES')}</strong></div>
+        </div>
+
         <table>
           <thead>
             <tr>
-              <th style="width: 30px;">#</th>
+              <th style="width: 35px; text-align: center;">#</th>
               <th>Alumno</th>
-              <th>Curso</th>
-              <th>S1</th><th>S2</th><th>S3</th><th>S4</th>
+              <th style="width: 110px;">Curso</th>
+              <th style="width: 45px; text-align: center;">Sem 1</th>
+              <th style="width: 45px; text-align: center;">Sem 2</th>
+              <th style="width: 45px; text-align: center;">Sem 3</th>
+              <th style="width: 45px; text-align: center;">Sem 4</th>
             </tr>
           </thead>
           <tbody>${filas}</tbody>
         </table>
+
+        <div class="footer-signature">
+          <div>Incidencias: ________________________________________________________________</div>
+          <div class="signature-box">Firma del Monitor</div>
+        </div>
+
         <script>window.print();</script>
       </body>
     </html>
@@ -1728,11 +1828,11 @@ const archivarBaja = async (alumno) => {
     const filas = listadoGlobal.map(a => {
       const p = padres[a.parentId] || {}; 
       
-      const nombre = (a.nombre || '').replace(/"/g, '""');
-      const actividad = (a.actividad || '-').replace(/"/g, '""');
-      const dias = (a.dias || '-').replace(/"/g, '""');
-      const horario = (a.horario || '-').replace(/"/g, '""');
-      const fAlta = (a.fechaAlta || '-').replace(/"/g, '""');
+      const nombre = (a.nombre || '').replace(new RegExp('"', 'g'), '""');
+      const actividad = (a.actividad || '-').replace(new RegExp('"', 'g'), '""');
+      const dias = (a.dias || '-').replace(new RegExp('"', 'g'), '""');
+      const horario = (a.horario || '-').replace(new RegExp('"', 'g'), '""');
+      const fAlta = (a.fechaAlta || '-').replace(new RegExp('"', 'g'), '""');
       const tipoAlumno = (p.tipo === 'externo') ? 'EXTERNO' : 'INTERNO';
 
       // 💰 LÓGICA DE PRECIO INTELIGENTE PARA EL EXCEL
@@ -1753,14 +1853,14 @@ const archivarBaja = async (alumno) => {
       precioFinal = String(precioFinal).replace('€', '').trim();
 
       if (soySuperAdmin) {
-        const pagador = (p.nombrePagador || '').replace(/"/g, '""');
-        const iban = (p.iban || '').replace(/"/g, '""');
-        const direccion = (p.direccion || '').replace(/"/g, '""');
+        const pagador = (p.nombrePagador || '').replace(new RegExp('"', 'g'), '""');
+        const iban = (p.iban || '').replace(new RegExp('"', 'g'), '""');
+        const direccion = (p.direccion || '').replace(new RegExp('"', 'g'), '""');
         const tel = p.telefono1 || '';
-        const dni = (p.dniPagador || '').replace(/"/g, '""');
-        const mail = (p.email || '').replace(/"/g, '""');
-        const cp = (p.cp || '').replace(/"/g, '""');
-        const pob = (p.poblacion || '').replace(/"/g, '""');
+        const dni = (p.dniPagador || '').replace(new RegExp('"', 'g'), '""');
+        const mail = (p.email || '').replace(new RegExp('"', 'g'), '""');
+        const cp = (p.cp || '').replace(new RegExp('"', 'g'), '""');
+        const pob = (p.poblacion || '').replace(new RegExp('"', 'g'), '""');
 
         return `"${nombre}","${a.curso}","${a.letra}","${tipoAlumno}","${actividad}","${dias}","${horario}","${fAlta}","${precioFinal}","${pagador}","${dni}","${mail}","${cp}","${pob}","${direccion}","${iban}","${tel}"`;
       } else {
@@ -1836,7 +1936,7 @@ let patronMesSig = "";
 if (esTemporadaReserva) {
     // 🚀 MODO RESERVA: Forzamos la vista al estreno del curso
     mesSigNom = "octubre";
-    patronMesSig = "2026-10";
+    patronMesSig = getDynamicAcademicYear().rawPattern;
 } else {
     // 🏊 MODO CURSO: Lógica normal de mes siguiente
     const proximoMesDate = new Date(hoyD.getFullYear(), hoyD.getMonth() + 1, 1);
@@ -3530,119 +3630,210 @@ if (hijo.estado === 'inscrito') {
 }
 
           return (
-            <div key={hijo.id} className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 relative overflow-hidden group mb-4">
+            <div key={hijo.id} className="bg-white/75 backdrop-blur-md p-6 rounded-3xl shadow-lg border border-white/50 relative overflow-hidden group mb-6 transition-all duration-300 hover:shadow-xl hover:border-blue-200 text-left">
               <div className={`absolute top-0 left-0 w-1.5 h-full ${bordeColor}`}></div>
               
               {/* CABECERA */}
               <div className="flex justify-between items-start mb-2 pl-3">
                 <div className="flex-1">
-                  <h3 className="font-bold text-xl text-gray-800 flex items-center gap-2">
-                  {hijo.nombre} 
-{(!hijo.actividad && hijo.estado === 'sin_inscripcion') && (
-  <button 
-    onClick={() => setAlumnoEditar(hijo)} 
-    className="text-gray-400 hover:text-blue-600 bg-gray-50 p-1.5 rounded-full transition-all"
-    title="Editar datos básicos"
-  >
-    ✏️
-  </button>
-)}                  </h3>
-                  <p className="text-gray-500 text-sm font-medium">{hijo.curso} • {hijo.letra}</p>
+                  <h3 className="font-black text-xl text-slate-800 flex items-center gap-2 tracking-tight">
+                    {hijo.nombre} 
+                    {(!hijo.actividad && hijo.estado === 'sin_inscripcion') && (
+                      <button 
+                        onClick={() => setAlumnoEditar(hijo)} 
+                        className="text-gray-400 hover:text-blue-600 bg-slate-50 border border-slate-100 p-1.5 rounded-full transition-all"
+                        title="Editar datos básicos"
+                      >
+                        ✏️
+                      </button>
+                    )}
+                  </h3>
+                  <p className="text-gray-500 text-xs font-black uppercase tracking-wider mt-0.5">{hijo.curso} • {hijo.letra}</p>
                 </div>
-                <div className="flex flex-col items-end gap-2"><span className="px-2 py-1 rounded text-[10px] font-extrabold uppercase bg-gray-100 text-gray-500">{estadoTexto}</span></div>
+                <div className="flex flex-col items-end gap-2">
+                  <span className={`px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wider shadow-sm border
+                    ${hijo.estado === 'inscrito' && estaAdmitido ? 'bg-green-50 text-green-700 border-green-200' : ''}
+                    ${hijo.estado === 'inscrito' && !estaAdmitido ? 'bg-yellow-50 text-yellow-700 border-yellow-200' : ''}
+                    ${hijo.estado === 'lista_espera' ? 'bg-amber-50 text-amber-700 border-amber-200' : ''}
+                    ${hijo.estado === 'prueba_reservada' ? 'bg-blue-50 text-blue-700 border-blue-200' : ''}
+                    ${hijo.estado === 'baja_pendiente' ? 'bg-rose-50 text-rose-700 border-rose-200' : ''}
+                    ${hijo.estado === 'baja_finalizada' ? 'bg-slate-100 text-slate-600 border-slate-200' : ''}
+                    ${hijo.estado === 'sin_inscripcion' ? 'bg-slate-50 text-slate-500 border-slate-200' : ''}
+                  `}>
+                    {estadoTexto}
+                  </span>
+                </div>
               </div>
 
+              {/* 📊 BARRA DE PROGRESO DE INSCRIPCIÓN */}
+              {hijo.estado !== 'sin_inscripcion' && hijo.estado !== 'baja_finalizada' && (
+                <div className="ml-3 mt-4 mb-5 px-2 py-3 bg-slate-50/50 rounded-2xl border border-slate-100 flex justify-between items-center relative gap-2">
+                  {(() => {
+                    const statusSteps = [
+                      { label: 'Solicitud', active: true },
+                      { label: 'Prueba', active: hijo.estado === 'prueba_reservada' || hijo.estado === 'inscrito' },
+                      { label: 'Validación', active: hijo.estado === 'inscrito' || hijo.estado === 'lista_espera' },
+                      { label: 'Confirmada', active: hijo.estado === 'inscrito' && estaAdmitido }
+                    ];
+                    
+                    let activeIndex = 0;
+                    if (hijo.estado === 'prueba_reservada') activeIndex = 1;
+                    if (hijo.estado === 'lista_espera') activeIndex = 2;
+                    if (hijo.estado === 'inscrito') {
+                      activeIndex = estaAdmitido ? 3 : 2;
+                    }
+
+                    return statusSteps.map((step, idx) => {
+                      const isCompleted = idx < activeIndex;
+                      const isCurrent = idx === activeIndex;
+
+                      let dotBg = 'bg-slate-200 border-slate-300';
+                      let labelColor = 'text-slate-400 font-bold';
+                      if (isCompleted) {
+                        dotBg = 'bg-blue-600 border-blue-600 text-white shadow-[0_0_8px_rgba(37,99,235,0.4)]';
+                        labelColor = 'text-blue-800 font-black';
+                      } else if (isCurrent) {
+                        dotBg = hijo.estado === 'lista_espera'
+                          ? 'bg-amber-500 border-amber-500 text-white shadow-[0_0_8px_rgba(245,158,11,0.4)] animate-pulse'
+                          : 'bg-yellow-500 border-yellow-500 text-white shadow-[0_0_8px_rgba(234,179,8,0.4)] animate-pulse';
+                        labelColor = hijo.estado === 'lista_espera' ? 'text-amber-700 font-black' : 'text-yellow-700 font-black';
+                      }
+
+                      return (
+                        <div key={idx} className="flex-1 flex flex-col items-center relative z-10">
+                          {/* Línea conectora */}
+                          {idx > 0 && (
+                            <div className={`absolute right-1/2 top-3 -translate-y-1/2 h-[2px] -z-10
+                              ${idx <= activeIndex ? 'bg-blue-600' : 'bg-slate-200'}
+                            `} style={{ right: '50%', width: '100%' }}></div>
+                          )}
+                          
+                          {/* Círculo indicador */}
+                          <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold border transition-all duration-300 ${dotBg}`}>
+                            {isCompleted ? '✓' : idx + 1}
+                          </div>
+                          
+                          {/* Etiqueta */}
+                          <span className={`text-[8px] uppercase tracking-wider mt-1.5 leading-none transition-colors duration-300 ${labelColor}`}>
+                            {step.label}
+                          </span>
+                        </div>
+                      );
+                    });
+                  })()}
+                </div>
+              )}
+
               {/* DATOS DE ACTIVIDAD (Inscrito, Baja Pendiente o LISTA DE ESPERA) */}
-{(hijo.estado === 'inscrito' || hijo.estado === 'baja_pendiente' || hijo.estado === 'lista_espera') && (
-  <div className={`ml-3 mt-4 p-3 rounded-lg border text-sm relative
-      ${hijo.estado === 'baja_pendiente' ? 'bg-red-50 border-red-200' : 
-        hijo.estado === 'lista_espera' ? 'bg-amber-50 border-amber-200' : // 🚩 Nuevo estilo Ámbar
-        !estaAdmitido ? 'bg-yellow-50 border-yellow-200' : 
-        'bg-green-50 border-green-100'
-      }`}>
+              {(hijo.estado === 'inscrito' || hijo.estado === 'baja_pendiente' || hijo.estado === 'lista_espera') && (
+                <div className={`ml-3 mt-4 p-4 rounded-2xl border text-sm relative
+                    ${hijo.estado === 'baja_pendiente' ? 'bg-red-50/50 border-red-200' : 
+                      hijo.estado === 'lista_espera' ? 'bg-amber-50/50 border-amber-200' :
+                      !estaAdmitido ? 'bg-yellow-50/50 border-yellow-200' : 
+                      'bg-green-50/50 border-green-100'
+                    }`}>
 
-    {/* CASO NUEVO: LISTA DE ESPERA */}
-    {hijo.estado === 'lista_espera' ? (
-        <div className="pr-6">
-            <p className="font-bold text-amber-900 text-sm uppercase mb-1">{hijo.actividad}</p>
-            <div className="flex gap-2 text-amber-800 text-xs mb-2 font-medium">
-                <span>📅 {hijo.dias}</span><span>⏰ {hijo.horario}</span>
-            </div>
-            <div className="bg-white/60 rounded p-2 border border-amber-200">
-                <p className="font-bold text-amber-800 text-[10px] uppercase mb-0.5">⏳ En espera de vacante</p>
-                <p className="text-[10px] text-amber-700 leading-tight">
-                  No hay plazas disponibles. Te avisaremos por orden de lista en cuanto quede un hueco libre.
-                </p>
-            </div>
-        </div>
-    ) : 
-    
-/* CASO: PENDIENTE DE VALIDAR (AMARILLO - El tuyo) */
-!estaAdmitido && hijo.estado === 'inscrito' ? (
-  <div className="text-center pr-6">
-      <p className="font-bold text-yellow-900 text-sm uppercase mb-1">{hijo.actividad}</p>
-      
-      {/* 🚀 FECHA PREVISTA EN AMARILLO */}
-      {hijo.inicioDeseado && (
-        <p className="text-[10px] font-black text-yellow-700 mb-1 uppercase">
-          🎯 Previsto para: {hijo.inicioDeseado.split('-').reverse().join('/')}
-        </p>
-      )}
+                  {/* CASO NUEVO: LISTA DE ESPERA */}
+                  {hijo.estado === 'lista_espera' ? (
+                      <div className="pr-6">
+                          <p className="font-black text-amber-900 text-base uppercase mb-2 tracking-tight">{hijo.actividad}</p>
+                          <div className="flex flex-wrap gap-2 mb-3">
+                              <span className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full border border-blue-200 text-[10px] font-black uppercase tracking-wide">
+                                📅 {hijo.dias}
+                              </span>
+                              <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-800 px-2 py-0.5 rounded-full border border-amber-200 text-[10px] font-black uppercase tracking-wide">
+                                ⏰ {hijo.horario}
+                              </span>
+                          </div>
+                          <div className="bg-white/70 backdrop-blur-sm rounded-xl p-3 border border-amber-200 shadow-sm">
+                              <p className="font-black text-amber-800 text-[10px] uppercase mb-0.5">⏳ En espera de vacante</p>
+                              <p className="text-[10px] text-amber-700 leading-tight">
+                                No hay plazas disponibles. Te avisaremos por orden de lista en cuanto quede un hueco libre.
+                              </p>
+                          </div>
+                      </div>
+                  ) : 
+                  
+              /* CASO: PENDIENTE DE VALIDAR (AMARILLO) */
+              !estaAdmitido && hijo.estado === 'inscrito' ? (
+                <div className="text-center pr-6">
+                    <p className="font-black text-yellow-900 text-base uppercase mb-2 tracking-tight">{hijo.actividad}</p>
+                    
+                    {/* 🚀 FECHA PREVISTA EN AMARILLO */}
+                    {hijo.inicioDeseado && (
+                      <p className="text-[10px] font-black text-yellow-700 mb-2 uppercase tracking-wide">
+                        🎯 Previsto para: {hijo.inicioDeseado.split('-').reverse().join('/')}
+                      </p>
+                    )}
 
-      <div className="flex justify-center gap-2 text-yellow-800 text-xs mb-2 opacity-80">
-          <span>📅 {hijo.dias}</span><span>⏰ {hijo.horario}</span>
-      </div>
-      <div className="bg-white/50 rounded p-1 border border-yellow-200">
-          <p className="font-bold text-yellow-800 text-xs">⏳ Solicitud Recibida</p>
-          <p className="text-[10px] text-yellow-700">
-            {(hijo.actividad || '').toUpperCase().includes('ADULTO') || (hijo.actividad || '').toUpperCase().includes('WATERPOLO')
-              ? "El club está revisando tu inscripción."
-              : "El coordinador está validando el nivel."
-            }
-          </p>
-      </div>
-  </div>
-) : (
-  /* CASO: ADMITIDO O BAJA PENDIENTE (VERDE/ROJO - El tuyo) */
-  <div className="pr-6">
-    <p className="font-bold mb-1 text-gray-800 uppercase">{hijo.actividad}</p>
-    
-    {/* 🚀 FECHA DE INICIO CONFIRMADA EN AZUL */}
-    {hijo.fechaAlta && (
-      <div className="mb-2">
-        <span className="bg-blue-600 text-white text-[10px] font-black px-2 py-1 rounded shadow-sm inline-flex items-center gap-1 uppercase">
-          🚀 Inicio: {hijo.fechaAlta.split('T')[0].split('-').reverse().join('/')}
-        </span>
-      </div>
-    )}
+                    <div className="flex flex-wrap justify-center gap-2 mb-3">
+                        <span className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full border border-blue-200 text-[10px] font-black uppercase tracking-wide">
+                          📅 {hijo.dias}
+                        </span>
+                        <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-800 px-2 py-0.5 rounded-full border border-amber-200 text-[10px] font-black uppercase tracking-wide">
+                          ⏰ {hijo.horario}
+                        </span>
+                    </div>
+                    <div className="bg-white/70 backdrop-blur-sm rounded-xl p-3 border border-yellow-200 shadow-sm">
+                        <p className="font-black text-yellow-800 text-xs">⏳ Solicitud Recibida</p>
+                        <p className="text-[10px] text-yellow-700 mt-0.5">
+                          {(hijo.actividad || '').toUpperCase().includes('ADULTO') || (hijo.actividad || '').toUpperCase().includes('WATERPOLO')
+                            ? "El club está revisando tu inscripción."
+                            : "El coordinador está validando el nivel."
+                          }
+                        </p>
+                    </div>
+                </div>
+              ) : (
+                /* CASO: ADMITIDO O BAJA PENDIENTE */
+                <div className="pr-6">
+                  <p className="font-black text-slate-800 text-base uppercase mb-2 tracking-tight">{hijo.actividad}</p>
+                  
+                  {/* 🚀 FECHA DE INICIO CONFIRMADA EN AZUL */}
+                  {hijo.fechaAlta && (
+                    <div className="mb-2.5">
+                      <span className="bg-blue-600 text-white text-[10px] font-black px-2.5 py-1 rounded-full shadow-sm inline-flex items-center gap-1 uppercase tracking-wide">
+                        🚀 Inicio: {hijo.fechaAlta.split('T')[0].split('-').reverse().join('/')}
+                      </span>
+                    </div>
+                  )}
 
-    <div className="flex items-center gap-2 text-gray-600">
-      <span>📅 {hijo.dias}</span><span>⏰ {hijo.horario}</span>
-    </div>
-    {hijo.estado === 'baja_pendiente' && (
-      <p className="text-red-600 font-bold text-xs mt-2 uppercase">⚠️ Baja efectiva a fin de mes</p>
-    )}
-    {estaAdmitido && hijo.estado === 'inscrito' && (
-      <p className="text-green-600 font-bold text-[10px] mt-2 uppercase">✅ Plaza Confirmada</p>
-    )}
-  </div>
-)}
-</div>
-)}
+                  <div className="flex flex-wrap gap-2 mb-2">
+                      <span className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full border border-blue-200 text-[10px] font-black uppercase tracking-wide">
+                        📅 {hijo.dias}
+                      </span>
+                      <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-800 px-2 py-0.5 rounded-full border border-amber-200 text-[10px] font-black uppercase tracking-wide">
+                        ⏰ {hijo.horario}
+                      </span>
+                  </div>
+                  {hijo.estado === 'baja_pendiente' && (
+                    <p className="text-red-600 font-bold text-xs mt-2.5 uppercase tracking-wide flex items-center gap-1"><span>⚠️</span> Baja efectiva a fin de mes</p>
+                  )}
+                  {estaAdmitido && hijo.estado === 'inscrito' && (
+                    <p className="text-green-600 font-bold text-[10px] mt-2.5 uppercase tracking-wider flex items-center gap-1"><span>✅</span> Plaza Confirmada</p>
+                  )}
+                </div>
+              )}
+              </div>
+              )}
               
 {/* DATOS DE PRUEBA */}
 {hijo.estado === 'prueba_reservada' && (
-  <div className="ml-3 mt-4 bg-orange-50 p-3 rounded-lg border border-orange-200 text-sm">
-    <div className="mb-3 pb-3 border-b border-orange-200">
-        <p className="text-[10px] font-bold text-orange-800 uppercase tracking-wider mb-1">🎯 Grupo Pre-seleccionado:</p>
+  <div className="ml-3 mt-4 bg-orange-50/50 p-4 rounded-2xl border border-orange-200 text-sm">
+    <div className="mb-3 pb-3 border-b border-orange-200/50">
+        <p className="text-[10px] font-black text-orange-800 uppercase tracking-wider mb-1">🎯 Grupo Pre-seleccionado:</p>
         
         {/* MODIFICACIÓN: Si ya tiene actividad Y días, mostramos la info. Si no, el botón. */}
         {hijo.actividad && hijo.dias ? (
             <div>
-              <p className="text-lg font-black text-orange-900 leading-tight">{hijo.actividad}</p>
-              <div className="flex gap-3 text-orange-800 text-xs mt-1 font-bold">
-                  <span>📅 {hijo.dias}</span>
-                  <span>⏰ {hijo.horario || 'Horario pendiente'}</span>
+              <p className="text-lg font-black text-orange-950 leading-tight uppercase tracking-tight">{hijo.actividad}</p>
+              <div className="flex flex-wrap gap-2 mt-2">
+                  <span className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full border border-blue-200 text-[10px] font-black uppercase tracking-wide">
+                    📅 {hijo.dias}
+                  </span>
+                  <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-800 px-2 py-0.5 rounded-full border border-amber-200 text-[10px] font-black uppercase tracking-wide">
+                    ⏰ {hijo.horario || 'Horario pendiente'}
+                  </span>
               </div>
             </div>
         ) : (
@@ -4511,8 +4702,9 @@ const confirmarReserva = async () => {
     const alumnoRef = doc(db, 'students', alumno.id);
     
     // 🎯 LA FECHA DE ORO: 1 de Octubre (Formato ISO puro sin horas de hoy)
-    const fechaFijaOctubre = "2026-10-01T08:00:00.000Z";
-    const soloFechaOctubre = "2026-10-01";
+    const academicInfo = getDynamicAcademicYear();
+    const fechaFijaOctubre = `${academicInfo.isoStartDate}T08:00:00.000Z`;
+    const soloFechaOctubre = academicInfo.isoStartDate;
 
     await updateDoc(alumnoRef, {
       estado: 'prueba_reservada',
@@ -4532,7 +4724,7 @@ const confirmarReserva = async () => {
       horario: alumno.horario || '',
       
       // 🎯 Solo dejamos anotada la preferencia para cuando el Admin acepte
-      inicioDeseado: "2026-10-01", 
+      inicioDeseado: academicInfo.isoStartDate, 
       mesInicio: 'octubre',
       
       grupo: (alumno.dias && alumno.horario) ? `${alumno.dias} ${alumno.horario}` : ''
@@ -4625,7 +4817,7 @@ const confirmarReserva = async () => {
                   >
                     {[0,1,2,3,4,5,6,7,8,9,10,11].map((mIdx) => (
                       <option key={mIdx} value={mIdx} className="bg-slate-800">
-                        {new Date(2026, mIdx).toLocaleString('es-ES', { month: 'long' }).toUpperCase()}
+                        {new Date(mesVisual.getFullYear(), mIdx).toLocaleString('es-ES', { month: 'long' }).toUpperCase()}
                       </option>
                     ))}
                   </select>
