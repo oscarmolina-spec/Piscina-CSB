@@ -403,6 +403,80 @@ const LandingPage = ({ setView }) => {
   const [tab, setTab] = useState('actividades');
   const [filtroEtapa, setFiltroEtapa] = useState('todos');
 
+  // 🎨 GENERADOR DE TEMAS ESTÉTICOS POR ACTIVIDAD (factor WOW)
+  const getThemeByActivity = (act) => {
+    const id = act.id || '';
+    if (id === 'chapoteo') {
+      return {
+        headerGrad: 'from-pink-500/90 to-rose-600/90',
+        badgeText: '👶 Iniciación Infantil',
+        btnBg: 'bg-pink-50 text-pink-600 border-pink-100 hover:bg-pink-600 hover:text-white',
+        btnHover: 'group-hover:bg-pink-600 group-hover:text-white border-pink-100',
+        shadowGlow: 'hover:shadow-pink-900/10 hover:border-pink-200',
+        priceColor: 'from-pink-600 to-rose-500'
+      };
+    }
+    if (id.includes('primaria')) {
+      return {
+        headerGrad: 'from-blue-600/90 to-indigo-700/90',
+        badgeText: '🏅 Perfeccionamiento Primaria',
+        btnBg: 'bg-blue-50 text-blue-600 border-blue-100 hover:bg-blue-600 hover:text-white',
+        btnHover: 'group-hover:bg-blue-600 group-hover:text-white border-blue-100',
+        shadowGlow: 'hover:shadow-blue-900/10 hover:border-blue-200',
+        priceColor: 'from-blue-600 to-indigo-500'
+      };
+    }
+    if (id === 'waterpolo') {
+      return {
+        headerGrad: 'from-orange-500/90 to-red-600/90',
+        badgeText: '🤽‍♂️ Balón y Deporte de Equipo',
+        btnBg: 'bg-orange-50 text-orange-600 border-orange-100 hover:bg-orange-600 hover:text-white',
+        btnHover: 'group-hover:bg-orange-600 group-hover:text-white border-orange-100',
+        shadowGlow: 'hover:shadow-orange-900/10 hover:border-orange-200',
+        priceColor: 'from-orange-600 to-red-500'
+      };
+    }
+    if (id === 'eso_bach') {
+      return {
+        headerGrad: 'from-purple-600/90 to-violet-700/90',
+        badgeText: '🎓 Jóvenes y Mantenimiento',
+        btnBg: 'bg-purple-50 text-purple-600 border-purple-100 hover:bg-purple-600 hover:text-white',
+        btnHover: 'group-hover:bg-purple-600 group-hover:text-white border-purple-100',
+        shadowGlow: 'hover:shadow-purple-900/10 hover:border-purple-200',
+        priceColor: 'from-purple-600 to-violet-500'
+      };
+    }
+    if (id === 'aquagym') {
+      return {
+        headerGrad: 'from-cyan-500/90 to-teal-600/90',
+        badgeText: '⚡ Fitness y Tono Acuático',
+        btnBg: 'bg-cyan-50 text-cyan-600 border-cyan-100 hover:bg-cyan-600 hover:text-white',
+        btnHover: 'group-hover:bg-cyan-600 group-hover:text-white border-cyan-100',
+        shadowGlow: 'hover:shadow-cyan-900/10 hover:border-cyan-200',
+        priceColor: 'from-cyan-600 to-teal-500'
+      };
+    }
+    if (id === 'nado_libre') {
+      return {
+        headerGrad: 'from-slate-600/90 to-slate-850/90',
+        badgeText: '⏱️ Nado Libre Independiente',
+        btnBg: 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-800 hover:text-white',
+        btnHover: 'group-hover:bg-slate-800 group-hover:text-white border-slate-200',
+        shadowGlow: 'hover:shadow-slate-900/10 hover:border-slate-350',
+        priceColor: 'from-slate-700 to-slate-500'
+      };
+    }
+    // Adultos
+    return {
+      headerGrad: 'from-emerald-600/90 to-teal-700/90',
+      badgeText: '🌱 Salud & Bienestar Adultos',
+      btnBg: 'bg-emerald-50 text-emerald-600 border-emerald-100 hover:bg-emerald-600 hover:text-white',
+      btnHover: 'group-hover:bg-emerald-600 group-hover:text-white border-emerald-100',
+      shadowGlow: 'hover:shadow-emerald-900/10 hover:border-emerald-200',
+      priceColor: 'from-emerald-600 to-teal-500'
+    };
+  };
+
   return (
     <div className="font-sans text-gray-800 bg-white min-h-screen flex flex-col">
       {/* HERO SECTION */}
@@ -524,70 +598,78 @@ const LandingPage = ({ setView }) => {
           if (filtroEtapa === 'adultos') return act.cursos.includes('ADULTO');
           return true;
         })
-        .map((act) => (
-          /* 🚀 CADA TARJETA AHORA LLEVA AL LOGIN */
-          <div 
-            key={act.id} 
-            onClick={() => setView('login')}
-            className="bg-white/70 backdrop-blur-md rounded-2xl shadow-lg overflow-hidden border border-white/40 flex flex-col hover:shadow-2xl hover:bg-white/90 transition-all duration-500 group cursor-pointer transform hover:-translate-y-1"
-          >
-            
-            {/* Encabezado Azul con degradado cristalino */}
-            <div className="bg-gradient-to-br from-blue-600/90 to-blue-700/90 p-4 relative text-left">
-              <h3 className="text-white font-black text-lg pr-8 uppercase tracking-tight">{act.nombre}</h3>
+        .map((act) => {
+          const theme = getThemeByActivity(act);
+          return (
+            /* 🚀 CADA TARJETA AHORA LLEVA AL LOGIN */
+            <div 
+              key={act.id} 
+              onClick={() => setView('login')}
+              className={`bg-white/70 backdrop-blur-md rounded-2xl shadow-lg overflow-hidden border border-white/40 flex flex-col hover:shadow-2xl hover:bg-white/90 transition-all duration-500 group cursor-pointer transform hover:-translate-y-1 w-full max-w-sm md:max-w-none ${theme.shadowGlow}`}
+            >
               
-              {/* ✨ Aviso que sale al pasar el ratón */}
-              <div className="absolute top-4 right-4 text-white opacity-0 group-hover:opacity-100 transition-opacity">
-                <span className="text-[10px] font-black bg-blue-900/40 px-2 py-1 rounded-lg">ENTRAR ➔</span>
-              </div>
-
-              <div className="flex flex-wrap gap-2 mt-2">
-                <span className="bg-blue-900/30 backdrop-blur-sm text-white text-[10px] px-2 py-1 rounded border border-white/10 font-mono">
-                  📅 {act.diasResumen}
-                </span>
-                <span className="bg-white/20 text-white text-[10px] px-2 py-1 rounded font-bold border border-white/10">
-                  👥 Máx. {act.alumnosMax} Alumnos
-                </span>
-                {act.requierePrueba && (
-                  <span className="bg-red-500 text-white text-[10px] px-2 py-1 rounded font-bold shadow-sm animate-pulse whitespace-nowrap">
-                    ❗ Requiere Prueba
+              {/* Encabezado con degradado dinámico según actividad */}
+              <div className={`bg-gradient-to-br ${theme.headerGrad} p-4 relative text-left`}>
+                <div className="flex justify-between items-start mb-2">
+                  <span className="bg-white/20 backdrop-blur-sm text-white text-[9px] px-2.5 py-0.5 rounded-full font-black uppercase tracking-wider border border-white/10">
+                    {theme.badgeText}
                   </span>
-                )}
-              </div>
-            </div>
-      
-            <div className="p-5 flex-1 flex flex-col">
-              <p className="text-slate-600 text-sm mb-4 flex-1 whitespace-pre-line leading-relaxed text-left font-medium">
-                {act.descripcion}
-              </p>
-              
-              {/* Aviso en cristal amarillo */}
-              <div className="bg-amber-400/10 border border-amber-200/50 p-3 rounded-xl text-xs text-amber-900 mb-4 font-semibold flex gap-2 text-left backdrop-blur-sm">
-                <span>⚠️</span>
-                <span>{act.aviso}</span>
-              </div>
-      
-              {/* Footer con precios destacados */}
-              <div className="border-t border-slate-100 pt-3 mt-auto flex justify-between items-center">
-                 <div className="text-left">
-                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter">Mínimo para grupo:</p>
-                    <p className="text-xs font-black text-blue-800">{act.minAlumnos} alumnos</p>
-                 </div>
-                 <div className="flex flex-col items-end">
-                    <span className="text-[10px] text-slate-400 font-bold uppercase">Precio</span>
-                    <p className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-blue-400">
-                      {act.precioResumen}
-                    </p>
-                 </div>
-              </div>
+                </div>
+                <h3 className="text-white font-black text-lg pr-8 uppercase tracking-tight leading-tight">{act.nombre}</h3>
+                
+                {/* ✨ Aviso que sale al pasar el ratón */}
+                <div className="absolute top-4 right-4 text-white opacity-0 group-hover:opacity-100 transition-opacity">
+                  <span className="text-[10px] font-black bg-blue-900/40 px-2 py-1 rounded-lg">ENTRAR ➔</span>
+                </div>
 
-              {/* ✨ Botón visual extra para que quede claro que se pulsa */}
-              <div className="mt-4 py-2 bg-blue-50 text-blue-600 text-[10px] font-black uppercase tracking-widest rounded-xl text-center group-hover:bg-blue-600 group-hover:text-white transition-all border border-blue-100">
-                Inscribirme / Reservar Prueba
+                <div className="flex flex-wrap gap-2 mt-3">
+                  <span className="bg-blue-900/30 backdrop-blur-sm text-white text-[10px] px-2 py-1 rounded border border-white/10 font-mono">
+                    📅 {act.diasResumen}
+                  </span>
+                  <span className="bg-white/20 text-white text-[10px] px-2 py-1 rounded font-bold border border-white/10">
+                    👥 Máx. {act.alumnosMax} Alumnos
+                  </span>
+                  {act.requierePrueba && (
+                    <span className="bg-red-500 text-white text-[10px] px-2 py-1 rounded font-bold shadow-sm animate-pulse whitespace-nowrap">
+                      ❗ Requiere Prueba
+                    </span>
+                  )}
+                </div>
+              </div>
+        
+              <div className="p-5 flex-1 flex flex-col">
+                <p className="text-slate-600 text-sm mb-4 flex-1 whitespace-pre-line leading-relaxed text-left font-medium">
+                  {act.descripcion}
+                </p>
+                
+                {/* Aviso en cristal amarillo */}
+                <div className="bg-amber-400/10 border border-amber-200/50 p-3 rounded-xl text-xs text-amber-900 mb-4 font-semibold flex gap-2 text-left backdrop-blur-sm">
+                  <span>⚠️</span>
+                  <span>{act.aviso}</span>
+                </div>
+        
+                {/* Footer con precios destacados */}
+                <div className="border-t border-slate-100 pt-3 mt-auto flex justify-between items-center">
+                   <div className="text-left">
+                      <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter">Mínimo para grupo:</p>
+                      <p className="text-xs font-black text-blue-800">{act.minAlumnos} alumnos</p>
+                   </div>
+                   <div className="flex flex-col items-end">
+                      <span className="text-[10px] text-slate-400 font-bold uppercase">Precio</span>
+                      <p className={`text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r ${theme.priceColor}`}>
+                        {act.precioResumen}
+                      </p>
+                   </div>
+                </div>
+
+                {/* ✨ Botón visual extra para que quede claro que se pulsa */}
+                <div className={`mt-4 py-2 text-[10px] font-black uppercase tracking-widest rounded-xl text-center transition-all border ${theme.btnBg} ${theme.btnHover}`}>
+                  Inscribirme / Reservar Prueba
+                </div>
               </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
     </div>
   </div>
 )}
