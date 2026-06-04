@@ -11,8 +11,18 @@ import {
   updateDoc,
   deleteDoc,
   onSnapshot,
-  orderBy
+  orderBy,
+  enableIndexedDbPersistence
 } from 'firebase/firestore';
+
+// Habilitar persistencia de Firestore offline para soportar mala cobertura
+enableIndexedDbPersistence(db).catch((err) => {
+  if (err.code === 'failed-precondition') {
+    console.warn("La persistencia falló: múltiples pestañas abiertas.");
+  } else if (err.code === 'unimplemented') {
+    console.warn("El navegador no soporta persistencia offline.");
+  }
+});
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
