@@ -1,4864 +1,5639 @@
-'use client';
-import { db } from './firebase';
+import React, { useState, useEffect, useRef } from 'react';import { db, auth } from './firebase.js'; 
 import {
   collection,
   addDoc,
-  getDocs,
   query,
+  where,
+  getDocs,
   doc,
-  deleteDoc,
+  setDoc,
+  getDoc, // <--- ¡AQUÍ ESTABA EL CULPABLE! FALTABA ESTO
   updateDoc,
-  onSnapshot, // 👈 ¡Sincronización en tiempo real activa!
+  deleteDoc,
+  onSnapshot,
+  orderBy,
   enableIndexedDbPersistence
 } from 'firebase/firestore';
 
-// Habilitar persistencia de Firestore offline para soportar mala cobertura en el pabellón/colegio
-if (typeof window !== 'undefined') {
-  enableIndexedDbPersistence(db).catch((err) => {
-    if (err.code === 'failed-precondition') {
-      console.warn("La persistencia falló: múltiples pestañas abiertas.");
-    } else if (err.code === 'unimplemented') {
-      console.warn("El navegador no soporta persistencia offline.");
-    }
-  });
-}
-import { useState, useEffect, useMemo } from 'react';
-import dynamic from 'next/dynamic';
-
-// Esto es como un "escudo" para que el mapa cargue solo cuando la web esté lista
-const MapaActividad = dynamic(() => import('./Mapa'), {
-  ssr: false,
-  loading: () => (
-    <div
-      style={{
-        height: '350px',
-        backgroundColor: '#f1f5f9',
-        borderRadius: '24px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        fontWeight: 'bold',
-      }}
-    >
-      Cargando mapa interactivo...
-    </div>
-  ),
+// Habilitar persistencia de Firestore offline para soportar mala cobertura
+enableIndexedDbPersistence(db).catch((err) => {
+  if (err.code === 'failed-precondition') {
+    console.warn("La persistencia falló: múltiples pestañas abiertas.");
+  } else if (err.code === 'unimplemented') {
+    console.warn("El navegador no soporta persistencia offline.");
+  }
 });
-// ⭐ ESTE ES EL NUEVO: Mapa para los Puntos de Interés Generales
-const MapaPuntosInteres = dynamic(() => import('./MapaPuntosInteres'), {
-  ssr: false,
-  loading: () => (
-    <div style={{ height: '100vh', backgroundColor: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <p>Cargando mapa maestro...</p>
-    </div>
-  ),
-});
+import {
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  onAuthStateChanged,
+  signOut,
+  updatePassword,        // <--- Añade esta
+  sendPasswordResetEmail
+} from 'firebase/auth';
+// ==========================================
+// 🌐 ESTADO GLOBAL (CONTEXTO DE AUTENTICACIÓN)
+// ==========================================
+const AuthContext = React.createContext();
 
-// 🔔 Componente Toast Premium para notificaciones elegantes
-function ToastContainer({ toasts }) {
-  if (!toasts || toasts.length === 0) return null;
-  return (
-    <div style={{
-      position: 'fixed',
-      top: '20px',
-      right: '20px',
-      zIndex: 999999,
-      display: 'flex',
-      flexDirection: 'column',
-      gap: '10px',
-      maxWidth: '350px',
-      width: '100%',
-      pointerEvents: 'none'
-    }}>
-      {toasts.map(t => (
-        <div key={t.id} style={{
-          padding: '16px 20px',
-          borderRadius: '16px',
-          backgroundColor: t.tipo === 'exito' ? '#10b981' : t.tipo === 'error' ? '#ef4444' : t.tipo === 'advertencia' ? '#f59e0b' : '#3b82f6',
-          color: 'white',
-          fontWeight: 'bold',
-          fontSize: '0.9rem',
-          boxShadow: '0 10px 25px rgba(0,0,0,0.15)',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          gap: '15px',
-          pointerEvents: 'auto',
-          animation: 'slideIn 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards, fadeOut 0.3s ease-in 3.2s forwards',
-          borderLeft: '5px solid rgba(0,0,0,0.2)'
-        }}>
-          <span>{t.mensaje}</span>
-        </div>
-      ))}
-    </div>
-  );
-}
+export function AuthProvider({ children }) {
+  const [user, setUser] = useState(null);
+  const [userRole, setUserRole] = useState('user');
+  const [view, setView] = useState('landing');
+  const [loading, setLoading] = useState(true);
 
-// 🔑 Componente Modal de Login Admin Premium (Glassmorphism con Firebase Auth)
-function AdminPasswordModal({ mostrar, onClose, db, setIsAdmin, lanzarToast }) {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [mostrarOjo, setMostrarOjo] = useState(false);
-  const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    if (mostrar) {
-      setEmail('');
-      setPassword('');
-      setLoading(false);
-    }
-  }, [mostrar]);
-
-  if (!mostrar) return null;
-
-  const validar = async (e) => {
-    e.preventDefault();
-    if (!email) return lanzarToast('¡Escribe tu correo de administrador! 📧', 'advertencia');
-    if (!password) return lanzarToast('¡Escribe tu contraseña! 🔑', 'advertencia');
-    setLoading(true);
-
-    try {
-      // 🔐 AUTENTICACIÓN REAL CONTRA FIREBASE AUTH EN TIEMPO REAL
-      const { getAuth, signInWithEmailAndPassword } = await import('firebase/auth');
-      const auth = getAuth();
-      
-      await signInWithEmailAndPassword(auth, email, password);
-      
-      setIsAdmin(true);
-      lanzarToast('¡Superpoderes de Admin activados! 🌟 (Autenticado de forma 100% segura)', 'exito');
-      onClose();
-    } catch (err) {
-      console.error(err);
-      if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
-        lanzarToast('❌ Correo o contraseña incorrectos', 'error');
-      } else {
-        lanzarToast('❌ Error de conexión al autenticar', 'error');
-      }
-    } finally {
-      setLoading(false);
-    }
+  // El "value" contiene todo lo que queremos que sea accesible desde cualquier sitio
+  const value = {
+    user, setUser,
+    userRole, setUserRole,
+    view, setView,
+    isAdmin: userRole === 'admin'
   };
 
   return (
-    <div style={{
-      position: 'fixed',
-      top: 0,
-      left: 0,
-      width: '100vw',
-      height: '100vh',
-      backgroundColor: 'rgba(15, 23, 42, 0.65)',
-      backdropFilter: 'blur(10px)',
-      WebkitBackdropFilter: 'blur(10px)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      zIndex: 999999,
-      animation: 'fadeIn 0.2s ease-out'
-    }}>
-      <form onSubmit={validar} style={{
-        backgroundColor: 'rgba(255, 255, 255, 0.95)',
-        padding: '35px',
-        borderRadius: '32px',
-        maxWidth: '400px',
-        width: '90%',
-        boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.3)',
-        border: '1px solid rgba(255, 255, 255, 0.4)',
-        textAlign: 'center',
-        boxSizing: 'border-box'
-      }}>
-        <div style={{ fontSize: '2.5rem', marginBottom: '15px' }}>🔑</div>
-        <h3 style={{ margin: '0 0 10px', color: '#0f172a', fontWeight: '900', fontSize: '1.5rem', letterSpacing: '-0.5px' }}>
-          Área de Administración
-        </h3>
-        <p style={{ margin: '0 0 25px', color: '#64748b', fontSize: '0.9rem', fontWeight: '500' }}>
-          Introduce tu correo y contraseña de Firebase para activar los superpoderes de edición de forma 100% segura.
-        </p>
-
-        {/* Campo de Correo Electrónico */}
-        <div style={{ position: 'relative', marginBottom: '15px' }}>
-          <input
-            type="email"
-            placeholder="Correo del administrador..."
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            style={{
-              width: '100%',
-              padding: '14px 16px',
-              borderRadius: '16px',
-              border: '2px solid #e2e8f0',
-              fontSize: '1rem',
-              outline: 'none',
-              boxSizing: 'border-box',
-              fontWeight: 'bold',
-              transition: 'border-color 0.2s'
-            }}
-            onFocus={(e) => e.target.style.borderColor = '#3b82f6'}
-            onBlur={(e) => e.target.style.borderColor = '#e2e8f0'}
-          />
-        </div>
-
-        {/* Campo de Contraseña */}
-        <div style={{ position: 'relative', marginBottom: '20px' }}>
-          <input
-            type={mostrarOjo ? 'text' : 'password'}
-            placeholder="Introduce la contraseña..."
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            style={{
-              width: '100%',
-              padding: '14px 45px 14px 16px',
-              borderRadius: '16px',
-              border: '2px solid #e2e8f0',
-              fontSize: '1rem',
-              outline: 'none',
-              boxSizing: 'border-box',
-              fontWeight: 'bold',
-              transition: 'border-color 0.2s'
-            }}
-            onFocus={(e) => e.target.style.borderColor = '#3b82f6'}
-            onBlur={(e) => e.target.style.borderColor = '#e2e8f0'}
-          />
-          <button
-            type="button"
-            onClick={() => setMostrarOjo(!mostrarOjo)}
-            style={{
-              position: 'absolute',
-              right: '15px',
-              top: '50%',
-              transform: 'translateY(-50%)',
-              background: 'none',
-              border: 'none',
-              cursor: 'pointer',
-              fontSize: '1.2rem'
-            }}
-          >
-            {mostrarOjo ? '👁️' : '🙈'}
-          </button>
-        </div>
-
-        <div style={{ display: 'flex', gap: '12px' }}>
-          <button
-            type="button"
-            onClick={onClose}
-            style={{
-              flex: 1,
-              padding: '14px',
-              backgroundColor: '#f1f5f9',
-              color: '#475569',
-              border: 'none',
-              borderRadius: '16px',
-              fontWeight: 'bold',
-              cursor: 'pointer',
-              fontSize: '0.9rem',
-              transition: 'background-color 0.2s'
-            }}
-          >
-            Cancelar
-          </button>
-          <button
-            type="submit"
-            disabled={loading}
-            style={{
-              flex: 1,
-              padding: '14px',
-              backgroundColor: '#3b82f6',
-              color: 'white',
-              border: 'none',
-              borderRadius: '16px',
-              fontWeight: 'bold',
-              cursor: 'pointer',
-              fontSize: '0.9rem',
-              boxShadow: '0 4px 12px rgba(59, 130, 246, 0.3)',
-              transition: 'background-color 0.2s'
-            }}
-          >
-            {loading ? 'Validando...' : 'Validar'}
-          </button>
-        </div>
-      </form>
-    </div>
+    <AuthContext.Provider value={value}>
+      {children}
+    </AuthContext.Provider>
   );
 }
 
-// 💀 Componente de Carga Esqueleto (Skeleton Card)
-function SkeletonCard() {
-  return (
-    <div style={{
-      backgroundColor: 'white',
-      borderRadius: '28px',
-      height: '530px',
-      overflow: 'hidden',
-      border: '3px solid #e2e8f0',
-      display: 'flex',
-      flexDirection: 'column',
-      boxShadow: '0 20px 35px rgba(0, 0, 0, 0.05)',
-      animation: 'pulse 1.5s infinite ease-in-out'
-    }}>
-      {/* Img Box */}
-      <div style={{ height: '180px', backgroundColor: '#e2e8f0' }} />
-      {/* Content Box */}
-      <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', flexGrow: 1, gap: '12px' }}>
-        <div style={{ height: '24px', backgroundColor: '#e2e8f0', borderRadius: '6px', width: '70%' }} />
-        <div style={{ height: '30px', backgroundColor: '#e2e8f0', borderRadius: '12px', width: '45%', marginTop: '5px' }} />
-        <div style={{ height: '18px', backgroundColor: '#e2e8f0', borderRadius: '6px', width: '55%' }} />
-        <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', height: '24px' }}>
-            <div style={{ height: '18px', backgroundColor: '#e2e8f0', borderRadius: '4px', width: '25%' }} />
-            <div style={{ height: '28px', backgroundColor: '#e2e8f0', borderRadius: '6px', width: '35%' }} />
-          </div>
-          <div style={{ height: '42px', backgroundColor: '#e2e8f0', borderRadius: '14px', width: '100%' }} />
-          <div style={{ height: '42px', backgroundColor: '#e2e8f0', borderRadius: '14px', width: '100%' }} />
-        </div>
-      </div>
-    </div>
-  );
-}
+// Este es el Hook personalizado para usar el estado global
+export const useAuth = () => {
+  const context = React.useContext(AuthContext);
+  if (!context) throw new Error("useAuth debe usarse dentro de un AuthProvider");
+  return context;
+};
 
-export default function Page() {
-  const [vista, setVista] = useState('catalogo');
-  const [fotoFondoHeader, setFotoFondoHeader] = useState('');
-  const [fotosEtapas, setFotosEtapas] = useState({
-    Infantil: '',
-    Primaria: '',
-    ESO: '',
-    Adultos: '',
-    'Clubes Amigos': ''
-  });
-  const [preguntaAbierta, setPreguntaAbierta] = useState(null);
-  const [etapaActiva, setEtapaActiva] = useState('Todos');
-  const [actividades, setActividades] = useState([]);
-  const [puntosInteres, setPuntosInteres] = useState([]);
-  const [editandoPuntoId, setEditandoPuntoId] = useState(null);
-  const [isAdmin, setIsAdmin] = useState(false);
-  // Este es el estado que le dirá al mapa a dónde volar
-  const [destino, setDestino] = useState(null);
-  const [actividadSeleccionada, setActividadSeleccionada] = useState(null);
-  const [editandoId, setEditandoId] = useState(null); // Para saber si estamos creando o editando
-  const [pestaña, setPestaña] = useState('info'); // Puede ser 'info' o 'mapa'
-  const [coordsTemp, setCoordsTemp] = useState({
-    latA: '',
-    lngA: '',
-    latM: '',
-    lngM: '',
-    latF: '',
-    lngF: '',
-  });
+// ==========================================
+// ⚙️ CONFIGURACIÓN GENERAL DEL SISTEMA
+// ==========================================
 
-  // 🌟 NUEVOS ESTADOS PREMIUM
-  const [toasts, setToasts] = useState([]); // [{ id, mensaje, tipo }]
-  const [mostrarAdminModal, setMostrarAdminModal] = useState(false);
-  const [claveInput, setClaveInput] = useState('');
-  const [mostrarOjo, setMostrarOjo] = useState(false);
-  const [cargando, setCargando] = useState(true); // Control del Skeleton Loading
-  const [modoOscuro, setModoOscuro] = useState(false); // 🌓 Control del Modo Oscuro
-  const [capturandoCoordenadasPara, setCapturandoCoordenadasPara] = useState(null); // 📡 Indica qué campo se está rellenando al hacer clic en el mapa
-  const [mostrarSubirArriba, setMostrarSubirArriba] = useState(false); // ⬆️ Control de visibilidad del botón para volver arriba
-  const [mostrarMenuEtapas, setMostrarMenuEtapas] = useState(true); // 🧸 Control del portal de bienvenida por etapas
-  const [subcategoriaActiva, setSubcategoriaActiva] = useState('Todas');
+// Email del administrador (Superusuario)
+const ADMIN_EMAIL = 'extraescolares@sanbuenaventura.org'; 
 
-  // 🔔 FUNCIÓN DE TOASTS PERSONALIZADOS
-  const lanzarToast = (mensaje, tipo = 'exito') => {
-    const id = Date.now();
-    setToasts((prev) => [...prev, { id, mensaje, tipo }]);
-    setTimeout(() => {
-      setToasts((prev) => prev.filter((t) => t.id !== id));
-    }, 3500);
-  };
+// Configuración de aforo para pruebas de nivel (alumnos por hueco de 5 min)
+const CAPACIDAD_POR_HUECO = 2; 
 
-  // 📚 FUNCIÓN DE RESOLUCIÓN EN TIEMPO REAL DE ACTIVIDADES DE ETAPA (100% REALES DESDE FIRESTORE)
-  const obtenerPillsEjemplos = (etapaId) => {
-    const actsEtapa = pillsEjemplosPorEtapa[etapaId] || [];
+// ==========================================
+// 🖼️ BANCO DE IMÁGENES
+// ==========================================
+const IMG_ESCUDO_BLANCO = 'https://i.ibb.co/v6gvHDfv/logo-BLANCO.png';
+const IMG_ESCUDO_COLOR = 'https://i.ibb.co/KjCWNLrc/CSB.png';
 
-    if (actsEtapa.length === 0) {
-      return (
-        <span style={{ fontSize: '0.78rem', color: modoOscuro ? '#94a3b8' : '#64748b', fontStyle: 'italic', display: 'block', padding: '4px 0' }}>
-          ¡Próximamente más actividades! 🚀
-        </span>
-      );
-    }
+// 👇 ¡AÑADE ESTO PARA QUE NO SE QUEDE EN BLANCO! 👇
+const IMG_ESCUDO = IMG_ESCUDO_COLOR; 
 
-    return (
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-        {actsEtapa.map((item, idx) => (
-          <span
-            key={item.id || idx}
-            style={{
-              fontSize: '0.76rem',
-              color: modoOscuro ? '#cbd5e1' : '#334155',
-              fontWeight: '600',
-              backgroundColor: modoOscuro ? 'rgba(255, 255, 255, 0.06)' : 'rgba(0, 0, 0, 0.04)',
-              padding: '4px 10px',
-              borderRadius: '10px',
-              border: `1px solid ${modoOscuro ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.05)'}`
-            }}
-          >
-            {item.nombre}
-          </span>
-        ))}
-      </div>
-    );
-  };
+const IMG_PRINCIPAL = 'https://i.ibb.co/HLt30jVK/20241210-084606.jpg';
+const MAPA_IMAGEN_URL = "https://i.ibb.co/35RNNBLz/Info-piscina.png";
 
+const GALERIA = [
+  { url: 'https://i.ibb.co/mrJHGscm/Screenshot-2025-05-09-15-04-17.png', nombre: "Vaso/Cristalera", zona: "Vista General" },
+  { url: 'https://i.ibb.co/Psstvn93/20241210-084647.jpg', nombre: "Zona de Aguas", zona: "Vaso" },
+  { url: 'https://i.ibb.co/gFT6zfHC/20241210-083956.jpg', nombre: "Duchas interiores", zona: "Instalaciones" },
+  { url: 'https://i.ibb.co/pvDBMSbv/20241210-083700.jpg', nombre: "Vestuario Femenino", zona: "Equipado" },
+  { url: 'https://i.ibb.co/hJxW45tC/20241210-084225.jpg', nombre: "Vestuario Masculino", zona: "Equipado" },
+  { url: 'https://i.ibb.co/9B0Fb23/20241210-083619.jpg', nombre: "Entrada/Hall", zona: "Entrada Principal" }
+];
+// ==========================================
+// 📚 LISTADO MAESTRO DE CURSOS ESCOLARES
+// ==========================================
+const LISTA_CURSOS = [
+  { val: 'INF3', label: 'Infantil 3 Años' },
+  { val: 'INF4', label: 'Infantil 4 Años' },
+  { val: 'INF5', label: 'Infantil 5 Años' },
+  { val: '1PRI', label: '1º Primaria' },
+  { val: '2PRI', label: '2º Primaria' },
+  { val: '3PRI', label: '3º Primaria' },
+  { val: '4PRI', label: '4º Primaria' },
+  { val: '5PRI', label: '5º Primaria' },
+  { val: '6PRI', label: '6º Primaria' },
+  { val: '1ESO', label: '1º ESO' },
+  { val: '2ESO', label: '2º ESO' },
+  { val: '3ESO', label: '3º ESO' },
+  { val: '4ESO', label: '4º ESO' },
+  { val: '1BACH', label: '1º Bachillerato' },
+  { val: '2BACH', label: '2º Bachillerato' },
+  { val: 'ADULTO', label: 'Adulto / +16 Años' },
+];
 
-  // 🔑 ESCUCHA EN TIEMPO REAL PARA MANTENER LA SESIÓN DEL ADMINISTRADOR ACTIVA
-  useEffect(() => {
-    const escucharAuth = async () => {
-      try {
-        const { getAuth, onAuthStateChanged } = await import('firebase/auth');
-        const auth = getAuth();
-        onAuthStateChanged(auth, (user) => {
-          if (user) {
-            setIsAdmin(true);
-            lanzarToast('¡Sesión de administrador recuperada! 🔑', 'info');
-          } else {
-            setIsAdmin(false);
-          }
-        });
-      } catch (err) {
-        console.error("Error al inicializar escucha de autenticación:", err);
-      }
-    };
-    escucharAuth();
-  }, []);
-
-  // ⬆️ ESCUCHA DE SCROLL PARA MOSTRAR U OCULTAR EL BOTÓN "VOLVER ARRIBA"
-  useEffect(() => {
-    const manejarScroll = () => {
-      if (window.scrollY > 400) {
-        setMostrarSubirArriba(true);
-      } else {
-        setMostrarSubirArriba(false);
-      }
-    };
-    window.addEventListener('scroll', manejarScroll);
-    return () => window.removeEventListener('scroll', manejarScroll);
-  }, []);
-
-  // 2️⃣ SEGUNDO: ¡AQUÍ JUSTO VA TU NUEVO ROBOT (useEffect)!
-  // Colócalo aquí mismo, libre y sin meterlo en ningún "if"
-  useEffect(() => {
-    const cargarConfiguracionCole = async () => {
-      try {
-        const { doc, getDoc } = await import('firebase/firestore');
-        // 🔍 Buscamos en el rincón seguro de las actividades
-        const docSnap = await getDoc(doc(db, "actividades_cole", "configuracion_header"));
-        if (docSnap.exists()) {
-          const data = docSnap.data();
-          if (data.fotoFondoHeader) {
-            setFotoFondoHeader(data.fotoFondoHeader);
-          }
-          setFotosEtapas({
-            Infantil: data.fotoEtapaInfantil || '',
-            Primaria: data.fotoEtapaPrimaria || '',
-            ESO: data.fotoEtapaESO || '',
-            Adultos: data.fotoEtapaAdultos || '',
-            'Clubes Amigos': data.fotoEtapaClubes || ''
-          });
-        }
-      } catch (error) {
-        console.error("Error al cargar la configuración de fotos:", error);
-      }
-    };
-    cargarConfiguracionCole();
-  }, []);
-
-  // 📡 HOOK GLOBAL PARA INTERCEPTAR CLICS EN LOS MAPAS DE LEAFLET
-  useEffect(() => {
-    const hookLeaflet = () => {
-      if (typeof window !== 'undefined' && window.L && window.L.Map) {
-        if (!window.L.Map.prototype._hasAntigravityClickHook) {
-          window.L.Map.prototype._hasAntigravityClickHook = true;
-          window.L.Map.addInitHook(function () {
-            this.on('click', (e) => {
-              window.dispatchEvent(new CustomEvent('leaflet-map-click', { 
-                detail: { lat: e.latlng.lat, lng: e.latlng.lng } 
-              }));
-            });
-          });
-        }
-      }
-    };
-
-    hookLeaflet();
-    const interval = setInterval(hookLeaflet, 1000);
-    return () => clearInterval(interval);
-  }, []);
-
-  useEffect(() => {
-    const handleMapClick = (e) => {
-      const { lat, lng } = e.detail;
-      if (!capturandoCoordenadasPara) return;
-
-      const latFijo = lat.toFixed(6);
-      const lngFijo = lng.toFixed(6);
-
-      if (capturandoCoordenadasPara === 'maestro') {
-        const inputLat = document.getElementById('nuevoPuntoLat');
-        const inputLng = document.getElementById('nuevoPuntoLng');
-        if (inputLat && inputLng) {
-          inputLat.value = latFijo;
-          inputLng.value = lngFijo;
-          inputLat.dispatchEvent(new Event('input', { bubbles: true }));
-          inputLng.dispatchEvent(new Event('input', { bubbles: true }));
-          lanzarToast('¡Coordenadas del mapa maestro capturadas! 📍', 'exito');
-        }
-      } else if (capturandoCoordenadasPara === 'actividad') {
-        setNuevaAct(prev => ({ ...prev, latAct: latFijo, lngAct: lngFijo }));
-        lanzarToast('¡Coordenadas de la actividad capturadas! 🎒', 'exito');
-      } else if (capturandoCoordenadasPara === 'monitores') {
-        setNuevaAct(prev => ({ ...prev, latMon: latFijo, lngMon: lngFijo }));
-        lanzarToast('¡Coordenadas de monitores capturadas! 🚶‍♂️', 'exito');
-      } else if (capturandoCoordenadasPara === 'familias') {
-        setNuevaAct(prev => ({ ...prev, latFam: latFijo, lngFam: lngFijo }));
-        lanzarToast('¡Coordenadas de familias capturadas! 👨‍👩‍👧', 'exito');
-      }
-
-      setCapturandoCoordenadasPara(null); // Desactivar modo captura
-      setVista('panel'); // Volver automáticamente al panel de control
-    };
-
-    window.addEventListener('leaflet-map-click', handleMapClick);
-    return () => window.removeEventListener('leaflet-map-click', handleMapClick);
-  }, [capturandoCoordenadasPara, setVista]);
-
-  const [clubes, setClubes] = useState([]); // Aquí guardaremos la lista que viene de la nube
-  const [empresaActiva, setEmpresaActiva] = useState('Todas');
-  const [busqueda, setBusqueda] = useState('');
-  const [mostrarFiltros, setMostrarFiltros] = useState(false); // Para abrir y cerrar el panel
-  const [diaActivo, setDiaActivo] = useState('Todos');         // Para saber qué día eligen
-  const [nuevoClub, setNuevoClub] = useState({
-  nombre: '',
-  etapas: [],
-  horario: '',
-  descripcion: '',
-  imagen: '',          // Aquí irá el logo
-  contacto: '',        // Teléfono o Email
-  linkInscripcion: '', // El enlace directo general
-  latAct: '',          // Punto de interés (latitud)
-  lngAct: '',          // Punto de interés (longitud)
-  linksMultiples: []   // 🌟 ¡NUEVO! Aquí guardaremos la lista de cursos y enlaces
-});
-
-  // 📚 MEMOIZACIÓN PREMIUM DE ACTIVIDADES DE ETAPA (100% REALES Y OPTIMIZADAS)
-  const pillsEjemplosPorEtapa = useMemo(() => {
-    const todoJunto = [
-      ...actividades.map(a => ({ ...a, esClub: false })),
-      ...clubes.map(c => ({ ...c, esClub: true }))
-    ];
-    
-    const obtenerActs = (etapaId) => {
-      return todoJunto.filter(item => {
-        if (etapaId === 'Clubes Amigos') {
-          return item.esClub || item.etapa === 'Clubes Amigos' || (item.etapas && item.etapas.includes('Clubes Amigos'));
-        }
-        if (etapaId === 'Infantil') {
-          return item.Infantil || item.etapa === 'Infantil' || (item.etapas && item.etapas.includes('Infantil'));
-        }
-        if (etapaId === 'ESO') {
-          return item.ESO || item.etapa === 'ESO' || (item.etapas && item.etapas.includes('ESO'));
-        }
-        if (etapaId === 'Adultos') {
-          return item.Adultos || item.etapa === 'Adultos' || (item.etapas && item.etapas.includes('Adultos'));
-        }
-        if (etapaId === 'Primaria') {
-          return item.Primaria || item.etapa === 'Primaria' || (item.etapas && item.etapas.includes('Primaria')) ||
-                 (!item.esClub && !item.Infantil && !item.ESO && !item.Adultos && item.etapa !== 'Infantil' && item.etapa !== 'ESO' && item.etapa !== 'Adultos' && item.etapa !== 'Clubes Amigos');
-        }
-        return false;
-      });
-    };
-
-    return {
-      Infantil: obtenerActs('Infantil').slice(0, 4),
-      Primaria: obtenerActs('Primaria').slice(0, 4),
-      ESO: obtenerActs('ESO').slice(0, 4),
-      Adultos: obtenerActs('Adultos').slice(0, 4),
-      'Clubes Amigos': obtenerActs('Clubes Amigos').slice(0, 4)
-    };
-  }, [actividades, clubes]);
-
-  // 🧠 CLASIFICADOR AUTOMÁTICO INTELIGENTE POR PALABRAS CLAVE CON CONTROL TOTAL
-  const obtenerCategoriaDeActividad = (item) => {
-    if (item.categoria) return item.categoria;
-
-    const nombre = (item.nombre || '').toLowerCase();
-    const info = (item.info || item.descripcion || '').toLowerCase();
-    const textoCompleto = `${nombre} ${info}`;
-
-    const keywordsDeportes = [
-      'futbol', 'fútbol', 'baloncesto', 'judo', 'natacion', 'natación', 'patinaje', 'deporte', 
-      'gimnasia', 'atletismo', 'tenis', 'padel', 'pádel', 'karate', 'taekwondo', 'balonmano',
-      'voleibol', 'futbolin', 'fútbolin', 'esgrima', 'deportiva'
-    ];
-
-    const keywordsIdiomas = [
-      'ingles', 'inglés', 'english', 'idioma', 'idiomas', 'frances', 'francés', 'aleman', 'alemán', 
-      'oratoria', 'debate', 'chinesse', 'chino', 'language', 'cambridge'
-    ];
-
-    const keywordsArte = [
-      'teatro', 'zumba', 'baile', 'danza', 'lectura', 'arte', 'expresion', 'expresión', 'musica', 
-      'música', 'pintura', 'dibujo', 'coro', 'guitarra', 'piano', 'flauta', 'violn', 'violín', 
-      'espectaculo', 'espectáculo', 'creatividad', 'creativa'
-    ];
-
-    const keywordsTecnologia = [
-      'robotica', 'robótica', 'ajedrez', 'digital', 'tecnologia', 'tecnología', 'programacion', 
-      'programación', 'manualidades', 'costura', 'cocina', 'lego', 'minecraft', 'scratch', 
-      'ciencias', 'experimentos', 'brico', 'bricolaje', 'taller'
-    ];
-
-    const contieneKeyword = (texto, keywords) => {
-      return keywords.some(keyword => texto.includes(keyword));
-    };
-
-    if (contieneKeyword(textoCompleto, keywordsDeportes)) return 'Deportes';
-    if (contieneKeyword(textoCompleto, keywordsIdiomas)) return 'Idiomas';
-    if (contieneKeyword(textoCompleto, keywordsArte)) return 'Arte/expresión';
-    if (contieneKeyword(textoCompleto, keywordsTecnologia)) return 'Tecnología/manualidades';
-
-    return 'Deportes'; // Default fallback si no coincide nada
-  };
-
-  // 🚀 ACTIVIDADES ACTIVAS EN LA ETAPA ACTUAL (Para conteo dinámico y visibilidad reactiva)
-  const activitiesInActiveStage = useMemo(() => {
-    const todoJunto = [
-      ...actividades.map(a => ({ ...a, esClub: false })),
-      ...clubes.map(c => ({ ...c, esClub: true }))
-    ];
-    const etapaBoton = etapaActiva.trim().toLowerCase();
-    if (etapaBoton === 'todos') return todoJunto;
-
-    return todoJunto.filter(item => {
-      const esClub = item.etapas && item.etapas.includes('Clubes Amigos');
-      if (etapaBoton === 'clubes amigos') return esClub;
-      if (esClub) return false;
-
-      const estaEnListaEtapas = Array.isArray(item.etapas) && 
-                                item.etapas.some(e => e.trim().toLowerCase() === etapaBoton);
-      const etapaSimple = (item.etapa || "").trim().toLowerCase();
-      return estaEnListaEtapas || (etapaSimple === etapaBoton);
-    });
-  }, [actividades, clubes, etapaActiva]);
-
-  // 📊 CONTEO REACTIVO DE ACTIVIDADES POR SUB-CATEGORÍA EN LA ETAPA ACTIVA
-  const categoriasDisponibles = useMemo(() => {
-    const counts = {
-      Todas: activitiesInActiveStage.length,
-      Deportes: 0,
-      Idiomas: 0,
-      'Arte/expresión': 0,
-      'Tecnología/manualidades': 0
-    };
-
-    activitiesInActiveStage.forEach(item => {
-      const cat = obtenerCategoriaDeActividad(item);
-      if (cat && cat in counts) {
-        counts[cat]++;
-      }
-    });
-
-    return counts;
-  }, [activitiesInActiveStage]);
-
-  // 🚀 FILTRO MEMOIZADO SÚPER VELOZ PARA EL CATÁLOGO (CERO RELENTIZACIONES)
-  const itemsFiltrados = useMemo(() => {
-    const todoJunto = [
-      ...actividades.map(a => ({ ...a, esClub: false })),
-      ...clubes.map(c => ({ ...c, esClub: true }))
-    ];
-
-    const normalizar = (texto) => 
-      texto.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-      
-    const loQueEscribeLaFamilia = normalizar(busqueda);
-    const etapaBoton = etapaActiva.trim().toLowerCase();
-    const empresaBoton = empresaActiva.trim().toLowerCase();
-    const diaBoton = diaActivo.toLowerCase();
-
-    return todoJunto.filter((item) => {
-      // 1. Filtrar por subcategoría activa si no es 'Todas'
-      if (subcategoriaActiva !== 'Todas') {
-        const cat = obtenerCategoriaDeActividad(item);
-        if (cat !== subcategoriaActiva) return false;
-      }
-
-      const nombreActividad = normalizar(item.nombre || "");
-      if (!nombreActividad.includes(loQueEscribeLaFamilia)) return false;
-    
-      const empresaActividad = (item.empresa || "").trim().toLowerCase();
-      const cumpleEmpresa = 
-        empresaBoton === 'todas' || 
-        empresaActividad === empresaBoton ||
-        (empresaBoton === 'san buenaventura' && empresaActividad === 'colegio san buenaventura');
-    
-      if (!cumpleEmpresa) return false;
-    
-      const diasActividad = (item.dias || "").toLowerCase();
-      const cumpleDia = diaBoton === 'todos' || diasActividad.includes(diaBoton);
-      if (!cumpleDia) return false;
-    
-      const esClub = item.etapas && item.etapas.includes('Clubes Amigos');
-      if (etapaBoton === 'clubes amigos') return esClub;
-      if (esClub) return false;
-      
-      if (etapaBoton === 'todos') return true;
-      
-      const estaEnListaEtapas = Array.isArray(item.etapas) && 
-                                item.etapas.some(e => e.trim().toLowerCase() === etapaBoton);
-      
-      const etapaSimple = (item.etapa || "").trim().toLowerCase();
-      const esEtapaVieja = etapaSimple === etapaBoton;
-    
-      return estaEnListaEtapas || esEtapaVieja;
-    });
-  }, [actividades, clubes, busqueda, etapaActiva, empresaActiva, diaActivo, subcategoriaActiva]);
-// 🚀 ¡AQUÍ LAS PEGAS! LAS TRES FUNCIONES NUEVAS:
-  const agregarFilaLink = () => {
-    setNuevoClub({
-      ...nuevoClub,
-      linksMultiples: [...(nuevoClub.linksMultiples || []), { etiqueta: '', url: '' }]
-    });
-  };
-
-  const manejarCambioLink = (index, campo, valor) => {
-    const nuevosLinks = [...(nuevoClub.linksMultiples || [])];
-    nuevosLinks[index][campo] = valor;
-    setNuevoClub({ ...nuevoClub, linksMultiples: nuevosLinks });
-  };
-
-  const eliminarFilaLink = (index) => {
-    const nuevosLinks = (nuevoClub.linksMultiples || []).filter((_, i) => i !== index);
-    setNuevoClub({ ...nuevoClub, linksMultiples: nuevosLinks });
-  };
-  // 🏰 El enlace mágico de tu escudo desde Storage
-  const URL_ESCUDO =
-    'https://firebasestorage.googleapis.com/v0/b/extraescolarescsb.firebasestorage.app/o/colegio%20buena%20-%20Editada.png?alt=media&token=d30127c6-037e-47c5-a7e0-29d7cd5585fd';
-
-    const [nuevaAct, setNuevaAct] = useState({
-      nombre: '',
-      categoria: '', // 👈 Control Total Manual o Clasificación Automática
-      etapas: [], // 👈 ¡Ahora es una lista para marcar varias!
-      dias: '',
-      horario: '',
-      lugar: '',
-      info: '',
-      imagen: '',
-      recogidaMonitores: '',
-      recogidaFamilias: '',
-      precio: '',
-      latAct: '40.407937755274425',
-      lngAct: '-3.7469348757382366',
-      fotoAct: '', 
-      fotoMon: '', 
-      fotoFam: '', 
-    });
-
-  // 📡 SINCRONIZACIÓN EN TIEMPO REAL CON FIRESTORE (onSnapshot)
-  useEffect(() => {
-    setCargando(true);
-
-    // 1. Actividades reales en tiempo real
-    const qAct = query(collection(db, 'actividades_cole'));
-    const unsubAct = onSnapshot(qAct, (snapshot) => {
-      const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      const actividadesReales = docs.filter(
-        (item) =>
-          item.id !== 'configuracion_header' &&
-          item.id !== 'configuración header' &&
-          !item.id.toLowerCase().includes('configuracio')
-      );
-      setActividades(actividadesReales);
-      setCargando(false);
-    }, (error) => {
-      console.error("Error al cargar actividades:", error);
-      lanzarToast("Error al conectar con la base de datos de actividades ☁️", "error");
-      setCargando(false);
-    });
-
-    // 2. Puntos de interés en tiempo real (Mapa Maestro)
-    const qPuntos = query(collection(db, 'puntos_interes_cole'));
-    const unsubPuntos = onSnapshot(qPuntos, (snapshot) => {
-      const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setPuntosInteres(docs);
-    }, (error) => {
-      console.error("Error al cargar puntos de interés:", error);
-    });
-
-    // 3. Clubes Amigos en tiempo real
-    const qClubes = query(collection(db, 'clubes_cole'));
-    const unsubClubes = onSnapshot(qClubes, (snapshot) => {
-      const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setClubes(docs);
-    }, (error) => {
-      console.error("Error al cargar clubes:", error);
-    });
-
-    return () => {
-      unsubAct();
-      unsubPuntos();
-      unsubClubes();
-    };
-  }, []);
-
-  // 📡 CONTROL DE ENLACES COMPARTIDOS (DEEP LINKING / URL PARAMS)
-  useEffect(() => {
-    if (cargando || (actividades.length === 0 && clubes.length === 0)) return;
-
-    const params = new URLSearchParams(window.location.search);
-    const actId = params.get('act');
-    if (actId) {
-      const encontrada = actividades.find(a => a.id === actId) || clubes.find(c => c.id === actId);
-      if (encontrada) {
-        setActividadSeleccionada(encontrada);
-        setVista('detalles');
-      }
-    }
-  }, [cargando, actividades, clubes]);
-
-  // Funciones de compatibilidad para evitar errores al guardar/borrar
-  const cargarActividades = () => {};
-  const cargarPuntosInteres = () => {};
-
-  const guardarActividad = async () => {
-    if (!isAdmin) return lanzarToast('🛑 ¡Acceso denegado! No tienes permisos de administrador. 🔐', 'error');
-    if (!nuevaAct.nombre) return lanzarToast('¡Escribe el nombre de la actividad! 📝', 'advertencia');
-    
-    if (!nuevaAct.etapas || nuevaAct.etapas.length === 0) {
-      return lanzarToast('¡Debes elegir al menos una etapa para que aparezca en la web! 🚩', 'advertencia');
-    }
-
-    // 🚀 Preparamos el paquete limpiando los enlaces antiguos y nuevos
-    const actividadFinal = {
-      ...nuevaAct,
-      etapas: nuevaAct.etapas,
-      // 🌟 EL TRUCO DE LA PISCINA: Aseguramos que la casilla principal guarde la web en los dos campos posibles
-      enlace: nuevaAct.enlace || '',
-      linkInscripcion: nuevaAct.enlace || '',
-      // 🌟 Añadimos también los links múltiples por si acaso
-      linksMultiples: nuevaAct.linksMultiples || [],
-      latAct: parseFloat(nuevaAct.latAct) || 0,
-      lngAct: parseFloat(nuevaAct.lngAct) || 0,
-      latMon: parseFloat(nuevaAct.latMon) || 0,
-      lngMon: parseFloat(nuevaAct.lngMon) || 0,
-      latFam: parseFloat(nuevaAct.latFam) || 0,
-      lngFam: parseFloat(nuevaAct.lngFam) || 0,
-    };
-
-    delete actividadFinal.etapa;
-
-    try {
-      if (editandoId) {
-        await updateDoc(doc(db, 'actividades_cole', editandoId), actividadFinal);
-        lanzarToast('¡Actividad actualizada con éxito! 🔄', 'exito');
-      } else {
-        await addDoc(collection(db, 'actividades_cole'), actividadFinal);
-        lanzarToast('¡Publicado con éxito! ✨', 'exito');
-      }
-
-      // ✨ LIMPIEZA TOTAL (¡Actualizada con los enlaces!)
-      setNuevaAct({
-        nombre: '',
-        categoria: '', // 🧹 Limpiamos la categoría
-        etapas: [],
-        empresa: '',
-        logoEmpresa: '',
-        nombreContacto: '',
-        contacto: '', // Este es el email
-        dias: '',
-        horario: '',
-        lugar: '',
-        info: '',
-        imagen: '',
-        enlace: '',           // 🧹 Limpiamos el enlace principal antiguo
-        linksMultiples: [],   // 🧹 Limpiamos la nueva lista de enlaces múltiples
-        recogidaMonitores: '',
-        recogidaFamilias: '',
-        precio: '',
-        latAct: '40.407937755274425',
-        lngAct: '-3.7469348757382366',
-        latMon: '',
-        lngMon: '',
-        latFam: '',
-        lngFam: '',
-        fotoAct: '',
-        fotoMon: '',
-        fotoFam: '',
-      });
-
-      setEditandoId(null);
-      setVista('catalogo');
-      cargarActividades();
-    } catch (e) {
-      console.error('Error al guardar:', e);
-      lanzarToast('Vaya, parece que ha habido un error al conectar con la nube.', 'error');
-    }
-  };
-
-  // 🚀 El "brazo robótico" para guardar Clubes Amigos (¡También actualizado!)
-  const guardarClub = async () => {
-    if (!isAdmin) return lanzarToast('🛑 ¡Acceso denegado! No tienes permisos de administrador. 🔐', 'error');
-    if (!nuevoClub.nombre) return lanzarToast('¡Escribe el nombre del club! 🥋', 'advertencia');
-    if (nuevoClub.etapas.length === 0) return lanzarToast('¡Marca al menos una etapa! 🏁', 'advertencia');
-
-    try {
-      // 🚀 Preparamos el paquete como siempre
-      const clubFinal = {
-        nombre: nuevoClub.nombre,
-        etapas: nuevoClub.etapas,
-        horario: nuevoClub.horario || '',
-        descripcion: nuevoClub.descripcion || '',
-        imagen: nuevoClub.imagen || '',
-        contacto: nuevoClub.contacto || '',
-        linkInscripcion: nuevoClub.linkInscripcion || '',
-        linksMultiples: nuevoClub.linksMultiples || [], // 🌟 ¡NUEVO! Añadimos esto para la nube de los clubes
-        latAct: parseFloat(nuevoClub.latAct) || 0,
-        lngAct: parseFloat(nuevoClub.lngAct) || 0
-      };
-
-      // ✨ ¡AQUÍ ESTÁ EL TRUCO!
-      if (editandoId) {
-        // ✏️ SI HAY UN ID: Usamos updateDoc para sobrescribir el viejo
-        await updateDoc(doc(db, 'clubes_cole', editandoId), clubFinal);
-        lanzarToast('¡Club Amigo actualizado! ✨', 'exito');
-      } else {
-        // 🆕 SI NO HAY ID: Usamos addDoc para crear uno nuevo
-        await addDoc(collection(db, 'clubes_cole'), clubFinal);
-        lanzarToast('¡Club Amigo guardado con éxito! 🌟', 'exito');
-      }
-
-      // 🧹 Limpiamos el cajón y reseteamos el ID de edición
-      setNuevoClub({
-        nombre: '', etapas: [], horario: '', descripcion: '',
-        imagen: '', contacto: '', linkInscripcion: '', latAct: '', lngAct: '',
-        linksMultiples: [] // 🌟 ¡NUEVO! También limpiamos la lista de los clubes al terminar
-      });
-      setEditandoId(null); // 👈 ¡Súper importante para que el siguiente no sea una edición!
-      
-      setVista('catalogo');
-      if (typeof cargarClubes === 'function') cargarClubes();
-
-    } catch (e) {
-      console.error('Error al guardar/actualizar:', e);
-      lanzarToast('¡Uy! Ha fallado el envío a la nube.', 'error');
-    }
-  };
-  const cargarClubes = () => {};
-// 📑 Lista de preguntas frecuentes corregidas y adaptadas para las familias
-const preguntasFrecuentes = [
+// ==========================================
+// 📋 CATÁLOGO DE ACTIVIDADES (DATABASE)
+// ==========================================
+const OFERTA_ACTIVIDADES = [
   {
-    id: 1,
-    pregunta: "❓ ¿Cómo recogen los monitores a los alumnos y dónde se entregan?",
-    respuesta: "¡Es súper fácil! Dentro de esta misma web, si pulsas en el botón 'Ver información completa' de cada actividad, verás detallado paso a paso el lugar exacto donde se realiza, dónde recogen los monitores a los niños y en qué punto se entregan a las familias al terminar. ¡Todo bien especificado para tu total tranquilidad!"
+    id: 'chapoteo', 
+    nombre: '🚼 Chapoteo "Infantil" (16:00-17:00)', 
+    cursos: ['INF3', 'INF4', 'INF5'], 
+    requierePrueba: false, 
+    diasResumen: 'L-V', 
+    precioResumen: '45€', 
+    alumnosMax: 16, // <--- Añadido
+    minAlumnos: 5, // <--- Añadido para que sea dinámico
+    descripcion: 'Iniciación y familiarización con el medio acuático. El monitor está dentro del agua para mayor seguridad y confianza.\n\n⬇️ HORARIOS ⬇️\n• 1 día/sem (45€): Lunes a Viernes (16:00-17:00).', 
+    aviso: 'Plazas limitadas por estricto orden de inscripción.', // He cambiado el aviso porque el "mínimo" ya saldrá abajo
+    opciones: [
+        { dias: 'Lunes', horario: '16:00-17:00', precio: '45€' },
+        { dias: 'Martes', horario: '16:00-17:00', precio: '45€' },
+        { dias: 'Miércoles', horario: '16:00-17:00', precio: '45€' },
+        { dias: 'Jueves', horario: '16:00-17:00', precio: '45€' },
+        { dias: 'Viernes', horario: '16:00-17:00', precio: '45€' }
+    ]
   },
   {
-    id: 2,
-    pregunta: "📋 ¿Cuándo se pasan los recibos mensuales de las actividades?",
-    respuesta: "Los recibos de las actividades extraescolares se cobran de forma cómoda para las familias siempre a principio de cada mes."
+    id: 'primaria_1615', 
+    nombre: '🏅 Natación Primaria (16:15-17:15)', 
+    cursos: ['1PRI', '2PRI', '3PRI', '4PRI', '5PRI', '6PRI'], 
+    requierePrueba: true, 
+    diasResumen: 'L-V', 
+    precioResumen: '45€ / 65€', 
+    alumnosMax: 12, // El máximo que me has indicado
+    minAlumnos: 6,  // El mínimo que tenías en el aviso
+    descripcion: 'Desarrollo de estilos y técnica. Se divide en subgrupos por nivel. Ideal para perfeccionar la natación.\n\n⬇️ ELIGE TU OPCIÓN ⬇️\n⭐ PACK 2 DÍAS (65€): L/X o M/J.\n⭐ DÍA SUELTO (45€): L, M, X, J o V.', 
+    aviso: 'Plazas limitadas por nivel y estricto orden de inscripción.', 
+    opciones: [
+        { dias: '[PACK 2 DÍAS] Lunes y Miércoles', horario: '16:15-17:15', precio: '65€' },
+        { dias: '[PACK 2 DÍAS] Martes y Jueves', horario: '16:15-17:15', precio: '65€' },
+        { dias: '[1 DÍA] Lunes', horario: '16:15-17:15', precio: '45€' },
+        { dias: '[1 DÍA] Martes', horario: '16:15-17:15', precio: '45€' },
+        { dias: '[1 DÍA] Miércoles', horario: '16:15-17:15', precio: '45€' },
+        { dias: '[1 DÍA] Jueves', horario: '16:15-17:15', precio: '45€' },
+        { dias: '[1 DÍA] Viernes', horario: '16:15-17:15', precio: '45€' }
+    ]
   },
   {
-    id: 3,
-    pregunta: "❌ ¿Cómo puedo solicitar la baja de una actividad?",
-    respuesta: "Si necesitas solicitar una baja, recuerda hacerlo siempre antes del día 25 del mes anterior. El trámite se realiza directamente a través de la página web de Alventus, a excepción de las actividades de piscina, las cuales se gestionan cómodamente desde la propia página web de la piscina."
+      id: 'primaria_123_tarde', 
+      nombre: '🐟 Natación 1º-3º Prim (17:30-18:00)', 
+      cursos: ['1PRI', '2PRI', '3PRI'], 
+      requierePrueba: true, 
+      diasResumen: 'L-V', 
+      precioResumen: '37€ / 50€', 
+      alumnosMax: 8, // Configurado según me has pedido
+      minAlumnos: 4, // El mínimo que tenías en el aviso
+      descripcion: 'Sesiones breves, dinámicas y muy seguras para avanzar en autonomía acuática. Grupos reducidos.\n\n⬇️ ELIGE TU OPCIÓN ⬇️\n⭐ PACK 2 DÍAS (50€): L/X o M/J.\n⭐ DÍA SUELTO (37€): Cualquier día.', 
+      aviso: 'Plazas limitadas por nivel y estricto orden de inscripción.', 
+    opciones: [
+        { dias: '[PACK 2 DÍAS] Lunes y Miércoles', horario: '17:30-18:00', precio: '50€' },
+        { dias: '[PACK 2 DÍAS] Martes y Jueves', horario: '17:30-18:00', precio: '50€' },
+        { dias: '[1 DÍA] Lunes', horario: '17:30-18:00', precio: '37€' },
+        { dias: '[1 DÍA] Martes', horario: '17:30-18:00', precio: '37€' },
+        { dias: '[1 DÍA] Miércoles', horario: '17:30-18:00', precio: '37€' },
+        { dias: '[1 DÍA] Jueves', horario: '17:30-18:00', precio: '37€' },
+        { dias: '[1 DÍA] Viernes', horario: '17:30-18:00', precio: '37€' }
+    ]
   },
   {
-    id: 4,
-    pregunta: "🌧️ ¿Qué pasa si llueve y la actividad es al aire libre?",
-    respuesta: "¡La diversión nunca se detiene en el cole! En caso de lluvia o mal tiempo, los monitores tienen previstos espacios cubiertos alternativos dentro del colegio (como aulas asignadas, porches o el gimnasio) para realizar la actividad de forma segura y adaptada."
+    id: 'primaria_456_tarde', 
+    nombre: '🏊 Natación 4º-6º Prim (17:30-18:00)', 
+    cursos: ['4PRI', '5PRI', '6PRI'], 
+    requierePrueba: true, 
+    diasResumen: 'L-V', 
+    precioResumen: '37€ / 50€', 
+    alumnosMax: 8, // Configurado según me has pedido
+    minAlumnos: 4, // El mínimo que tenías en el aviso
+    descripcion: 'Para quienes quieren seguir mejorando técnica y condición física. Ideal como complemento a otras actividades deportivas.\n\n⬇️ ELIGE TU OPCIÓN ⬇️\n⭐ PACK 2 DÍAS (50€).\n⭐ DÍA SUELTO (37€).', 
+    aviso: 'Plazas limitadas por nivel y estricto orden de inscripción.',
+    opciones: [
+        { dias: '[PACK 2 DÍAS] Lunes (30m) y Miércoles (30m)', horario: '17:30-18:00', precio: '50€' },
+        { dias: '[PACK 2 DÍAS] Martes (30m) y Jueves (30m)', horario: '17:30-18:00', precio: '50€' },
+        { dias: '[1 DÍA] Lunes', horario: '17:30-18:00', precio: '37€' },
+        { dias: '[1 DÍA] Martes', horario: '17:30-18:00', precio: '37€' },
+        { dias: '[1 DÍA] Miércoles', horario: '17:30-18:00', precio: '37€' },
+        { dias: '[1 DÍA] Jueves', horario: '17:30-18:00', precio: '37€' },
+        { dias: '[1 DÍA] Viernes', horario: '17:30-18:00', precio: '37€' }
+    ]
   },
   {
-    id: 5,
-    pregunta: "🏊‍♂️ ¿Cómo accedo a las actividades y reservas de la Piscina?",
-    respuesta: (
-      <span>
-        Las actividades acuáticas y de natación del colegio tienen un portal propio e independiente. Puedes acceder directamente a través de <a href="https://piscina-csb.vercel.app/" target="_blank" rel="noopener noreferrer" style={{ color: '#3b82f6', textDecoration: 'underline', fontWeight: '700' }}>piscina-csb.vercel.app</a> para consultar los niveles, reservar citas para pruebas de nivel y gestionar cómodamente las inscripciones online.
-      </span>
-    )
+    id: 'waterpolo', 
+    nombre: '🤽‍♂️ Waterpolo 3º-6º Prim (17:30-18:30)', 
+    cursos: ['3PRI', '4PRI', '5PRI', '6PRI'], 
+    requierePrueba: false, 
+    diasResumen: 'L-V', 
+    precioResumen: '45€ / 60€', 
+    alumnosMax: 12, // Configurado según me has pedido
+    minAlumnos: 7,  // El mínimo que tenías en el aviso
+    descripcion: 'Iniciación al waterpolo. Deporte de equipo, balón y natación. Fomenta el compañerismo.\n\n⬇️ ELIGE TU OPCIÓN ⬇️\n⭐ PACK 2 DÍAS (60€): L/X o M/J.\n⭐ DÍA SUELTO (45€): L, M, X, J o V.', 
+    aviso: 'Deporte de equipo con plazas limitadas por grupo.',
+    opciones: [
+        { dias: '[PACK 2 DÍAS] Lunes y Miércoles', horario: '17:30-18:30', precio: '60€' },
+        { dias: '[PACK 2 DÍAS] Martes y Jueves', horario: '17:30-18:30', precio: '60€' },
+        { dias: '[1 DÍA] Lunes', horario: '17:30-18:30', precio: '45€' },
+        { dias: '[1 DÍA] Martes', horario: '17:30-18:30', precio: '45€' },
+        { dias: '[1 DÍA] Miércoles', horario: '17:30-18:30', precio: '45€' },
+        { dias: '[1 DÍA] Jueves', horario: '17:30-18:30', precio: '45€' },
+        { dias: '[1 DÍA] Viernes', horario: '17:30-18:30', precio: '45€' }
+    ]
   },
   {
-    id: 6,
-    pregunta: "✍️ ¿Puedo inscribir a mi hijo en una actividad si el curso ya ha comenzado?",
-    respuesta: (
-      <span>
-        ¡Sí, por supuesto! Las inscripciones permanecen abiertas durante todo el curso escolar (que se imparte de <strong>octubre a mayo</strong>), siempre y cuando queden vacantes en la actividad elegida. Ten en cuenta que <strong>no se aplican descuentos ni prorrateos por apuntarse a mitad de mes</strong> (se cobrará la mensualidad completa). Si lo prefieres, <strong>puedes solicitar comenzar la actividad a partir del primer día del mes siguiente</strong> para evitar el cobro del mes en curso. Asimismo, recuerda que la viabilidad de cada actividad al inicio del curso está sujeta a alcanzar un <strong>mínimo de alumnos inscritos</strong> en el grupo.
-      </span>
-    )
+    id: 'aquagym', 
+    nombre: '💧 Aquagym "+16 años" (17:30-18:15)', 
+    cursos: ['ADULTO', '1BACH', '2BACH'], 
+    requierePrueba: false, 
+    diasResumen: 'M y J', 
+    precioResumen: '50€', 
+    alumnosMax: 12, // Configurado según me has pedido
+    minAlumnos: 5,  // El mínimo que tenías en el aviso
+    descripcion: 'Actividad de bajo impacto ideal para mantenerse en forma sin sobrecargar articulaciones. Mejora la movilidad y el tono muscular.\n\n⬇️ HORARIOS ⬇️\n• PACK 2 DÍAS (50€): Martes y Jueves (17:30-18:15).', 
+    aviso: 'Actividad recomendada para todos los niveles físicos.',
+    opciones: [
+        { dias: '[PACK] Martes y Jueves', horario: '17:30-18:15', precio: '50€' }
+    ]
   },
   {
-    id: 7,
-    pregunta: "🥋 ¿Qué equipamiento o ropa especial necesita llevar mi hijo para la actividad?",
-    respuesta: (
-      <span>
-        ¡No te preocupes! <strong>Dentro de la ficha de información detallada de cada actividad en esta web viene especificado exactamente el material técnico</strong>, ropa o calzado que el alumno necesita llevar a las sesiones. Por norma general, para las actividades deportivas se recomienda asistir con ropa cómoda o el chándal oficial del colegio.
-      </span>
-    )
+    id: 'adultos', 
+    nombre: '👨‍👩‍👧 Adultos (L-X-V 18:00-18:30) (M-J 18:30-19:00)', 
+    cursos: ['ADULTO'], 
+    requierePrueba: false, 
+    diasResumen: 'L-V', 
+    precioResumen: '37€ / 50€', 
+    alumnosMax: 10, // Configurado según me has pedido
+    minAlumnos: 4,  // El mínimo que tenías en el aviso
+    descripcion: 'Clases para adultos que quieran mantenerse activos o mejorar su estilo.\n\n⬇️ ELIGE TU OPCIÓN ⬇️\n⭐ PACK 2 DÍAS (50€): L/X o M/J.\n⭐ DÍA SUELTO (37€): Cualquier día.\n(Horarios variables según el día).', 
+    aviso: 'Plazas asignadas por estricto orden de inscripción.',
+    opciones: [
+        { dias: '[PACK 2 DÍAS] Lunes y Miércoles', horario: '18:00-18:30', precio: '50€' },
+        { dias: '[PACK 2 DÍAS] Martes y Jueves', horario: '18:30-19:00', precio: '50€' },
+        { dias: '[1 DÍA] Lunes', horario: '18:00-18:30', precio: '37€' },
+        { dias: '[1 DÍA] Martes', horario: '18:30-19:00', precio: '37€' },
+        { dias: '[1 DÍA] Miércoles', horario: '18:00-18:30', precio: '37€' },
+        { dias: '[1 DÍA] Jueves', horario: '18:30-19:00', precio: '37€' },
+        { dias: '[1 DÍA] Viernes', horario: '18:00-18:30', precio: '37€' }
+    ]
   },
   {
-    id: 8,
-    pregunta: "📅 ¿Hay actividades extraescolares los días festivos o no lectivos?",
-    respuesta: "No, las actividades extraescolares siguen estrictamente el calendario escolar oficial del colegio. Por tanto, no habrá clases los días festivos nacionales, autonómicos o municipales, ni durante las vacaciones escolares (Navidad, Semana Santa y verano) o los días no lectivos marcados por el centro."
+    id: 'eso_bach', 
+    nombre: '🎓 ESO/Bach (L-X 18:30-19:00) (V 14:15-15:00)', 
+    cursos: ['1ESO', '2ESO', '3ESO', '4ESO', '1BACH', '2BACH'], 
+    requierePrueba: true, 
+    diasResumen: 'L/X o V', 
+    precioResumen: '37€ / 50€', 
+    alumnosMax: 10, // Configurado según me has pedido
+    minAlumnos: 4,  // El mínimo que tenías en el aviso
+    descripcion: 'Sesiones específicas para adolescentes, con técnica, mantenimiento o preparación física.\n\n⬇️ ELIGE TU OPCIÓN ⬇️\n⭐ PACK 2 DÍAS (50€): Tardes.\n⭐ DÍA SUELTO (37€): Tarde o Mediodía.', 
+    aviso: 'Plazas limitadas por nivel y estricto orden de inscripción.',
+    opciones: [
+        { dias: '[PACK 2 DÍAS] Lunes y Miércoles', horario: '18:30-19:00', precio: '50€' },
+        { dias: '[1 DÍA] Lunes', horario: '18:30-19:00', precio: '37€' },
+        { dias: '[1 DÍA] Miércoles', horario: '18:30-19:00', precio: '37€' },
+        { dias: '[1 DÍA] Viernes', horario: '14:15-15:00', precio: '37€' }
+    ]
   },
   {
-    id: 9,
-    pregunta: "💰 ¿Existen descuentos por hermanos o por apuntarse a más de una actividad?",
-    respuesta: "Las políticas de precios y los posibles descuentos dependen directamente de la empresa gestora de la actividad (como Alventus para las actividades generales o los respectivos clubes deportivos para el baloncesto o judo). Te aconsejamos consultar la ficha de información detallada de cada actividad para revisar sus condiciones tarifarias específicas."
-  },
-  {
-    id: 10,
-    pregunta: "🔄 ¿Se puede realizar un cambio de actividad a mitad de curso?",
-    respuesta: "¡Claro que sí! Para cambiar de actividad, deberás solicitar la baja de la actividad en la que está inscrito el alumno antes del día 25 del mes y realizar una nueva inscripción en la actividad que prefiera. El cambio estará siempre sujeto a la disponibilidad de plazas libres en el nuevo grupo."
+    id: 'nado_libre', 
+    nombre: '🏊‍♂️ Nado Libre ">16 años" (18:30-19:00)', 
+    cursos: ['ADULTO', '1BACH', '2BACH'], 
+    requierePrueba: false, 
+    diasResumen: 'L-V', 
+    precioResumen: '25€ / 35€', 
+    alumnosMax: 10, // Configurado según me has pedido
+    minAlumnos: 2,  // El mínimo que tenías en el aviso
+    descripcion: 'Uso de calle para entrenamiento personal sin monitor. Ideal para quienes buscan nadar a su propio ritmo.\n\n⬇️ ELIGE TU OPCIÓN ⬇️\n⭐ PACK 2 DÍAS (35€): L/X o M/J.\n⭐ DÍA SUELTO (25€): Cualquier día de la semana.', 
+    aviso: 'Uso exclusivo de calle para nado continuo sin monitor.',
+    opciones: [
+        { dias: '[PACK 2 DÍAS] Lunes y Miércoles', horario: '18:30-19:00', precio: '35€' },
+        { dias: '[PACK 2 DÍAS] Martes y Jueves', horario: '18:30-19:00', precio: '35€' },
+        { dias: '[1 DÍA] Lunes', horario: '18:30-19:00', precio: '25€' },
+        { dias: '[1 DÍA] Martes', horario: '18:30-19:00', precio: '25€' },
+        { dias: '[1 DÍA] Miércoles', horario: '18:30-19:00', precio: '25€' },
+        { dias: '[1 DÍA] Jueves', horario: '18:30-19:00', precio: '25€' },
+        { dias: '[1 DÍA] Viernes', horario: '18:30-19:00', precio: '25€' }
+    ]
   }
 ];
 
-// 🌟 Estado para saber qué pregunta está abierta
-  if (vista === 'catalogo') {
-    return (
-      <div
-        style={{
-          fontFamily: 'sans-serif',
-          // 🎨 ¡CAMBIO MÁGICO! Fondo claro, limpio y con un contraste del 100% (Modo oscuro compatible!)
-          backgroundColor: modoOscuro ? '#0a0f1d' : '#f1f5f9', 
-          color: modoOscuro ? '#f1f5f9' : '#1e293b',
-          minHeight: '100vh',        // 📐 ¡Toda la altura de la pantalla obligatoria!
-          
-          // 🧲 ACTIVAMOS EL IMÁN ANTI-ESPACIOS BLANCOS:
-          display: 'flex',          
-          flexDirection: 'column',  
-          justifyContent: 'space-between', 
-          position: 'relative',
-          overflowX: 'hidden',
-          paddingBottom: '0px',     
-          transition: 'background-color 0.3s ease, color 0.3s ease',
-        }}
-      >
-        <style dangerouslySetInnerHTML={{ __html: `
-          *, *::before, *::after {
-            box-sizing: border-box !important;
-          }
-          @keyframes slideIn {
-            from { transform: translateX(100%); opacity: 0; }
-            to { transform: translateX(0); opacity: 1; }
-          }
-          @keyframes fadeOut {
-            to { opacity: 0; transform: translateY(-10px); }
-          }
-          @keyframes pulse {
-            0%, 100% { opacity: 0.6; }
-            50% { opacity: 1; }
-          }
-          @keyframes fadeIn {
-            from { opacity: 0; }
-            to { opacity: 1; }
-          }
-          .card-premium {
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
-          }
-          .card-premium:hover {
-            transform: translateY(-8px) !important;
-            border-color: var(--hover-color, #3b82f6) !important;
-            box-shadow: var(--hover-shadow, 0 15px 35px rgba(0, 0, 0, 0.1)) !important;
-          }
-          .card-img-zoom {
-            transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1) !important;
-          }
-          .card-premium:hover .card-img-zoom {
-            transform: scale(1.05) !important;
-          }
-          @media (max-width: 768px) {
-            .explore-banner {
-              flex-direction: column !important;
-              align-items: center !important;
-              text-align: center !important;
-            }
-            .footer-grid {
-              text-align: center !important;
-            }
-            .footer-grid > div {
-              align-items: center !important;
-            }
-            .admin-panel-card {
-              width: 95% !important;
-              padding: 18px !important;
-            }
-          }
-        ` }} />
-        {/* 🔮 CÍRCULOS DE LUZ SUAVES EN EL FONDO GENERAL (Ahora más sutiles para fondo claro) */}
-        <div style={{ position: 'absolute', top: '15%', left: '-10%', width: '500px', height: '500px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(59,130,246,0.12) 0%, rgba(0,0,0,0) 70%)', filter: 'blur(50px)', pointerEvents: 'none', zIndex: 0 }} />
-        <div style={{ position: 'absolute', bottom: '20%', right: '-10%', width: '600px', height: '600px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(217,70,239,0.08) 0%, rgba(0,0,0,0) 70%)', filter: 'blur(60px)', pointerEvents: 'none', zIndex: 0 }} />
+// ==========================================
+// 📧 UTILIDADES Y FUNCIONES DE AYUDA
+// ==========================================
 
-        <header
-          style={{
-            background: 'linear-gradient(145deg, rgba(15, 23, 42, 0.9) 0%, rgba(10, 15, 30, 0.98) 100%)',
-            backdropFilter: 'blur(25px) saturate(180%)', // 💎 Apple-like premium glassmorphism
-            WebkitBackdropFilter: 'blur(25px) saturate(180%)',
-            padding: '20px 20px 35px',
-            textAlign: 'center',
-            borderRadius: '0 0 50px 50px', // Curvas grandes y fluidas
-            boxShadow: '0 20px 40px rgba(0,0,0,0.3)',
-            borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
-            marginBottom: '25px',
-            position: 'relative',
-            overflow: 'hidden',
-            zIndex: 10,
-          }}
-        >
-          {/* 🌫️ ¡EL EFECTO SILUETA REFORZADO!: Ocupa todo tu header por detrás de las letras con más fuerza */}
-          {typeof fotoFondoHeader !== 'undefined' && fotoFondoHeader && (
-            <img
-              src={fotoFondoHeader}
-              style={{
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                width: '100%',
-                height: '100%',
-                objectFit: 'cover',   // 🍿 Obliga a la foto a cubrir todo el espacio sin deformarse
-                opacity: 0.15,        // 📈 ¡SUBIDO!: Pasamos del 6% al 15% para que la silueta tenga más cuerpo
-                filter: 'blur(1.5px) grayscale(100%)', // 🌫️ ¡MÁS NÍTIDO!: Bajamos el difuminado de 3px a 1.5px para que se reconozcan mejor las ventanas y paredes
-                zIndex: 0,            // Envía la foto al piso de abajo del todo
-                pointerEvents: 'none' // 🖱️ Los clics pasan a través de ella sin molestar a los botones
-              }}
-            />
-          )}
+// Ayudante dinámico para obtener el año académico actual/siguiente
+const getDynamicAcademicYear = () => {
+  const today = new Date();
+  const currentYear = today.getFullYear();
+  // El año académico de natación comienza el 1 de octubre.
+  // Si estamos antes de octubre (meses 0 a 8 en JS), la temporada comienza el 1 de octubre de este año.
+  // Si estamos en octubre o después (meses 9 a 11 en JS), comienza el 1 de octubre del año que viene.
+  const startYear = today.getMonth() < 9 ? currentYear : currentYear + 1;
+  return {
+    startYear,
+    isoStartDate: `${startYear}-10-01`,
+    formattedStartDate: `01/10/${startYear}`,
+    rawPattern: `${startYear}-10`
+  };
+};
 
-          {/* 🧭 NAV BAR SUPERIOR FLEX RESPONSIVA */}
-          <div style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            width: '100%',
-            maxWidth: '1200px',
-            margin: '0 auto 25px',
-            padding: '10px 20px',
-            boxSizing: 'border-box',
-            flexWrap: 'wrap',
-            gap: '12px',
-            zIndex: 100,
-            position: 'relative',
-            background: 'rgba(255, 255, 255, 0.03)',
-            borderRadius: '16px',
-            border: '1px solid rgba(255, 255, 255, 0.06)',
-            backdropFilter: 'blur(10px)',
-            WebkitBackdropFilter: 'blur(10px)',
-          }}>
-            {/* Logotipo o insignia pequeña en navbar izquierdo */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ 
-                color: '#f8fafc', 
-                fontSize: '0.85rem', 
-                fontWeight: '900', 
-                letterSpacing: '1px',
-                textTransform: 'uppercase'
-              }}>
-                Colegio San Buenaventura - Madrid
-              </span>
+// Sistema global de Toasts Premium
+let globalShowToast = (msg, type) => { console.log("Toast: ", msg, type); };
+const showToast = (message, type = 'success') => {
+  globalShowToast(message, type);
+};
+
+// Calcular los próximos 4 lunes para las pruebas de nivel
+const getNextMondays = () => {
+  const d = new Date();
+  // Avanzar hasta el próximo lunes
+  d.setDate(d.getDate() + ((1 + 7 - d.getDay()) % 7));
+  const r = [];
+  for (let i = 0; i < 4; i++) {
+    r.push(new Date(d));
+    d.setDate(d.getDate() + 7); // Saltar 7 días
+  }
+  return r;
+};
+
+// Formato de fecha para ID (DD-MM-YYYY)
+const getDateId = (d) => {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+
+// Formato de fecha legible (Lunes 14 de Febrero)
+const getHumanDate = (d) => {
+  return d.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' });
+};
+
+// Sistema de envío de Emails (simulado con extensión Firebase Trigger Email)
+const enviarEmailConfirmacion = async (email, alumno, detalle, tipo, fechaInicio) => { // 🚩 Quitamos el '= cita' para que use el valor real
+  try {
+    const nombreAlumno = String(alumno).trim();
+    const esAlta = tipo === 'alta'; 
+
+    // Formateamos la fecha si viene (de 2026-03-11 a 11/03/2026)
+    const fechaFormateada = fechaInicio && fechaInicio !== 'cita' 
+      ? fechaInicio.split('-').reverse().join('/') 
+      : null;
+
+    await addDoc(collection(db, 'mail'), {
+      to: [email],
+      message: {
+        subject: esAlta ? `✅ Plaza Confirmada: ${nombreAlumno}` : `Reserva Confirmada: ${nombreAlumno}`,
+        html: `
+          <div style="font-family: sans-serif; padding: 20px; color: #333; border: 1px solid #ddd; border-radius: 15px; max-width: 600px;">
+            <h2 style="color: ${esAlta ? '#059669' : '#2563EB'}; border-bottom: 2px solid ${esAlta ? '#059669' : '#2563EB'}; padding-bottom: 10px;">
+               ${esAlta ? '🏊 Plaza Validada Correctamente' : '🏊 Reserva Prueba de Nivel'}
+            </h2>
+            <p>Hola familia de <strong>${nombreAlumno}</strong>,</p>
+            
+            ${esAlta 
+              ? `<p>¡Buenas noticias! La inscripción ha sido revisada y validada por la coordinación. El alumno ya tiene su plaza definitiva confirmada.</p>`
+              : `<p>Os confirmamos que la prueba de nivel ha sido reservada correctamente. Rogamos acudan con tiempo suficiente para estar listos a la hora indicada.</p>`
+            }
+
+            <div style="background: ${esAlta ? '#ECFDF5' : '#EFF6FF'}; padding: 15px; border-radius: 10px; margin: 20px 0; border: 1px solid ${esAlta ? '#10B981' : '#BFDBFE'};">
+              <p style="margin: 0; color: ${esAlta ? '#065F46' : '#1E40AF'}; font-weight: bold;">
+                ${esAlta ? '📍 Detalles de la Inscripción:' : '📅 Detalles de la Cita:'}
+              </p>
+              <p style="margin: 10px 0 0 0; font-size: 16px;">${detalle}</p>
+              
+              ${esAlta && fechaFormateada ? `
+                <p style="margin: 10px 0 0 0; font-size: 16px; color: #d32f2f;">
+                  <strong>📅 Fecha de inicio:</strong> ${fechaFormateada}
+                </p>
+              ` : ''}
             </div>
 
-            {/* Grupo de botones a la derecha */}
-            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-              {/* 🌓 BOTÓN DE MODO OSCURO */}
-              <button
-                type="button"
-                onClick={() => setModoOscuro(!modoOscuro)}
-                style={{
-                  padding: '8px 16px',
-                  backgroundColor: 'rgba(255, 255, 255, 0.08)',
-                  color: 'white',
-                  border: '1px solid rgba(255, 255, 255, 0.15)',
-                  borderRadius: '12px',
-                  cursor: 'pointer',
-                  fontSize: '0.8rem',
-                  fontWeight: 'bold',
-                  transition: 'all 0.25s ease',
-                  outline: 'none',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px'
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.18)';
-                  e.currentTarget.style.transform = 'translateY(-1px)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.08)';
-                  e.currentTarget.style.transform = 'translateY(0)';
-                }}
-              >
-                <span>{modoOscuro ? '☀️' : '🌙'}</span>
-                <span>{modoOscuro ? 'Modo Claro' : 'Modo Oscuro'}</span>
-              </button>
+            ${esAlta 
+              ? `<p>🎒 <strong>Recordad traer:</strong> Bañador, gorro, toalla, gafas y chanclas.</p>`
+              : `<p>🎒 <strong>Recordad traer:</strong> Bañador, gorro, toalla, gafas y chanclas.</p>`
+            }
 
-              <button
-                type="button"
-                onClick={() => setVista('mapa')}
-                style={{
-                  padding: '8px 16px',
-                  backgroundColor: 'rgba(255, 255, 255, 0.08)',
-                  color: 'white',
-                  border: '1px solid rgba(255, 255, 255, 0.15)',
-                  borderRadius: '12px',
-                  cursor: 'pointer',
-                  fontSize: '0.8rem',
-                  fontWeight: 'bold',
-                  transition: 'all 0.25s ease',
-                  outline: 'none',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px'
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.18)';
-                  e.currentTarget.style.transform = 'translateY(-1px)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.08)';
-                  e.currentTarget.style.transform = 'translateY(0)';
-                }}
-              >
-                <span>📍</span>
-                <span>Mapa Cole</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setVista('faq')}
-                style={{
-                  padding: '8px 16px',
-                  backgroundColor: 'rgba(255, 255, 255, 0.08)',
-                  color: 'white',
-                  border: '1px solid rgba(255, 255, 255, 0.15)',
-                  borderRadius: '12px',
-                  cursor: 'pointer',
-                  fontSize: '0.8rem',
-                  fontWeight: 'bold',
-                  transition: 'all 0.25s ease',
-                  outline: 'none',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px'
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.18)';
-                  e.currentTarget.style.transform = 'translateY(-1px)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.08)';
-                  e.currentTarget.style.transform = 'translateY(0)';
-                }}
-              >
-                <span>💬</span>
-                <span>Preguntas</span>
-              </button>
-
-              {!isAdmin ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setClaveInput('');
-                    setMostrarAdminModal(true);
-                  }}
-                  style={{
-                    padding: '8px 16px',
-                    backgroundColor: '#3b82f6',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '12px',
-                    cursor: 'pointer',
-                    fontSize: '0.8rem',
-                    fontWeight: 'bold',
-                    boxShadow: '0 4px 12px rgba(59, 130, 246, 0.3)',
-                    transition: 'all 0.25s ease',
-                    outline: 'none',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px'
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.backgroundColor = '#2563eb';
-                    e.currentTarget.style.transform = 'translateY(-1px)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.backgroundColor = '#3b82f6';
-                    e.currentTarget.style.transform = 'translateY(0)';
-                  }}
-                >
-                  <span>🔑</span>
-                  <span>Admin</span>
-                </button>
-              ) : (
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  <button
-                    type="button"
-                    onClick={() => setVista('panel')}
-                    style={{
-                      padding: '8px 16px',
-                      backgroundColor: '#10ac84',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '12px',
-                      cursor: 'pointer',
-                      fontSize: '0.8rem',
-                      fontWeight: 'bold',
-                      transition: 'all 0.25s ease',
-                      outline: 'none',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '6px'
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.backgroundColor = '#0e906f';
-                      e.currentTarget.style.transform = 'translateY(-1px)';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.backgroundColor = '#10ac84';
-                      e.currentTarget.style.transform = 'translateY(0)';
-                    }}
-                  >
-                    <span>➕</span>
-                    <span>Añadir</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      try {
-                        const { getAuth } = await import('firebase/auth');
-                        await getAuth().signOut();
-                        setIsAdmin(false);
-                        lanzarToast('¡Sesión de administrador cerrada! 🔐', 'info');
-                      } catch (err) {
-                        console.error(err);
-                        lanzarToast('Error al cerrar sesión', 'error');
-                      }
-                    }}
-                    style={{
-                      padding: '8px 12px',
-                      backgroundColor: '#ef4444',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '12px',
-                      cursor: 'pointer',
-                      fontSize: '0.8rem',
-                      fontWeight: 'bold',
-                      transition: 'all 0.25s ease',
-                      outline: 'none',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '6px'
-                    }} 
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.backgroundColor = '#dc2626';
-                      e.currentTarget.style.transform = 'translateY(-1px)';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.backgroundColor = '#ef4444';
-                      e.currentTarget.style.transform = 'translateY(0)';
-                    }}
-                  >
-                    <span>🚪</span>
-                    <span>Salir</span>
-                  </button>
-                </div>
-              )}
-            </div>
+            <p style="margin-top: 25px;">Saludos,<br><strong>Coordinación de Extraescolares CSB</strong></p>
+            <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;" />
+            <p style="font-size: 11px; color: #999;">Este es un mensaje automático generado por el sistema de gestión de piscina.</p>
           </div>
+        `,
+      },
+    });
+    console.log(`🚀 Email de ${tipo} encolado para:`, email);
+  } catch (e) {
+    console.error("Error al encolar email:", e);
+  }
+};
+// ==========================================
+// 🏠 LANDING PAGE (VERSIÓN COMPLETA Y DETALLADA)
+// ==========================================
+const LandingPage = ({ setView }) => {
+  const [tab, setTab] = useState('actividades');
+  const [filtroEtapa, setFiltroEtapa] = useState('todos');
+  const [highlightedActId, setHighlightedActId] = useState(null);
 
-          {/* Brillo decorativo de fondo */}
-          <div style={{ position: 'absolute', top: '-50px', right: '-50px', width: '150px', height: '150px', background: 'rgba(59, 130, 246, 0.15)', borderRadius: '50%', filter: 'blur(40px)', pointerEvents: 'none' }}></div>
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const actId = params.get('act');
+    if (actId) {
+      const actExists = OFERTA_ACTIVIDADES.some(a => a.id === actId);
+      if (actExists) {
+        setTab('actividades');
+        setFiltroEtapa('todos');
+        setHighlightedActId(actId);
+        
+        // Esperar a que cambie el tab y se renderice el layout
+        setTimeout(() => {
+          const el = document.getElementById(`card-${actId}`);
+          if (el) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+        }, 500);
 
-  {/* ⭐ MEJORA 1: ¡EL ESCUDO RECUPERA SUS 400PX ORIGINALES Y MAJESTUOSOS SIN DESBORDAR! */}
-  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: '10px', width: '100%', padding: '0 10px', boxSizing: 'border-box' }}>
-    <img
-      src="https://firebasestorage.googleapis.com/v0/b/extraescolarescsb.firebasestorage.app/o/colegio%20buena%20-%20Editada.png?alt=media&token=d30127c6-037e-47c5-a7e0-29d7cd5585fd"
-      style={{
-        width: '100%',
-        maxWidth: '400px', // 🛡️ ¡Vuelve a su tamaño grande original!
-        height: 'auto',
-        filter: `drop-shadow(2px 0 0 white) drop-shadow(-2px 0 0 white) drop-shadow(0 2px 0 white) drop-shadow(0 -2px 0 white) drop-shadow(0 25px 35px rgba(0, 0, 0, 0.5))`
-      }}
-    />
-    <h1 style={{ 
-      margin: '10px 0 0', 
-      fontSize: 'clamp(1.8rem, 6vw, 2.5rem)', // 📐 ¡Adaptativo inteligente en móviles!
-      fontWeight: '800', 
-      color: '#ffffff', 
-      letterSpacing: '-1px',
-      textAlign: 'center'
-    }}>
-      Actividades Extraescolares
-    </h1>
-{/* 🌟 ¡TU FRASE AJUSTADA: CURSIVA, CON COMILLAS Y MÁS PEQUEÑA! */}
-<p style={{
-      color: 'rgba(255, 255, 255, 0.85)', // Blanco suave y elegante
-      fontSize: '0.85rem', // 📐 ¡Tamaño reducido para que quede fina!
-      fontWeight: '500',
-      fontStyle: 'italic', // 🪄 ¡Cursiva activada!
-      margin: '12px 0 0 0',
-      textAlign: 'center',
-      maxWidth: '500px',
-      textShadow: '0 2px 4px rgba(0,0,0,0.6)'
-    }}>
-      "Estas actividades tienen carácter voluntario, no discriminatorio y no lucrativo"
-    </p>
-  </div>
+        // Limpiar el parámetro de la URL
+        setTimeout(() => {
+          const url = new URL(window.location.href);
+          url.searchParams.delete('act');
+          window.history.replaceState({}, '', url.pathname + url.search);
+        }, 1500);
 
-{/* --- 🛒 MEJORA 2: CAJA CONTENEDORA EN VERTICAL (¡CENTRADO ULTRA REFORZADO!) --- */}
-<div style={{ 
-    display: 'flex', 
-    flexDirection: 'column', 
-    gap: '15px', 
-    maxWidth: '400px', 
-    margin: '25px auto 0', // Centra la caja grande respecto al escudo
-    padding: '0 20px', 
-    alignItems: 'center', // Centra de forma interna el botón y el buscador
-    justifyContent: 'center',
-    width: '100%',
-    boxSizing: 'border-box'
-  }}>
-    
-    {/* Buscador inteligente con imán de centrado directo */}
-    <div style={{ 
-      position: 'relative', 
-      width: '100%', 
-      maxWidth: '360px', // Le damos un ancho máximo fijo muy elegante
-      margin: '0 auto' // 🎯 ¡EL TRUCO DEFINITIVO!: Obliga a este div a centrarse en su celda
-    }}>
-      <span style={{ position: 'absolute', left: '15px', top: '50%', transform: 'translateY(-50%)', fontSize: '1.2rem', zIndex: 3 }}>🔍</span>
-      <input
-        type="text"
-        placeholder="Busca por nombre..."
-        value={busqueda}
-        onChange={(e) => setBusqueda(e.target.value)}
-        style={{
-          width: '100%',
-          padding: '12px 15px 12px 45px',
-          borderRadius: '15px',
-          border: '2px solid rgba(255,255,255,0.15)',
-          backgroundColor: 'rgba(255,255,255,0.07)',
-          color: 'white',
-          fontSize: '1rem',
-          outline: 'none',
-          boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.2)',
-          transition: 'all 0.3s ease',
-          display: 'block', // Evita comportamientos extraños de línea
-          boxSizing: 'border-box' // Asegura que los paddings no ensanchen el cuadro
-        }}
-        onFocus={(e) => {
-          e.currentTarget.style.borderColor = '#3b82f6';
-          e.currentTarget.style.boxShadow = '0 0 0 4px rgba(59, 130, 246, 0.35), inset 0 2px 4px rgba(0,0,0,0.2)';
-          e.currentTarget.style.transform = 'scale(1.03)';
-        }}
-        onBlur={(e) => {
-          e.currentTarget.style.borderColor = 'rgba(255,255,255,0.15)';
-          e.currentTarget.style.boxShadow = 'inset 0 2px 4px rgba(0,0,0,0.2)';
-          e.currentTarget.style.transform = 'scale(1)';
-        }}
-      />
-    </div>
+        // Limpiar el resaltado después de 4 segundos
+        setTimeout(() => {
+          setHighlightedActId(null);
+        }, 4000);
+      }
+    }
+  }, []);
 
-    {/* 🎛️ BOTÓN INTERACTIVO: Siguiendo la línea recta perfecta */}
-    <button
-      onClick={() => setMostrarFiltros(!mostrarFiltros)}
-      style={{
-        padding: '10px 24px',
-        borderRadius: '14px',
-        border: 'none',
-        backgroundColor: mostrarFiltros ? '#3b82f6' : 'rgba(255,255,255,0.1)',
-        color: 'white',
-        fontWeight: 'bold',
-        fontSize: '0.95rem',
-        cursor: 'pointer',
-        display: 'flex',
-        alignItems: 'center',
-        gap: '8px',
-        boxShadow: mostrarFiltros ? '0 8px 20px rgba(59, 130, 246, 0.4)' : 'none',
-        transition: 'all 0.3s ease',
-        width: 'fit-content',
-        margin: '0 auto'
-      }}
-    >
-      <span>🎛️</span>
-      <span>{mostrarFiltros ? 'Ocultar Filtros' : 'Filtrar por Etapa / Empresa / Día'}</span>
-    </button>
-  </div>
+  // 🎨 GENERADOR DE TEMAS ESTÉTICOS POR ACTIVIDAD (factor WOW)
+  const getThemeByActivity = (act) => {
+    const id = act.id || '';
+    if (id === 'chapoteo') {
+      return {
+        headerGrad: 'from-pink-500/90 to-rose-600/90',
+        badgeText: '👶 Iniciación Infantil',
+        btnBg: 'bg-pink-50 text-pink-600 border-pink-100 hover:bg-pink-600 hover:text-white',
+        btnHover: 'group-hover:bg-pink-600 group-hover:text-white border-pink-100',
+        shadowGlow: 'hover:shadow-pink-900/10 hover:border-pink-200',
+        priceColor: 'from-pink-600 to-rose-500'
+      };
+    }
+    if (id.includes('primaria')) {
+      return {
+        headerGrad: 'from-blue-600/90 to-indigo-700/90',
+        badgeText: '🏅 Perfeccionamiento Primaria',
+        btnBg: 'bg-blue-50 text-blue-600 border-blue-100 hover:bg-blue-600 hover:text-white',
+        btnHover: 'group-hover:bg-blue-600 group-hover:text-white border-blue-100',
+        shadowGlow: 'hover:shadow-blue-900/10 hover:border-blue-200',
+        priceColor: 'from-blue-600 to-indigo-500'
+      };
+    }
+    if (id === 'waterpolo') {
+      return {
+        headerGrad: 'from-orange-500/90 to-red-600/90',
+        badgeText: '🤽‍♂️ Balón y Deporte de Equipo',
+        btnBg: 'bg-orange-50 text-orange-600 border-orange-100 hover:bg-orange-600 hover:text-white',
+        btnHover: 'group-hover:bg-orange-600 group-hover:text-white border-orange-100',
+        shadowGlow: 'hover:shadow-orange-900/10 hover:border-orange-200',
+        priceColor: 'from-orange-600 to-red-500'
+      };
+    }
+    if (id === 'eso_bach') {
+      return {
+        headerGrad: 'from-purple-600/90 to-violet-700/90',
+        badgeText: '🎓 Jóvenes y Mantenimiento',
+        btnBg: 'bg-purple-50 text-purple-600 border-purple-100 hover:bg-purple-600 hover:text-white',
+        btnHover: 'group-hover:bg-purple-600 group-hover:text-white border-purple-100',
+        shadowGlow: 'hover:shadow-purple-900/10 hover:border-purple-200',
+        priceColor: 'from-purple-600 to-violet-500'
+      };
+    }
+    if (id === 'aquagym') {
+      return {
+        headerGrad: 'from-cyan-500/90 to-teal-600/90',
+        badgeText: '⚡ Fitness y Tono Acuático',
+        btnBg: 'bg-cyan-50 text-cyan-600 border-cyan-100 hover:bg-cyan-600 hover:text-white',
+        btnHover: 'group-hover:bg-cyan-600 group-hover:text-white border-cyan-100',
+        shadowGlow: 'hover:shadow-cyan-900/10 hover:border-cyan-200',
+        priceColor: 'from-cyan-600 to-teal-500'
+      };
+    }
+    if (id === 'nado_libre') {
+      return {
+        headerGrad: 'from-slate-600/90 to-slate-850/90',
+        badgeText: '⏱️ Nado Libre Independiente',
+        btnBg: 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-800 hover:text-white',
+        btnHover: 'group-hover:bg-slate-800 group-hover:text-white border-slate-200',
+        shadowGlow: 'hover:shadow-slate-900/10 hover:border-slate-350',
+        priceColor: 'from-slate-700 to-slate-500'
+      };
+    }
+    // Adultos
+    return {
+      headerGrad: 'from-emerald-600/90 to-teal-700/90',
+      badgeText: '🌱 Salud & Bienestar Adultos',
+      btnBg: 'bg-emerald-50 text-emerald-600 border-emerald-100 hover:bg-emerald-600 hover:text-white',
+      btnHover: 'group-hover:bg-emerald-600 group-hover:text-white border-emerald-100',
+      shadowGlow: 'hover:shadow-emerald-900/10 hover:border-emerald-200',
+      priceColor: 'from-emerald-600 to-teal-500'
+    };
+  };
 
-  {/* 📦 PANEL DESPLEGABLE CON SELECTORES DE CRISTAL INTELIGENTES */}
-  {mostrarFiltros && (
-    <div style={{
-      display: 'flex',
-      flexDirection: 'column',
-      gap: '20px',
-      marginTop: '25px',
-      padding: '24px',
-      backgroundColor: 'rgba(15, 23, 42, 0.65)',
-      borderRadius: '28px',
-      border: '1px solid rgba(255, 255, 255, 0.12)',
-      backdropFilter: 'blur(16px)',
-      boxShadow: '0 20px 40px rgba(0, 0, 0, 0.3)',
-      maxWidth: '650px',
-      margin: '25px auto 0'
-    }}>
-      
-      {/* Selector 1: Etapas */}
-      <div style={{ display: 'flex', flexDirection: 'column', width: '100%', alignItems: 'center', gap: '8px' }}>
-        <span style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: 'bold', letterSpacing: '0.05em', textTransform: 'uppercase' }}>🎒 ETAPA</span>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', justifyContent: 'center' }}>
-          {[
-            { value: 'Todos', label: 'Todas las Etapas' },
-            { value: 'Infantil', label: 'Infantil' },
-            { value: 'Primaria', label: 'Primaria' },
-            { value: 'ESO', label: 'ESO' },
-            { value: 'Adultos', label: 'Adultos' },
-            { value: 'Clubes Amigos', label: 'Clubes Amigos' }
-          ].map(opt => {
-            const activo = etapaActiva === opt.value;
-            return (
-              <button
-                key={opt.value}
-                type="button"
-                onClick={() => {
-                  setEtapaActiva(opt.value);
-                  setSubcategoriaActiva('Todas');
-                }}
-                style={{
-                  padding: '8px 16px',
-                  borderRadius: '20px',
-                  border: activo ? '1px solid #60a5fa' : '1px solid rgba(255,255,255,0.1)',
-                  background: activo ? 'linear-gradient(135deg, #3b82f6, #1d4ed8)' : 'rgba(255, 255, 255, 0.05)',
-                  color: activo ? 'white' : '#94a3b8',
-                  fontWeight: 'bold',
-                  cursor: 'pointer',
-                  fontSize: '0.8rem',
-                  transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-                  boxShadow: activo ? '0 4px 12px rgba(59, 130, 246, 0.4)' : 'none',
-                  transform: activo ? 'scale(1.05)' : 'scale(1)',
-                  outline: 'none'
-                }}
-              >
-                {opt.label}
-              </button>
-            );
-          })}
+  return (
+    <div className="font-sans text-gray-800 bg-white min-h-screen flex flex-col">
+      {/* HERO SECTION */}
+      <div className="relative h-[480px] flex items-center justify-center text-white bg-black">
+        <div className="absolute inset-0">
+          <div className="absolute inset-0 bg-black/40 z-10"></div>
+          <img src={IMG_PRINCIPAL} className="w-full h-full object-cover z-0" alt="Piscina" />
+        </div>
+        <div className="relative z-20 text-center px-4 max-w-4xl mx-auto flex flex-col items-center">
+        <img src={IMG_ESCUDO_BLANCO} className="h-20 md:h-28 mx-auto mb-6 drop-shadow-2xl object-contain max-w-[85vw]" alt="Escudo" />
+        <h1 className="text-3xl sm:text-4xl md:text-6xl font-black mb-4 text-white leading-tight [text-shadow:_2px_2px_0_#2563eb,_-2px_-2px_0_#2563eb,_2px_-2px_0_#2563eb,_-2px_2px_0_#2563eb,_0_4px_6px_rgba(0,0,0,0.3)]">
+          Natación colegio <br /> 
+          <span className="tracking-tight">San Buenaventura</span>
+        </h1>
+          
+          {/* 👇 AQUÍ ESTÁN LAS FRASES QUE FALTABAN 👇 */}
+          <p className="text-xl md:text-2xl font-light mb-2 drop-shadow-sm opacity-90">
+            Deporte, salud y educación en el agua
+          </p>
+          <p className="text-xs md:text-sm italic text-gray-200 mb-8 max-w-2xl border-t border-white/30 pt-2">
+            "Estas actividades tienen carácter voluntario, no discriminatorio y no lucrativo"
+          </p>
+
+          <button
+            onClick={() => setView('login')}
+            className="bg-white text-blue-900 px-8 py-3 rounded-full font-bold text-lg hover:bg-blue-50 transition shadow-lg mt-2 transform hover:scale-105"
+          >
+            Acceder al Área Privada
+          </button>
         </div>
       </div>
 
-      {/* Selector 2: Empresas */}
-      <div style={{ display: 'flex', flexDirection: 'column', width: '100%', alignItems: 'center', gap: '8px' }}>
-        <span style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: 'bold', letterSpacing: '0.05em', textTransform: 'uppercase' }}>🏢 EMPRESA</span>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', justifyContent: 'center' }}>
-          {[
-            { value: 'Todas', label: 'Todas las Empresas' },
-            { value: 'Alventus', label: 'Alventus' },
-            { value: '4life', label: '4life' },
-            { value: 'Kids&Us', label: 'Kids&Us' },
-            { value: 'San Buenaventura', label: 'San Buenaventura' }
-          ].map(opt => {
-            const activo = empresaActiva === opt.value;
-            return (
-              <button
-                key={opt.value}
-                type="button"
-                onClick={() => setEmpresaActiva(opt.value)}
-                style={{
-                  padding: '8px 16px',
-                  borderRadius: '20px',
-                  border: activo ? '1px solid #10b981' : '1px solid rgba(255,255,255,0.1)',
-                  background: activo ? 'linear-gradient(135deg, #10b981, #059669)' : 'rgba(255, 255, 255, 0.05)',
-                  color: activo ? 'white' : '#94a3b8',
-                  fontWeight: 'bold',
-                  cursor: 'pointer',
-                  fontSize: '0.8rem',
-                  transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-                  boxShadow: activo ? '0 4px 12px rgba(16, 185, 129, 0.4)' : 'none',
-                  transform: activo ? 'scale(1.05)' : 'scale(1)',
-                  outline: 'none'
-                }}
-              >
-                {opt.label}
-              </button>
-            );
-          })}
+      {/* NAV TABS */}
+      <div className="sticky top-0 z-40 bg-white shadow-md border-b">
+        <div className="max-w-4xl mx-auto flex">
+{['actividades', 'info', 'instalaciones', 'tutorial'].map(t => (            <button
+              key={t}
+              onClick={() => setTab(t)}
+              className={`flex-1 py-4 font-bold text-sm uppercase border-b-4 transition-colors ${
+                tab === t ? 'border-blue-600 text-blue-800 bg-blue-50' : 'border-transparent text-gray-500 hover:text-blue-600'
+              }`}
+            >
+              {t}
+            </button>
+          ))}
         </div>
       </div>
 
-      {/* Selector 3: Filtro por Días */}
-      <div style={{ display: 'flex', flexDirection: 'column', width: '100%', alignItems: 'center', gap: '8px' }}>
-        <span style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: 'bold', letterSpacing: '0.05em', textTransform: 'uppercase' }}>📅 DÍA SEMANA</span>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', justifyContent: 'center' }}>
-          {[
-            { value: 'Todos', label: 'Todos los Días' },
-            { value: 'lunes', label: 'Lunes' },
-            { value: 'martes', label: 'Martes' },
-            { value: 'miércoles', label: 'Miércoles' },
-            { value: 'jueves', label: 'Jueves' },
-            { value: 'viernes', label: 'Viernes' }
-          ].map(opt => {
-            const activo = diaActivo === opt.value;
-            return (
-              <button
-                key={opt.value}
-                type="button"
-                onClick={() => setDiaActivo(opt.value)}
-                style={{
-                  padding: '8px 16px',
-                  borderRadius: '20px',
-                  border: activo ? '1px solid #a78bfa' : '1px solid rgba(255,255,255,0.1)',
-                  background: activo ? 'linear-gradient(135deg, #8b5cf6, #6366f1)' : 'rgba(255, 255, 255, 0.05)',
-                  color: activo ? 'white' : '#94a3b8',
-                  fontWeight: 'bold',
-                  cursor: 'pointer',
-                  fontSize: '0.8rem',
-                  transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-                  boxShadow: activo ? '0 4px 12px rgba(139, 92, 246, 0.4)' : 'none',
-                  transform: activo ? 'scale(1.05)' : 'scale(1)',
-                  outline: 'none'
-                }}
-              >
-                {opt.label}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-    </div>
-  )}
-</header>
-
-        <main style={{ flex: 1, width: '100%', zIndex: 1 }}>
-          {/* 🧸 PORTAL DE BIENVENIDA POR ETAPAS (Opción 1) */}
-          {mostrarMenuEtapas && !busqueda ? (
-            <div style={{
-              width: '100%',
-              boxSizing: 'border-box',
-              maxWidth: '1100px',
-              margin: '30px auto',
-              padding: '0 20px',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '30px',
-              animation: 'fadeIn 0.6s ease-out'
-            }}>
-              <div style={{ textAlign: 'center', marginBottom: '10px' }}>
-                <h2 style={{
-                  fontSize: '2rem',
-                  fontWeight: '800',
-                  color: modoOscuro ? '#f8fafc' : '#0f172a',
-                  margin: '0 0 10px 0',
-                  letterSpacing: '-0.5px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '12px',
-                  flexWrap: 'wrap'
-                }}>
-                  Explora las Actividades del Colegio
-                  <img 
-                    src="https://firebasestorage.googleapis.com/v0/b/extraescolarescsb.firebasestorage.app/o/Dise%C3%B1o%20sin%20t%C3%ADtulo%20(9).png?alt=media&token=155598bc-fb6e-4383-aca6-66dbb5bfe3f7" 
-                    alt="Escudo" 
-                    style={{ 
-                      height: '42px', 
-                      width: 'auto', 
-                      objectFit: 'contain',
-                      filter: 'drop-shadow(0 2px 8px rgba(0,0,0,0.15))'
-                    }} 
-                  />
-                </h2>
-                <p style={{
-                  fontSize: '1rem',
-                  color: modoOscuro ? '#94a3b8' : '#475569',
-                  margin: 0,
-                  fontWeight: '500'
-                }}>
-                  Selecciona una etapa escolar para ver los horarios, precios e inscribirte cómodamente
+      {/* CONTENT AREA */}
+      <div className="flex-1 bg-gray-50 py-10">
+        <div className="max-w-6xl mx-auto px-6">
+{/* 📹 NUEVA VISTA: REPRODUCTOR DEL VIDEOTUTORIAL DE INSCRIPCIÓN */}
+          {tab === 'tutorial' && (
+            <div className="max-w-3xl mx-auto animate-fade-in text-center space-y-6">
+              <div>
+                <h3 className="text-2xl font-black text-gray-800 flex items-center justify-center gap-2">
+                  📹 Videotutorial de Inscripción
+                </h3>
+                <p className="text-sm text-gray-500 mt-1">
+                  Te guiamos paso a paso para que puedas inscribir a tus hijos de forma fácil y rápida.
                 </p>
               </div>
 
-              {/* Grid de las 5 Tarjetas Premium */}
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
-                gap: '25px',
-                width: '100%'
-              }}>
-                {[
-                  {
-                    id: 'Infantil',
-                    emoji: '🧸',
-                    titulo: 'Educación Infantil',
-                    tituloMini: 'Infantil',
-                    color: '#22c55e',
-                    bgColor: modoOscuro ? 'rgba(34, 197, 94, 0.1)' : 'rgba(34, 197, 94, 0.06)',
-                    imagen: fotosEtapas.Infantil || 'https://images.unsplash.com/photo-1502086223501-7ea6ecd79368?auto=format&fit=crop&w=350&q=80',
-                    desc: 'Actividades diseñadas para el desarrollo psicomotriz, lingüístico y creativo de los más pequeños.'
-                  },
-                  {
-                    id: 'Primaria',
-                    emoji: '🎒',
-                    titulo: 'Educación Primaria',
-                    tituloMini: 'Primaria',
-                    color: '#3b82f6',
-                    bgColor: modoOscuro ? 'rgba(59, 130, 246, 0.1)' : 'rgba(59, 130, 246, 0.06)',
-                    imagen: fotosEtapas.Primaria || 'https://images.unsplash.com/photo-1577896851231-70ef18881754?auto=format&fit=crop&w=350&q=80',
-                    desc: 'Amplia gama de disciplinas deportivas, artísticas y tecnológicas para potenciar el talento.'
-                  },
-                  {
-                    id: 'ESO',
-                    emoji: '🎓',
-                    titulo: 'Secundaria y Bachillerato',
-                    tituloMini: 'Secundaria',
-                    color: '#f97316',
-                    bgColor: modoOscuro ? 'rgba(249, 115, 22, 0.1)' : 'rgba(249, 115, 22, 0.06)',
-                    imagen: fotosEtapas.ESO || 'https://images.unsplash.com/photo-1529156069898-49953e39b3ac?auto=format&fit=crop&w=350&q=80',
-                    desc: 'Actividades enfocadas en habilidades competitivas, razonamiento lógico y expresión personal.'
-                  },
-                  {
-                    id: 'Adultos',
-                    emoji: '🧘',
-                    titulo: 'Actividades de Adultos',
-                    tituloMini: 'Adultos',
-                    color: '#8b5cf6',
-                    bgColor: modoOscuro ? 'rgba(139, 92, 246, 0.1)' : 'rgba(139, 92, 246, 0.06)',
-                    imagen: fotosEtapas.Adultos || 'https://images.unsplash.com/photo-1544367567-0f2fcb009e0b?auto=format&fit=crop&w=350&q=80',
-                    desc: 'Espacios de bienestar, salud y cultura dirigidos exclusivamente a padres y adultos.'
-                  },
-                  {
-                    id: 'Clubes Amigos',
-                    emoji: '🌟',
-                    titulo: 'Clubes Amigos',
-                    tituloMini: 'Clubes',
-                    color: '#d946ef',
-                    bgColor: modoOscuro ? 'rgba(217, 70, 239, 0.1)' : 'rgba(217, 70, 239, 0.06)',
-                    imagen: fotosEtapas['Clubes Amigos'] || 'https://images.unsplash.com/photo-1517649763962-0c623066013b?auto=format&fit=crop&w=350&q=80',
-                    desc: 'Actividades federadas y convenios deportivos externos de alto rendimiento.'
-                  }
-                ].map((tarjeta) => (
-                  <div
-                    key={tarjeta.id}
-                    className="card-premium"
-                    onClick={() => {
-                      setEtapaActiva(tarjeta.id);
-                      setSubcategoriaActiva('Todas');
-                      setMostrarMenuEtapas(false);
-                      window.scrollTo({ top: 0, behavior: 'smooth' });
-                    }}
-                    style={{
-                      background: modoOscuro ? 'rgba(30, 41, 59, 0.45)' : 'rgba(255, 255, 255, 0.65)',
-                      backdropFilter: 'blur(20px)',
-                      WebkitBackdropFilter: 'blur(20px)',
-                      borderRadius: '24px',
-                      padding: '20px',
-                      border: `1.5px solid ${modoOscuro ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.06)'}`,
-                      borderTop: `4px solid ${tarjeta.color}`,
-                      boxShadow: modoOscuro ? '0 10px 30px rgba(0, 0, 0, 0.3)' : '0 10px 25px rgba(0, 0, 0, 0.05)',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      justifyContent: 'space-between',
-                      minHeight: '430px',
-                      boxSizing: 'border-box',
-                      '--hover-color': tarjeta.color,
-                      '--hover-shadow': modoOscuro ? `0 15px 35px rgba(${tarjeta.id === 'Infantil' ? '34, 197, 94' : tarjeta.id === 'Primaria' ? '59, 130, 246' : tarjeta.id === 'ESO' ? '249, 115, 22' : tarjeta.id === 'Adultos' ? '139, 92, 246' : '217, 70, 239'}, 0.2)` : '0 15px 35px rgba(0, 0, 0, 0.1)'
-                    }}
-                  >
-                    <div>
-                      {/* 🖼️ FOTO DE LA ETAPA CON BADGE GLASSMORPHIC */}
-                      <div style={{ position: 'relative', height: '140px', borderRadius: '16px', overflow: 'hidden', marginBottom: '16px' }}>
-                        <img src={tarjeta.imagen} loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt={tarjeta.titulo} />
-                        <div style={{
-                          position: 'absolute',
-                          top: '12px',
-                          left: '12px',
-                          padding: '6px 12px',
-                          borderRadius: '12px',
-                          backgroundColor: 'rgba(15, 23, 42, 0.65)',
-                          backdropFilter: 'blur(4px)',
-                          WebkitBackdropFilter: 'blur(4px)',
-                          color: 'white',
-                          fontWeight: '800',
-                          fontSize: '0.75rem',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '6px'
-                        }}>
-                          <span>{tarjeta.emoji}</span>
-                          <span>{tarjeta.tituloMini}</span>
-                        </div>
-                      </div>
-
-                      <h3 style={{
-                        margin: '0 0 10px 0',
-                        fontSize: '1.2rem',
-                        fontWeight: '800',
-                        color: modoOscuro ? '#f8fafc' : '#0f172a',
-                        letterSpacing: '-0.3px'
-                      }}>
-                        {tarjeta.titulo}
-                      </h3>
-
-                      <p style={{
-                        margin: '0 0 15px 0',
-                        fontSize: '0.85rem',
-                        lineHeight: '1.5',
-                        color: modoOscuro ? '#94a3b8' : '#475569',
-                        fontWeight: '500'
-                      }}>
-                        {tarjeta.desc}
-                      </p>
-
-                      <div style={{
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '6px',
-                        marginBottom: '15px',
-                        padding: '12px 16px',
-                        borderRadius: '16px',
-                        backgroundColor: tarjeta.bgColor
-                      }}>
-                        <span style={{
-                          fontSize: '0.7rem',
-                          fontWeight: '800',
-                          color: tarjeta.color,
-                          textTransform: 'uppercase',
-                          letterSpacing: '0.5px',
-                          display: 'block',
-                          marginBottom: '4px'
-                        }}>
-                          ✨ Actividades Destacadas:
-                        </span>
-                        {obtenerPillsEjemplos(tarjeta.id)}
-                      </div>
-                    </div>
-
-                    <div style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      color: tarjeta.color,
-                      fontWeight: '800',
-                      fontSize: '0.88rem',
-                      gap: '5px',
-                      marginTop: '5px'
-                    }}>
-                      Explorar Actividades <span style={{ transition: 'transform 0.2s' }} className="explore-arrow">→</span>
-                    </div>
-                  </div>
-                ))}
+              {/* REPRODUCTOR DE VÍDEO CONECTADO A STORAGE */}
+              <div className="bg-white p-4 rounded-3xl shadow-xl border border-gray-100 overflow-hidden">
+                <video 
+                  src="https://firebasestorage.googleapis.com/v0/b/piscina-sanbuenaventura.firebasestorage.app/o/Inscripci%C3%B3n%20piscina.mp4?alt=media&token=5e916f7d-52b0-4a1c-90cb-a969bd7836fd" 
+                  controls 
+                  className="w-full rounded-2xl shadow-inner border border-gray-100"
+                  poster="https://firebasestorage.googleapis.com/v0/b/piscina-sanbuenaventura.firebasestorage.app/o/colegio%20buena%20-%20Editad apng?alt=media&token=707d9103-533f-4460-b719-1274b2004031" // Imagen de fondo sutil antes de dar al play
+                />
               </div>
 
-              {/* Botón premium inferior para ver TODO directamente */}
-              <button
-                type="button"
-                onClick={() => {
-                  setEtapaActiva('Todos');
-                  setSubcategoriaActiva('Todas');
-                  setMostrarMenuEtapas(false);
-                }}
-                style={{
-                  alignSelf: 'center',
-                  marginTop: '15px',
-                  padding: '14px 30px',
-                  borderRadius: '18px',
-                  border: 'none',
-                  background: 'linear-gradient(135deg, #3b82f6, #1d4ed8)',
-                  color: 'white',
-                  fontWeight: '800',
-                  fontSize: '0.95rem',
-                  cursor: 'pointer',
-                  boxShadow: '0 8px 25px rgba(59, 130, 246, 0.35)',
-                  transition: 'all 0.2s'
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.transform = 'translateY(-2px)';
-                  e.currentTarget.style.boxShadow = '0 12px 30px rgba(59, 130, 246, 0.45)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = 'translateY(0)';
-                  e.currentTarget.style.boxShadow = '0 8px 25px rgba(59, 130, 246, 0.35)';
-                }}
-              >
-                🔍 Explorar Todo el Catálogo
-              </button>
+              <div className="bg-blue-50 border border-blue-100 p-4 rounded-2xl text-xs text-blue-900 font-medium max-w-xl mx-auto">
+                💡 <strong>¿Tienes alguna duda extra?</strong> Si tras ver el vídeo sigues necesitando ayuda, puedes acudir a la pestaña de "Información" para ver los teléfonos de contacto. ¡Al agua patos!
+              </div>
             </div>
-          ) : (
-            <>
-              {/* banner/cabecera minimalista Glassmorphic cuando exploramos una etapa */}
-              <div 
-                className="explore-banner"
-                style={{
-                  width: '100%',
-                  boxSizing: 'border-box',
-                  maxWidth: '1200px',
-                  margin: '20px auto 10px',
-                  padding: '0 20px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  flexWrap: 'wrap',
-                  gap: '15px'
-                }}
-              >
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '12px',
-                  padding: '10px 20px',
-                  background: modoOscuro ? 'rgba(30, 41, 59, 0.45)' : 'rgba(255, 255, 255, 0.65)',
-                  backdropFilter: 'blur(10px)',
-                  WebkitBackdropFilter: 'blur(10px)',
-                  borderRadius: '20px',
-                  border: `1px solid ${modoOscuro ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.06)'}`,
-                  fontSize: '0.9rem',
-                  fontWeight: '700',
-                  color: modoOscuro ? '#cbd5e1' : '#334155'
-                }}>
-                  <span>📍 Explorando:</span>
-                  <span style={{
-                    color: etapaActiva === 'Infantil' ? '#22c55e' : etapaActiva === 'Primaria' ? '#3b82f6' : etapaActiva === 'ESO' ? '#f97316' : etapaActiva === 'Adultos' ? '#8b5cf6' : etapaActiva === 'Clubes Amigos' ? '#d946ef' : '#3b82f6',
-                    fontWeight: '900',
-                    fontSize: '1rem',
-                    textTransform: 'uppercase'
-                  }}>
-                    {etapaActiva === 'Todos' ? 'Todas las Etapas' : etapaActiva}
-                  </span>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMostrarMenuEtapas(true);
-                    setEtapaActiva('Todos');
-                    setSubcategoriaActiva('Todas');
-                    setBusqueda('');
-                  }}
-                  style={{
-                    padding: '10px 20px',
-                    borderRadius: '16px',
-                    border: 'none',
-                    backgroundColor: modoOscuro ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.06)',
-                    color: modoOscuro ? '#cbd5e1' : '#475569',
-                    fontWeight: '800',
-                    fontSize: '0.85rem',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    transition: 'all 0.2s'
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.backgroundColor = modoOscuro ? 'rgba(255, 255, 255, 0.15)' : 'rgba(0, 0, 0, 0.1)';
-                    e.currentTarget.style.transform = 'translateX(-2px)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.backgroundColor = modoOscuro ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.06)';
-                    e.currentTarget.style.transform = 'translateX(0)';
-                  }}
-                >
-                  ← Volver al Menú
-                </button>
-              </div>
-
-              {/* 📁 SUB-CATEGORÍAS PREMIUM (Glassmorphism + Dynamic Counts + Responsive Slider) */}
-              {etapaActiva !== 'Todos' && activitiesInActiveStage.length > 0 && (
-                <div style={{
-                  width: '100%',
-                  boxSizing: 'border-box',
-                  maxWidth: '1200px',
-                  margin: '0 auto 20px',
-                  padding: '0 20px',
-                  overflowX: 'auto',
-                  whiteSpace: 'nowrap',
-                  scrollbarWidth: 'none',
-                  display: 'flex',
-                  gap: '10px',
-                  alignItems: 'center',
-                }} className="scrollbar-hidden">
-                  <style dangerouslySetInnerHTML={{ __html: `
-                    .scrollbar-hidden::-webkit-scrollbar {
-                      display: none;
-                    }
-                  ` }} />
-                  {['Todas', 'Deportes', 'Idiomas', 'Arte/expresión', 'Tecnología/manualidades'].map(cat => {
-                    const count = categoriasDisponibles[cat];
-                    if (cat !== 'Todas' && count === 0) return null; // Ocultamos categorías vacías
-                    
-                    const esActivo = subcategoriaActiva === cat;
-                    return (
-                      <button
-                        key={cat}
-                        type="button"
-                        onClick={() => setSubcategoriaActiva(cat)}
-                        style={{
-                          padding: '10px 20px',
-                          borderRadius: '24px',
-                          border: `1.5px solid ${esActivo ? 'transparent' : (modoOscuro ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)')}`,
-                          background: esActivo 
-                            ? (modoOscuro ? 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)' : 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)')
-                            : (modoOscuro ? 'rgba(30, 41, 59, 0.45)' : 'rgba(255, 255, 255, 0.65)'),
-                          color: esActivo ? 'white' : (modoOscuro ? '#cbd5e1' : '#475569'),
-                          fontWeight: '800',
-                          fontSize: '0.85rem',
-                          cursor: 'pointer',
-                          boxShadow: esActivo ? '0 8px 16px rgba(37, 99, 235, 0.25)' : 'none',
-                          transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '8px',
-                          backdropFilter: 'blur(10px)',
-                          WebkitBackdropFilter: 'blur(10px)',
-                        }}
-                        onMouseEnter={(e) => {
-                          if (!esActivo) {
-                            e.currentTarget.style.transform = 'translateY(-2px)';
-                            e.currentTarget.style.backgroundColor = modoOscuro ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.05)';
-                          }
-                        }}
-                        onMouseLeave={(e) => {
-                          if (!esActivo) {
-                            e.currentTarget.style.transform = 'translateY(0)';
-                            e.currentTarget.style.backgroundColor = modoOscuro ? 'rgba(30, 41, 59, 0.45)' : 'rgba(255, 255, 255, 0.65)';
-                          }
-                        }}
-                      >
-                        <span>{cat === 'Todas' ? '✨ Todas' : cat === 'Deportes' ? '⚽ Deportes' : cat === 'Idiomas' ? '🗣️ Idiomas' : cat === 'Arte/expresión' ? '🎨 Arte/Expresión' : '💻 Tecnología'}</span>
-                        <span style={{
-                          fontSize: '0.75rem',
-                          padding: '2px 8px',
-                          borderRadius: '12px',
-                          background: esActivo ? 'rgba(255, 255, 255, 0.25)' : (modoOscuro ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.06)'),
-                          color: esActivo ? 'white' : (modoOscuro ? '#cbd5e1' : '#64748b'),
-                          fontWeight: 'bold',
-                        }}>
-                          {count}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-
-              {/* 🌟 FILTROS Y RECORRIDO EN ACCIÓN */}
-              <>
-    {/* 🚩 Mensaje si no hay nada que enseñar (Solo si no está cargando) */}
-    {!cargando && itemsFiltrados.length === 0 && (
-      <div style={{ 
-        textAlign: 'center', 
-        padding: '50px 30px', 
-        background: modoOscuro ? 'rgba(30, 41, 59, 0.45)' : 'rgba(255, 255, 255, 0.45)', 
-        backdropFilter: 'blur(20px)',
-        WebkitBackdropFilter: 'blur(20px)',
-        color: modoOscuro ? '#f8fafc' : '#0f172a', 
-        borderRadius: '32px', 
-        margin: '40px auto', 
-        maxWidth: '650px', 
-        border: modoOscuro ? '1px solid rgba(255, 255, 255, 0.1)' : '1px solid rgba(0, 0, 0, 0.08)', 
-        boxShadow: modoOscuro ? '0 25px 50px -12px rgba(0, 0, 0, 0.5)' : '0 20px 40px -15px rgba(0, 0, 0, 0.1)',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        gap: '20px',
-        animation: 'fadeIn 0.6s ease-out'
-      }}>
-        {/* Floating animated icon container */}
-        <div style={{
-          width: '80px',
-          height: '80px',
-          borderRadius: '24px',
-          background: modoOscuro ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.03)',
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          fontSize: '2.5rem',
-          boxShadow: 'inset 0 2px 4px rgba(255, 255, 255, 0.1)',
-          animation: 'pulse 3s infinite ease-in-out'
-        }}>
-          🔍
-        </div>
-        
-        <h3 style={{ fontSize: '1.5rem', fontWeight: '800', margin: 0, letterSpacing: '-0.5px' }}>
-          Sin resultados
-        </h3>
-        
-        <p style={{ 
-          fontSize: '1rem', 
-          margin: 0, 
-          color: modoOscuro ? '#94a3b8' : '#475569', 
-          lineHeight: '1.6', 
-          maxWidth: '85%',
-          fontWeight: '550'
-        }}>
-          No hay actividades que coincidan con 
-          {busqueda ? ` "${busqueda}"` : ''} 
-          {empresaActiva !== 'Todas' ? ` de ${empresaActiva}` : ''}
-          {etapaActiva !== 'Todos' ? ` en la etapa ${etapaActiva}` : ''}
-          {diaActivo !== 'Todos' ? ` los ${diaActivo}` : ''}.
-        </p>
-
-        {isAdmin && (
-          <p style={{ 
-            color: '#10b981', 
-            fontWeight: '700', 
-            fontSize: '0.9rem', 
-            margin: '0', 
-            backgroundColor: modoOscuro ? 'rgba(16, 185, 129, 0.15)' : 'rgba(16, 185, 129, 0.08)',
-            padding: '6px 16px',
-            borderRadius: '12px'
-          }}>
-            💡 ¡Usa el panel de administrador para añadir una!
-          </p>
-        )}
-
-        <button
-          type="button"
-          onClick={() => {
-            setBusqueda('');
-            setEtapaActiva('Todos');
-            setSubcategoriaActiva('Todas');
-            setEmpresaActiva('Todas');
-            setDiaActivo('Todos');
-            lanzarToast('Filtros restaurados correctamente', 'exito');
-          }}
-          style={{
-            marginTop: '10px',
-            padding: '12px 24px',
-            borderRadius: '16px',
-            border: 'none',
-            background: 'linear-gradient(135deg, #3b82f6, #2563eb)',
-            color: 'white',
-            fontWeight: '750',
-            fontSize: '0.9rem',
-            cursor: 'pointer',
-            boxShadow: '0 10px 20px rgba(37, 99, 235, 0.2)',
-            transition: 'all 0.2s ease',
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.transform = 'translateY(-2px)';
-            e.currentTarget.style.boxShadow = '0 12px 24px rgba(37, 99, 235, 0.3)';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.transform = 'translateY(0)';
-            e.currentTarget.style.boxShadow = '0 10px 20px rgba(37, 99, 235, 0.2)';
-          }}
-        >
-          🔄 Restaurar Filtros
-        </button>
-      </div>
-    )}
-
-    {/* 📦 CONTENEDOR INTELIGENTE EN REJILLA */}
-    <div style={{
-      display: 'grid',
-      gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', 
-      gap: '30px',
-      padding: '20px 15px',
-      maxWidth: '1200px',
-      margin: '0 auto',
-      width: '100%',
-      boxSizing: 'border-box',
-      alignItems: 'stretch', 
-      justifyContent: 'center' 
-    }}>
-      {cargando ? (
-        <>
-          <SkeletonCard />
-          <SkeletonCard />
-          <SkeletonCard />
-          <SkeletonCard />
-          <SkeletonCard />
-          <SkeletonCard />
-        </>
-      ) : (
-        itemsFiltrados.map((item) => {
-          const m = ['Infantil', 'Primaria', 'ESO', 'Adultos'].filter(e => item[e] || (item.etapa === e) || (item.etapas && item.etapas.includes(e))).length > 1;
-          const cardColor = m ? '#a855f7' : (item.esClub || item.etapa === 'Clubes Amigos' || (item.etapas && item.etapas.includes('Clubes Amigos'))) ? '#d946ef' : (item.Infantil || item.etapa === 'Infantil' || (item.etapas && item.etapas.includes('Infantil'))) ? '#22c55e' : (item.ESO || item.etapa === 'ESO' || (item.etapas && item.etapas.includes('ESO'))) ? '#f97316' : '#3b82f6';
+          )}
           
+{/* VISTA ACTIVIDADES (CORREGIDA Y SIN ERRORES) */}
+{tab === 'actividades' && (
+  <div className="flex flex-col animate-fade-in w-full">
+    
+    {/* 1. TÍTULO */}
+    <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mb-6 text-center">
+      Navegación Rápida
+    </p>
+
+    {/* 2. FILTRO */}
+    <div className="flex flex-wrap justify-center gap-3 mb-10">
+      {[
+        { id: 'todos', label: '🌟 Todas', color: 'bg-slate-800' },
+        { id: 'infantil', label: '👶 Infantil', color: 'bg-pink-500' },
+        { id: 'primaria', label: '👦 Primaria', color: 'bg-blue-500' },
+        { id: 'secundaria', label: '🎓 ESO/Bach', color: 'bg-purple-600' },
+        { id: 'adultos', label: '👨‍👩‍👧 Adultos', color: 'bg-emerald-600' }
+      ].map((boton) => (
+        <button
+          key={boton.id}
+          onClick={() => setFiltroEtapa(boton.id)}
+          className={`px-5 py-2 rounded-full font-black text-xs uppercase tracking-widest transition-all duration-300 transform hover:scale-105 shadow-sm
+            ${filtroEtapa === boton.id 
+              ? `${boton.color} text-white shadow-lg ring-4 ring-offset-2 ring-opacity-50` 
+              : 'bg-white text-slate-400 hover:bg-slate-50 border border-slate-100'}`}
+        >
+          {boton.label}
+        </button>
+      ))}
+    </div>
+
+    {/* 3. GRID DE TARJETAS */}
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 justify-center justify-items-center">
+    {OFERTA_ACTIVIDADES
+        .filter(act => {
+          if (filtroEtapa === 'todos') return true;
+          if (filtroEtapa === 'infantil') return act.cursos.some(c => c.includes('INF'));
+          if (filtroEtapa === 'primaria') return act.cursos.some(c => c.includes('PRI'));
+          if (filtroEtapa === 'secundaria') return act.cursos.some(c => c.includes('ESO') || c.includes('BACH'));
+          if (filtroEtapa === 'adultos') return act.cursos.includes('ADULTO');
+          return true;
+        })
+        .map((act) => {
+          const theme = getThemeByActivity(act);
           return (
-            <div
-              key={item.id} 
-              className="card-premium"
-              style={{
-                background: modoOscuro ? 'rgba(30, 41, 59, 0.9)' : 'rgba(255, 255, 255, 0.94)',
-                backdropFilter: 'blur(20px)',
-                WebkitBackdropFilter: 'blur(20px)',
-                borderRadius: '28px', 
-                overflow: 'hidden',
-                boxShadow: modoOscuro ? '0 20px 40px rgba(0, 0, 0, 0.6)' : '0 20px 40px rgba(0, 0, 0, 0.15)', 
-                border: `3px solid ${cardColor}`, 
-                display: 'flex',
-                flexDirection: 'column',
-                minHeight: '530px', 
-                height: '100%',
-                '--hover-color': cardColor,
-                '--hover-shadow': modoOscuro ? '0 30px 60px rgba(96, 165, 250, 0.25)' : '0 30px 60px rgba(59, 130, 246, 0.25)'
-              }}
+            /* 🚀 CADA TARJETA AHORA LLEVA AL LOGIN */
+            <div 
+              key={act.id} 
+              id={`card-${act.id}`}
+              onClick={() => setView('login')}
+              className={`bg-white/70 backdrop-blur-md rounded-2xl shadow-lg overflow-hidden border flex flex-col hover:shadow-2xl hover:bg-white/90 transition-all duration-500 group cursor-pointer transform hover:-translate-y-1 w-full max-w-sm md:max-w-none ${
+                highlightedActId === act.id 
+                  ? 'ring-4 ring-blue-500 border-blue-500 scale-105 shadow-2xl z-10' 
+                  : 'border-white/40'
+              } ${theme.shadowGlow}`}
             >
-          {/* 🖼️ IMAGEN / LOGO */}
-          <div style={{ position: 'relative', height: '180px', minHeight: '180px', maxHeight: '180px', overflow: 'hidden', flexShrink: 0 }}>
-            <img
-              src={item.imagen || item.foto || 'https://via.placeholder.com/400x200?text=San+Buenaventura'}
-              className="card-img-zoom"
-              loading="lazy"
-              style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-              onError={(e) => { e.target.src = 'https://via.placeholder.com/400x200?text=Imagen+No+Disponible'; }}
-            />
-            <div style={{
-              position: 'absolute', top: '12px', right: '12px',
-              display: 'flex', gap: '6px', flexWrap: 'wrap',
-              justifyContent: 'flex-end', maxWidth: '85%'
-            }}>
-              {item.esClub ? (
-                <div style={{
-                  backgroundColor: '#d946ef',
-                  padding: '6px 12px', borderRadius: '99px', fontSize: '0.65rem', fontWeight: '800',
-                  color: 'white',
-                  boxShadow: '0 4px 8px rgba(0,0,0,0.15)',
-                  letterSpacing: '0.5px'
-                }}>
-                  🌟 CLUB AMIGO
-                </div>
-              ) : (
-                (() => {
-                  const etapasArray = Array.isArray(item.etapas) ? item.etapas : (item.etapa ? [item.etapa] : []);
-                  return etapasArray.map((et, index) => {
-                    let bgColor = '#64748b'; // default slate
-                    let text = et;
-                    const lowerEt = et.toLowerCase().trim();
-                    if (lowerEt.includes('infantil')) {
-                      bgColor = '#22c55e';
-                      text = '👶 INFANTIL';
-                    } else if (lowerEt.includes('primaria')) {
-                      bgColor = '#3b82f6';
-                      text = '🎒 PRIMARIA';
-                    } else if (lowerEt.includes('eso') || lowerEt.includes('secundaria')) {
-                      bgColor = '#f97316';
-                      text = '⚡ ESO';
-                    } else if (lowerEt.includes('adulto')) {
-                      bgColor = '#6366f1';
-                      text = '👥 ADULTOS';
-                    } else if (lowerEt.includes('club')) {
-                      bgColor = '#d946ef';
-                      text = '🌟 CLUB';
-                    }
-                    return (
-                      <div key={index} style={{
-                        backgroundColor: bgColor,
-                        padding: '5px 10px', borderRadius: '99px', fontSize: '0.65rem', fontWeight: '800',
-                        color: 'white',
-                        boxShadow: '0 4px 8px rgba(0,0,0,0.15)',
-                        letterSpacing: '0.5px'
-                      }}>
-                        {text}
-                      </div>
-                    );
-                  });
-                })()
-              )}
-            </div>
-          </div>
-
-          {/* 📝 CONTENIDO ESTILIZADO CON CONTRASTE REFORZADO Y MEJOR JERARQUÍA VISUAL */}
-          <div style={{ padding: '16px', textAlign: 'left', display: 'flex', flexDirection: 'column', flexGrow: 1 }}>
-            
-            {/* 👑 1. EL REY DE LA TARJETA: Título más grande en negro puro */}
-            <h3 style={{ margin: '0 0 4px', fontSize: '1.4rem', color: modoOscuro ? '#f8fafc' : '#0f172a', fontWeight: '900', letterSpacing: '-0.5px' }}>
-              {item.nombre}
-            </h3>
-            
-            {/* 🗓️⏰ Badges de Días y Horarios en Colores del Colegio (Azul y Amarillo) */}
-            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '10px' }}>
-              {/* Badge de Días (Azul Corporativo) */}
-              <div style={{ 
-                backgroundColor: modoOscuro ? 'rgba(37, 99, 235, 0.15)' : '#eff6ff', 
-                color: modoOscuro ? '#60a5fa' : '#1d4ed8', 
-                fontSize: '0.7rem', 
-                fontWeight: '900', 
-                padding: '5px 10px',
-                borderRadius: '8px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '4px',
-                border: `1px solid ${modoOscuro ? 'rgba(59, 130, 246, 0.3)' : '#bfdbfe'}`,
-              }}>
-                <span>🗓️</span>
-                <span>{item.dias ? item.dias.toUpperCase() : 'DÍAS A CONSULTAR'}</span>
-              </div>
-
-              {/* Badge de Horario (Amarillo Dorado Corporativo) */}
-              <div style={{ 
-                backgroundColor: modoOscuro ? 'rgba(245, 158, 11, 0.15)' : '#fef3c7', 
-                color: modoOscuro ? '#fbbf24' : '#b45309', 
-                fontSize: '0.7rem', 
-                fontWeight: '900', 
-                padding: '5px 10px',
-                borderRadius: '8px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '4px',
-                border: `1px solid ${modoOscuro ? 'rgba(245, 158, 11, 0.3)' : '#fde68a'}`,
-              }}>
-                <span>⏰</span>
-                <span>{item.horario ? item.horario.toUpperCase() : 'HORARIO A CONSULTAR'}</span>
-              </div>
-            </div>
-
-            {/* 📝 MINI-DESCRIPCIÓN DINÁMICA (Máximo 2 líneas con elipsis y limpieza de URLs) */}
-            <p style={{
-              color: modoOscuro ? '#94a3b8' : '#64748b',
-              fontSize: '0.8rem',
-              margin: '4px 0 0',
-              lineHeight: '1.4',
-              fontWeight: '600',
-              display: '-webkit-box',
-              WebkitLineClamp: 2,
-              WebkitBoxOrient: 'vertical',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              height: '38px' // Fija la altura a exactamente 2 líneas para simetría impecable
-            }}>
-              {(() => {
-                const rawInfo = item.info || item.descripcion || '';
-                const infoLimpia = rawInfo.includes('https://firebasestorage.googleapis.com')
-                  ? rawInfo.split('https://firebasestorage.googleapis.com')[0].trim()
-                  : rawInfo;
-                return infoLimpia || 'Sin descripción disponible.';
-              })()}
-            </p>
-
-            {/* 🍃 EL COLCHÓN DE AIRE (marginTop: 'auto') empuja todo lo demás al fondo de forma limpia */}
-            <div style={{ marginTop: 'auto' }}>
               
-              {/* 💰 PRECIO Y BOTÓN EN UNA SOLA FILA HORIZONTAL COMPACTA Y PRESTIGIOSA */}
-              <div style={{ 
-                display: 'flex', 
-                justifyContent: 'space-between', 
-                alignItems: 'center', 
-                marginBottom: '8px',
-                padding: '0 2px'
-              }}>
-                {/* Bloque del Precio */}
-                <div style={{ display: 'flex', flexDirection: 'column', textAlign: 'left' }}>
-                  <span style={{ fontSize: '0.65rem', color: modoOscuro ? '#94a3b8' : '#64748b', fontWeight: '800', letterSpacing: '0.5px' }}>PRECIO</span>
-                  <span style={{ fontSize: '1.3rem', fontWeight: '900', color: item.esClub ? '#d946ef' : (modoOscuro ? '#60a5fa' : '#1d4ed8'), lineHeight: '1.1' }}>
-                    {item.precio ? (String(item.precio).endsWith('€') ? item.precio : `${item.precio}€`) : '---'}
-                    <small style={{ fontSize: '0.7rem', fontWeight: '700', color: modoOscuro ? '#94a3b8' : '#64748b', marginLeft: '2px' }}>/mes</small>
+              {/* Encabezado con degradado dinámico según actividad */}
+              <div className={`bg-gradient-to-br ${theme.headerGrad} p-5 relative text-left`}>
+                <div className="flex justify-between items-start mb-2">
+                  <span className="bg-white/20 backdrop-blur-sm text-white text-[9px] px-2.5 py-0.5 rounded-full font-black uppercase tracking-wider border border-white/10">
+                    {theme.badgeText}
                   </span>
                 </div>
+                <h3 className="text-white font-black text-lg pr-8 uppercase tracking-tight leading-tight">{act.nombre}</h3>
+                
+                {/* ✨ Aviso que sale al pasar el ratón */}
+                <div className="absolute top-5 right-5 text-white opacity-0 group-hover:opacity-100 transition-opacity">
+                  <span className="text-[10px] font-black bg-blue-900/40 px-2.5 py-1.5 rounded-lg">ENTRAR ➔</span>
+                </div>
 
-                {/* Acciones de la Tarjeta */}
-                <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                  {/* Botón Compartir Rápido */}
+                <div className="flex flex-wrap gap-2 mt-3">
+                  <span className="bg-white/20 backdrop-blur-sm text-white text-[10px] px-2.5 py-1 rounded border border-white/10 font-mono font-bold">
+                    📅 {act.diasResumen}
+                  </span>
+                  <span className="bg-white/20 backdrop-blur-sm text-white text-[10px] px-2.5 py-1 rounded font-bold border border-white/10">
+                    👥 Máx. {act.alumnosMax} Alumnos
+                  </span>
+                  {act.requierePrueba && (
+                    <span className="bg-red-500 text-white text-[10px] px-2.5 py-1 rounded font-bold shadow-sm animate-pulse whitespace-nowrap">
+                      ❗ Requiere Prueba
+                    </span>
+                  )}
+                </div>
+              </div>
+        
+              <div className="p-5 flex-1 flex flex-col">
+                <p className="text-slate-600 text-sm mb-4 flex-1 whitespace-pre-line leading-relaxed text-left font-medium">
+                  {act.descripcion}
+                </p>
+                
+                {/* Aviso en cristal amarillo */}
+                {act.aviso && (
+                  <div className="bg-amber-400/10 border border-amber-200/50 p-3 rounded-xl text-xs text-amber-900 mb-4 font-semibold flex gap-2 text-left backdrop-blur-sm">
+                    <span>⚠️</span>
+                    <span>{act.aviso}</span>
+                  </div>
+                )}
+        
+                {/* Footer con precios destacados */}
+                <div className="border-t border-slate-100 pt-3 mt-auto flex justify-between items-center">
+                   <div className="text-left">
+                      <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter">Mínimo para grupo:</p>
+                      <p className="text-xs font-black text-blue-800">{act.minAlumnos} alumnos</p>
+                   </div>
+                   <div className="flex flex-col items-end">
+                      <span className="text-[10px] text-slate-400 font-bold uppercase">Precio</span>
+                      <p className={`text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r ${theme.priceColor}`}>
+                        {act.precioResumen}
+                      </p>
+                   </div>
+                </div>
+
+                {/* ✨ Botones de Acción (Inscripción y Compartido) */}
+                <div className="mt-4 flex gap-2 w-full">
+                  <div className={`flex-1 py-2.5 text-[10px] font-black uppercase tracking-widest rounded-xl text-center transition-all border flex items-center justify-center ${theme.btnBg} ${theme.btnHover}`}>
+                    Inscribirme / Reservar Prueba
+                  </div>
                   <button
                     type="button"
                     onClick={async (e) => {
                       e.stopPropagation();
-                      const urlCompartir = `${window.location.origin}${window.location.pathname}?act=${item.id}`;
-                      const textoCompartir = `¡Mira la actividad extraescolar de "${item.nombre}" del Colegio San Buenaventura! 🏫✨`;
+                      const urlCompartir = `${window.location.origin}${window.location.pathname}?act=${act.id}`;
+                      const textoCompartir = `¡Mira la actividad de natación de "${act.nombre}" del Colegio San Buenaventura! 🏊‍♂️✨`;
                       
                       if (navigator.share) {
                         try {
                           await navigator.share({
-                            title: item.nombre,
+                            title: act.nombre,
                             text: textoCompartir,
                             url: urlCompartir,
                           });
-                          lanzarToast('¡Compartido con éxito! 🚀', 'exito');
+                          showToast('¡Compartido con éxito! 🚀', 'success');
                         } catch (err) {
                           if (err.name !== 'AbortError') console.error(err);
                         }
                       } else {
                         try {
                           await navigator.clipboard.writeText(urlCompartir);
-                          lanzarToast('📋 ¡Enlace copiado! Listo para compartir.', 'exito');
+                          showToast('📋 ¡Enlace copiado! Listo para compartir.', 'success');
                         } catch (err) {
                           console.error(err);
-                          lanzarToast('❌ No se pudo copiar el enlace', 'error');
+                          showToast('❌ No se pudo copiar el enlace', 'error');
                         }
                       }
                     }}
-                    style={{
-                      padding: '8px 10px',
-                      borderRadius: '12px',
-                      border: 'none',
-                      backgroundColor: modoOscuro ? 'rgba(255, 255, 255, 0.08)' : '#f1f5f9',
-                      color: modoOscuro ? '#cbd5e1' : '#475569',
-                      cursor: 'pointer',
-                      fontSize: '0.85rem',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      transition: 'all 0.2s',
-                      outline: 'none',
-                    }}
+                    className="px-3.5 py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100 hover:text-slate-800 transition-colors flex items-center justify-center gap-1.5 text-[10px] font-black uppercase tracking-wider"
                     title="Compartir enlace directo"
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.backgroundColor = modoOscuro ? 'rgba(255, 255, 255, 0.18)' : '#e2e8f0';
-                      e.currentTarget.style.color = modoOscuro ? '#ffffff' : '#0f172a';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.backgroundColor = modoOscuro ? 'rgba(255, 255, 255, 0.08)' : '#f1f5f9';
-                      e.currentTarget.style.color = modoOscuro ? '#cbd5e1' : '#475569';
-                    }}
                   >
-                    🔗
-                  </button>
-
-                  {/* Botón Detalles Compacto */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setActividadSeleccionada(item);
-                      setVista('detalles');
-                    }}
-                    style={{
-                      padding: '8px 14px', 
-                      borderRadius: '12px', 
-                      border: 'none',
-                      backgroundColor: modoOscuro ? '#3b82f6' : '#0f172a', 
-                      color: '#ffffff', 
-                      fontWeight: '800', 
-                      cursor: 'pointer', 
-                      fontSize: '0.78rem',
-                      boxShadow: modoOscuro ? '0 4px 12px rgba(59, 130, 246, 0.25)' : '0 4px 10px rgba(15, 23, 42, 0.15)',
-                      transition: 'all 0.2s',
-                      outline: 'none',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '4px'
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.backgroundColor = modoOscuro ? '#60a5fa' : '#1e293b';
-                      e.currentTarget.style.transform = 'translateY(-1px)';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.backgroundColor = modoOscuro ? '#3b82f6' : '#0f172a';
-                      e.currentTarget.style.transform = 'translateY(0)';
-                    }}
-                  >
-                    <span>Detalles</span>
-                    <span>→</span>
+                    🔗 Compartir
                   </button>
                 </div>
               </div>
-
-              {/* 🔗 SECCIÓN DE INSCRIPCIÓN INTELIGENTE */}
-              <div style={{ width: '100%', paddingTop: '5px' }}>
-                {item.linksMultiples && item.linksMultiples.length > 0 ? (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    <select
-                      id={`select-${item.id}`}
-                      defaultValue=""
-                      style={{
-                        width: '100%',
-                        padding: '8px 11px',
-                        borderRadius: '12px',
-                        border: modoOscuro ? '2px solid rgba(255,255,255,0.2)' : '2px solid #0f172a',
-                        backgroundColor: modoOscuro ? '#1e293b' : '#ffffff',
-                        color: modoOscuro ? '#f8fafc' : '#0f172a',
-                        fontWeight: 'bold',
-                        fontSize: '0.82rem',
-                        outline: 'none',
-                        cursor: 'pointer'
-                      }}
-                      onChange={(e) => {
-                        const botonIr = document.getElementById(`btn-ir-${item.id}`);
-                        if (botonIr) {
-                          botonIr.href = e.target.value;
-                          botonIr.style.opacity = e.target.value ? '1' : '0.5';
-                          botonIr.style.pointerEvents = e.target.value ? 'auto' : 'none';
-                        }
-                      }}
-                    >
-                      <option value="" disabled>👇 Selecciona tu categoría / curso</option>
-                      {item.linksMultiples.map((link, index) => (
-                        <option key={index} value={link.url}>
-                          {link.etiqueta}
-                        </option>
-                      ))}
-                    </select>
-
-                    <a
-                      id={`btn-ir-${item.id}`}
-                      href=""
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      style={{
-                        display: 'block', 
-                        padding: '9px 12px', 
-                        backgroundColor: item.esClub ? '#d946ef' : '#ff6b6b',
-                        color: 'white', 
-                        borderRadius: '12px', 
-                        textDecoration: 'none', 
-                        fontWeight: '900',
-                        fontSize: '0.82rem', 
-                        textAlign: 'center', 
-                        boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-                        opacity: '0.5',          
-                        pointerEvents: 'none',   
-                        transition: 'all 0.2s ease'
-                      }}
-                    >
-                      📝 ¡INSCRIBIRSE AHORA!
-                    </a>
-                  </div>
-                ) : (
-                  (item.linkInscripcion || item.enlace) && (
-                    <a
-                      href={item.linkInscripcion ? item.linkInscripcion : item.enlace}
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      style={{
-                        display: 'block', 
-                        padding: '9px 12px', 
-                        backgroundColor: item.esClub ? '#d946ef' : '#ff6b6b',
-                        color: 'white', 
-                        borderRadius: '12px', 
-                        textDecoration: 'none', 
-                        fontWeight: '900',
-                        fontSize: '0.82rem', 
-                        textAlign: 'center', 
-                        boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-                      }}
-                    >
-                      📝 ¡INSCRIBIRSE AHORA!
-                    </a>
-                  )
-                )}
-              </div>
-
-              {/* 🛠️ BOTONES DE ADMINISTRACIÓN (¡A salvo e intactos!) */}
-              {isAdmin && (
-                <div style={{ display: 'flex', gap: '8px', marginTop: '8px', paddingTop: '8px', borderTop: modoOscuro ? '1px dotted rgba(255,255,255,0.15)' : '1px dotted rgba(0,0,0,0.2)' }}>
-                  <button
-                    onClick={() => {
-                      setNuevaAct({
-                        ...item, 
-                        nombre: item.nombre || '',
-                        etapas: item.etapas || [], 
-                        horario: item.horario || '',
-                        dias: item.dias || '',
-                        lugar: item.lugar || '',
-                        info: item.info || item.descripcion || '',
-                        imagen: item.imagen || '',
-                        precio: item.precio || '',
-                        empresa: item.empresa || '',
-                        logoEmpresa: item.logoEmpresa || '',
-                        nombreContacto: item.nombreContacto || '',
-                        contacto: item.contacto || '', 
-                        latAct: item.latAct ? Number(item.latAct) : 40.407937755274425,
-                        lngAct: item.lngAct ? Number(item.lngAct) : -3.7469348757382366,
-                        latMon: item.latMon ? Number(item.latMon) : '',
-                        lngMon: item.lngMon ? Number(item.lngMon) : '',
-                        latFam: item.latFam ? Number(item.latFam) : '',
-                        lngFam: item.lngFam ? Number(item.lngFam) : '',
-                        fotoAct: item.fotoAct || '',
-                        fotoMon: item.fotoMon || '',
-                        fotoFam: item.fotoFam || '',
-                        recogidaMonitores: item.recogidaMonitores || '',
-                        recogidaFamilias: item.recogidaFamilias || '',
-                        linkInscripcion: item.linkInscripcion || item.enlace || '',
-                        categoria: item.categoria || ''
-                      });
-                      setEditandoId(item.id); 
-                      setVista('panel');      
-                    }}
-                    style={{ flex: 1, padding: '8px', backgroundColor: '#fef3c7', color: '#92400e', border: '1px solid #f59e0b', borderRadius: '8px', fontSize: '0.75rem', fontWeight: 'bold', cursor: 'pointer' }}
-                  >
-                    EDITAR
-                  </button>
-
-                  <button
-                    onClick={async () => {
-                      if (!isAdmin) return lanzarToast('🛑 ¡No tienes permiso! 🔐', 'error');
-                      if (confirm(`⚠️ ¿Quieres eliminar permanentemente la actividad o club "${item.nombre}"?\n\nEsta acción no se puede deshacer y se borrará para todas las familias inmediatamente.`)) {
-                        const coleccion = item.esClub ? 'clubes_cole' : 'actividades_cole';
-                        await deleteDoc(doc(db, coleccion, item.id));
-                        item.esClub ? cargarClubes() : cargarActividades();
-                      }
-                    }}
-                    style={{ flex: 1, padding: '8px', backgroundColor: '#fee2e2', color: '#991b1b', border: '1px solid #ef4444', borderRadius: '8px', fontSize: '0.75rem', fontWeight: 'bold', cursor: 'pointer' }}
-                  >
-                    BORRAR
-                  </button>
-                </div>
-              )}
-
             </div>
-          </div>
-        </div>
-      );
-      })
-      )}
+          );
+        })}
     </div>
-  </>
-            </>
-          )}
-        </main>
+  </div>
+)}
 
-        {/* 🛡️ FOOTER PREMIUM GLASSMORPHIC */}
-        <footer style={{
-          background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)', // 🌌 Azul oscuro degradado premium
-          backdropFilter: 'blur(15px) saturate(160%)',
-          WebkitBackdropFilter: 'blur(15px) saturate(160%)',
-          borderTop: '1.5px solid rgba(255, 255, 255, 0.08)',
-          padding: '40px 20px 30px',
-          borderRadius: '32px 32px 0 0',
-          marginTop: '50px',
-          position: 'relative',
-          boxShadow: '0 50vh 0 #0f172a', // 🎨 Relleno oscuro infinito
-          color: '#cbd5e1', // Texto claro legible
-          transition: 'all 0.3s ease',
-          marginBottom: '0px',
-        }}>
-          <div 
-            className="footer-grid"
-            style={{
-              maxWidth: '1100px',
-              margin: '0 auto',
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-              gap: '30px',
-              textAlign: 'left'
-            }}
-          >
-            {/* Columna 1: Identidad */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <img 
-                  src="https://firebasestorage.googleapis.com/v0/b/extraescolarescsb.firebasestorage.app/o/logo%20BLANCO.png?alt=media&token=753d085f-d9d1-4b78-9d54-26e88578c35b" 
-                  alt="Escudo Cole" 
-                  style={{ 
-                    width: '140px', // 🛡️ Agrandado premium
-                    height: 'auto',
-                    objectFit: 'contain',
-                    filter: 'drop-shadow(0 2px 8px rgba(0,0,0,0.25))'
-                  }} 
-                />
-              </div>
-              <p style={{ fontSize: '0.85rem', color: '#94a3b8', margin: '0', lineHeight: '1.5', fontWeight: '500' }}>
-                Portal oficial de actividades extraescolares
-              </p>
-            </div>
-
-            {/* Columna 2: Contacto Premium */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              <span style={{ fontSize: '0.75rem', fontWeight: '900', color: '#60a5fa', letterSpacing: '1px', textTransform: 'uppercase' }}>
-                Contacto Directo
-              </span>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <a 
-                  href="https://maps.google.com/?q=Calle+de+El+Greco+16,+Madrid"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{ 
-                    fontSize: '0.85rem', 
-                    color: '#cbd5e1', 
-                    textDecoration: 'none',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    transition: 'color 0.2s',
-                    wordBreak: 'break-word'
-                  }}
-                  onMouseEnter={(e) => e.currentTarget.style.color = '#60a5fa'}
-                  onMouseLeave={(e) => e.currentTarget.style.color = '#cbd5e1'}
-                >
-                  <span>📍</span> Calle de El Greco 16, Madrid
-                </a>
-                <a 
-                  href="tel:915267161"
-                  style={{ 
-                    fontSize: '0.85rem', 
-                    color: '#cbd5e1', 
-                    textDecoration: 'none',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    transition: 'color 0.2s'
-                  }}
-                  onMouseEnter={(e) => e.currentTarget.style.color = '#60a5fa'}
-                  onMouseLeave={(e) => e.currentTarget.style.color = '#cbd5e1'}
-                >
-                  <span>📞</span> 915 267 161
-                </a>
-                <a 
-                  href="mailto:extraescolares@sanbuenaventura.org"
-                  style={{ 
-                    fontSize: '0.85rem', 
-                    color: '#cbd5e1', 
-                    textDecoration: 'none',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    transition: 'color 0.2s',
-                    wordBreak: 'break-all'
-                  }}
-                  onMouseEnter={(e) => e.currentTarget.style.color = '#60a5fa'}
-                  onMouseLeave={(e) => e.currentTarget.style.color = '#cbd5e1'}
-                >
-                  <span>📧</span> extraescolares@sanbuenaventura.org
-                </a>
-                <a 
-                  href="mailto:extraescolarespiscina@sanbuenaventura.org"
-                  style={{ 
-                    fontSize: '0.85rem', 
-                    color: '#cbd5e1', 
-                    textDecoration: 'none',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    transition: 'color 0.2s',
-                    wordBreak: 'break-all'
-                  }}
-                  onMouseEnter={(e) => e.currentTarget.style.color = '#60a5fa'}
-                  onMouseLeave={(e) => e.currentTarget.style.color = '#cbd5e1'}
-                >
-                  <span>📧</span> extraescolarespiscina@sanbuenaventura.org
-                </a>
-              </div>
-            </div>
-
-            {/* Columna 3: Enlaces Rápidos y Copyright */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', justifyContent: 'space-between' }}>
-              <div>
-                <span style={{ fontSize: '0.75rem', fontWeight: '900', color: '#60a5fa', letterSpacing: '1px', textTransform: 'uppercase' }}>
-                  Navegación Rápida
-                </span>
-                <div style={{ display: 'flex', gap: '15px', marginTop: '8px', flexWrap: 'wrap' }}>
-                  <button 
-                    type="button"
-                    onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-                    style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: '0.8rem', fontWeight: '700', padding: 0, transition: 'color 0.2s', outline: 'none' }}
-                    onMouseEnter={(e) => e.currentTarget.style.color = '#60a5fa'}
-                    onMouseLeave={(e) => e.currentTarget.style.color = '#94a3b8'}
-                  >
-                    ↑ Inicio
-                  </button>
-                  <button 
-                    type="button"
-                    onClick={() => setVista('faq')}
-                    style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: '0.8rem', fontWeight: '700', padding: 0, transition: 'color 0.2s', outline: 'none' }}
-                    onMouseEnter={(e) => e.currentTarget.style.color = '#60a5fa'}
-                    onMouseLeave={(e) => e.currentTarget.style.color = '#94a3b8'}
-                  >
-                    💬 FAQ
-                  </button>
-                  <button 
-                    type="button"
-                    onClick={() => setVista('mapa')}
-                    style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: '0.8rem', fontWeight: '700', padding: 0, transition: 'color 0.2s', outline: 'none' }}
-                    onMouseEnter={(e) => e.currentTarget.style.color = '#60a5fa'}
-                    onMouseLeave={(e) => e.currentTarget.style.color = '#94a3b8'}
-                  >
-                    📍 Mapa
-                  </button>
-                </div>
-              </div>
-
-              <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '10px' }}>
-                © {new Date().getFullYear()} Extraescolares Colegio San Buenaventura.
-              </div>
-            </div>
-          </div>
-        </footer>
-
-        {/* 🌟 COMPONENTES PREMIUM GLOBALES */}
-        <ToastContainer toasts={toasts} />
-        <AdminPasswordModal 
-          mostrar={mostrarAdminModal} 
-          onClose={() => setMostrarAdminModal(false)}
-          db={db}
-          setIsAdmin={setIsAdmin}
-          lanzarToast={lanzarToast}
-        />
-
-        {/* ⬆️ BOTÓN FLOTANTE "VOLVER ARRIBA" DILUIDO CON GLASSMORPHISM */}
-        {mostrarSubirArriba && (
-          <button
-            type="button"
-            onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-            style={{
-              position: 'fixed',
-              bottom: '30px',
-              right: '30px',
-              width: '50px',
-              height: '50px',
-              borderRadius: '50%',
-              background: 'rgba(15, 23, 42, 0.75)',
-              backdropFilter: 'blur(10px)',
-              border: '1px solid rgba(255, 255, 255, 0.1)',
-              color: 'white',
-              fontSize: '1.4rem',
-              cursor: 'pointer',
-              zIndex: 99999,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              boxShadow: '0 10px 25px rgba(0, 0, 0, 0.3)',
-              animation: 'fadeIn 0.3s ease-out',
-              transition: 'transform 0.2s',
-              outline: 'none'
-            }}
-            onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.1)'}
-            onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
-          >
-            ▲
-          </button>
-        )}
-      </div>
-);
-}
-
-// 🚩 ESTA ES LA "HABITACIÓN" DEL MAPA QUE FALTABA (¡Consolidada y con soporte Modo Oscuro!)
-if (vista === 'mapa') {
-  return (
-    <div
-      style={{
-        height: '100vh',
-        width: '100vw',
-        display: 'flex',
-        flexDirection: 'column',
-        backgroundColor: modoOscuro ? '#0a0f1d' : '#f8fafc',
-        color: modoOscuro ? '#f1f5f9' : '#1e293b',
-        transition: 'background-color 0.3s ease, color 0.3s ease',
-      }}
-    >
-      <div
-        style={{
-          padding: '15px 20px',
-          backgroundColor: modoOscuro ? '#1e293b' : 'white',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          boxShadow: modoOscuro ? '0 4px 12px rgba(0,0,0,0.3)' : '0 2px 10px rgba(0,0,0,0.1)',
-          borderBottom: modoOscuro ? '1px solid rgba(255, 255, 255, 0.08)' : 'none',
-          zIndex: 1000,
-          transition: 'all 0.3s ease',
-        }}
-      >
-        <button
-          onClick={() => setVista('catalogo')}
-          style={{
-            padding: '10px 20px',
-            borderRadius: '12px',
-            border: 'none',
-            backgroundColor: '#3b82f6',
-            color: 'white',
-            fontWeight: 'bold',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            boxShadow: '0 4px 10px rgba(59, 130, 246, 0.25)',
-            transition: 'transform 0.2s, background-color 0.2s',
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.transform = 'translateY(-1px)';
-            e.currentTarget.style.backgroundColor = '#2563eb';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.transform = 'translateY(0)';
-            e.currentTarget.style.backgroundColor = '#3b82f6';
-          }}
-        >
-          ← Volver al Inicio
-        </button>
-        <h2
-          style={{
-            margin: 0,
-            fontSize: '1.2rem',
-            fontWeight: '800',
-            color: modoOscuro ? '#f8fafc' : '#1e293b',
-            letterSpacing: '-0.5px',
-          }}
-        >
-          📍 Puntos Clave del Colegio
-        </h2>
-        <div style={{ width: '85px' }}></div>
-      </div>
-
-      <div style={{ flex: 1, position: 'relative' }}>
-        <MapaPuntosInteres puntos={puntosInteres} />
-      </div>
-    </div>
-  );
-}
-  if (vista === 'detalles' && actividadSeleccionada) {
-    const act = actividadSeleccionada;
-    const latMonNum = Number(act.latMon);
-    const latFamNum = Number(act.latFam);
-    const latActNum = Number(act.latAct);
-    const esMonValido = act.latMon && !isNaN(latMonNum) && latMonNum !== 0 && latMonNum !== 40.407937755274425;
-    const esFamValido = act.latFam && !isNaN(latFamNum) && latFamNum !== 0 && latFamNum !== 40.407937755274425;
-    const esActValido = act.latAct && !isNaN(latActNum) && latActNum !== 0 && latActNum !== 40.407937755274425;
-    return (
-      <div
-        style={{
-          maxWidth: '650px',
-          margin: '0 auto',
-          padding: '20px',
-          backgroundColor: modoOscuro ? '#0a0f1d' : '#f8fafc',
-          minHeight: '100vh',
-          fontFamily: 'sans-serif',
-          color: modoOscuro ? '#f1f5f9' : '#1e293b',
-          transition: 'all 0.3s ease',
-        }}
-      >
-        {/* 🔙 Botón Volver Minimalista y Compartir */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', gap: '15px' }}>
-          <button
-            onClick={() => {
-              setVista('catalogo');
-              setActividadSeleccionada(null);
-              if (typeof window !== 'undefined') {
-                window.history.replaceState({}, '', window.location.pathname);
-              }
-            }}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              background: 'none',
-              border: 'none',
-              color: modoOscuro ? '#94a3b8' : '#64748b',
-              fontWeight: 'bold',
-              cursor: 'pointer',
-              fontSize: '1rem',
-              outline: 'none',
-            }}
-          >
-            ← Volver al catálogo
-          </button>
-
-          <button
-            onClick={async () => {
-              const urlCompartir = `${window.location.origin}${window.location.pathname}?act=${act.id}`;
-              const textoCompartir = `¡Mira la actividad extraescolar de "${act.nombre}" del Colegio San Buenaventura! 🏫✨`;
+{/* VISTA INFO COMPLETA CON ÍNDICE DE ACCESO RÁPIDO */}
+{tab === 'info' && (
+            <div className="space-y-10 animate-fade-in">
               
-              if (navigator.share) {
-                try {
-                  await navigator.share({
-                    title: act.nombre,
-                    text: textoCompartir,
-                    url: urlCompartir,
-                  });
-                  lanzarToast('¡Compartido con éxito! 🚀', 'exito');
-                } catch (err) {
-                  if (err.name !== 'AbortError') {
-                    console.error(err);
-                  }
-                }
-              } else {
-                try {
-                  await navigator.clipboard.writeText(urlCompartir);
-                  lanzarToast('📋 ¡Enlace copiado! Compártelo por WhatsApp o Email.', 'exito');
-                } catch (err) {
-                  console.error(err);
-                  lanzarToast('❌ No se pudo copiar el enlace', 'error');
-                }
-              }
-            }}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              backgroundColor: modoOscuro ? 'rgba(59, 130, 246, 0.15)' : '#eff6ff',
-              border: `1.5px solid ${modoOscuro ? 'rgba(59, 130, 246, 0.3)' : '#bfdbfe'}`,
-              color: modoOscuro ? '#60a5fa' : '#1d4ed8',
-              fontWeight: 'bold',
-              cursor: 'pointer',
-              padding: '8px 16px',
-              borderRadius: '12px',
-              fontSize: '0.88rem',
-              transition: 'all 0.2s',
-              outline: 'none',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = modoOscuro ? 'rgba(59, 130, 246, 0.25)' : '#dbeafe';
-              e.currentTarget.style.transform = 'translateY(-1px)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = modoOscuro ? 'rgba(59, 130, 246, 0.15)' : '#eff6ff';
-              e.currentTarget.style.transform = 'translateY(0)';
-            }}
-          >
-            <span>🔗</span>
-            <span>Compartir</span>
-          </button>
-        </div>
-
-        {/* 🖼️ Tarjeta Principal de Imagen */}
-        <div
-          style={{
-            backgroundColor: modoOscuro ? '#1e293b' : 'white',
-            borderRadius: '32px',
-            overflow: 'hidden',
-            boxShadow: modoOscuro ? '0 20px 25px -5px rgba(0,0,0,0.3)' : '0 20px 25px -5px rgba(0,0,0,0.05)',
-            marginBottom: '25px',
-            border: modoOscuro ? '1px solid rgba(255,255,255,0.08)' : 'none',
-          }}
-        >
-          <img
-            src={
-              act.imagen ||
-              'https://via.placeholder.com/800x400?text=San+Buenaventura'
-            }
-            style={{ width: '100%', height: 'auto', maxHeight: '300px', aspectRatio: '16/9', objectFit: 'cover' }}
-            onError={(e) => {
-              e.target.src =
-                'https://via.placeholder.com/800x400?text=Revisar+Imagen';
-            }}
-          />
-          <div style={{ padding: '30px' }}>
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'flex-start',
-                flexWrap: 'wrap',
-                gap: '20px'
-              }}
-            >
-              <div>
-                {/* 🏷️ AQUÍ ESTÁN TODAS LAS ETAPAS JUNTAS */}
-                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                  {act.etapas && Array.isArray(act.etapas) ? (
-                    act.etapas.map((et) => (
-                      <span
-                        key={et}
-                        style={{
-                          backgroundColor: et === 'Clubes Amigos' ? '#d946ef' : '#dbeafe',
-                          color: et === 'Clubes Amigos' ? 'white' : '#1e40af',
-                          padding: '6px 16px',
-                          borderRadius: '99px',
-                          fontSize: '0.75rem',
-                          fontWeight: '800',
-                          textTransform: 'uppercase',
-                        }}
-                      >
-                        {et === 'Clubes Amigos' ? '🌟 CLUB AMIGO' : et}
-                      </span>
-                    ))
-                  ) : (
-                    // Por si es una de las antiguas que no tenía lista de etapas
-                    <span
-                      style={{
-                        backgroundColor: '#dbeafe',
-                        color: '#1e40af',
-                        padding: '6px 16px',
-                        borderRadius: '99px',
-                        fontSize: '0.75rem',
-                        fontWeight: '800',
-                        textTransform: 'uppercase',
-                      }}
-                    >
-                      {act.etapa}
-                    </span>
-                  )}
-                </div>
-
-                <h2
-                  style={{
-                    fontSize: '2.2rem',
-                    color: '#0f172a',
-                    margin: '15px 0 5px',
-                    fontWeight: '800',
-                    letterSpacing: '-1px',
-                  }}
-                >
-                  {act.nombre}
-                </h2>
-              </div>
-
-              {/* 💰 EL PRECIO A LA DERECHA */}
-              <div style={{ textAlign: 'right' }}>
-                <p
-                  style={{
-                    color: '#3b82f6',
-                    fontSize: '1.8rem',
-                    fontWeight: '800',
-                    margin: 0,
-                  }}
-                >
-                  {act.precio}€
-                </p>
-                <p style={{ margin: 0, color: '#64748b', fontSize: '0.9rem' }}>
-                  al mes
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* 📋 SELECTOR DE PESTAÑAS (Estilo Apple, muy moderno) */}
-        <div
-          style={{
-            display: 'flex',
-            gap: '8px',
-            marginBottom: '25px',
-            backgroundColor: '#f1f5f9',
-            padding: '6px',
-            borderRadius: '20px',
-          }}
-        >
-          <button
-            onClick={() => setPestaña('info')}
-            style={{
-              flex: 1,
-              padding: '14px',
-              borderRadius: '15px',
-              border: 'none',
-              backgroundColor: pestaña === 'info' ? 'white' : 'transparent',
-              color: pestaña === 'info' ? '#1e293b' : '#64748b',
-              fontWeight: 'bold',
-              cursor: 'pointer',
-              transition: '0.3s',
-              boxShadow:
-                pestaña === 'info' ? '0 4px 10px rgba(0,0,0,0.05)' : 'none',
-            }}
-          >
-            📝 Información
-          </button>
-          <button
-            onClick={() => setPestaña('mapa')}
-            style={{
-              flex: 1,
-              padding: '14px',
-              borderRadius: '15px',
-              border: 'none',
-              backgroundColor: pestaña === 'mapa' ? 'white' : 'transparent',
-              color: pestaña === 'mapa' ? '#1e293b' : '#64748b',
-              fontWeight: 'bold',
-              cursor: 'pointer',
-              transition: '0.3s',
-              boxShadow:
-                pestaña === 'mapa' ? '0 4px 10px rgba(0,0,0,0.05)' : 'none',
-            }}
-          >
-            📍 Mapa y Recogida
-          </button>
-        </div>
-
-        {/* 📦 CONTENIDO DINÁMICO */}
-        {pestaña === 'info' && (
-          <div style={{ animation: 'fadeIn 0.3s' }}>
-            {/* 📅 Grid de Información Rápida */}
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: '1fr 1fr',
-                gap: '15px',
-                marginBottom: '25px',
-              }}
-            >
-              <div
-                style={{
-                  backgroundColor: 'white',
-                  padding: '20px',
-                  borderRadius: '24px',
-                  border: '1px solid #f1f5f9',
-                }}
-              >
-                <p
-                  style={{
-                    margin: 0,
-                    fontSize: '0.7rem',
-                    color: '#94a3b8',
-                    fontWeight: '800',
-                    textTransform: 'uppercase',
-                  }}
-                >
-                  📅 Días
-                </p>
-                <p
-                  style={{
-                    margin: '5px 0 0',
-                    fontWeight: '700',
-                    color: '#1e293b',
-                    fontSize: '1.1rem',
-                    whiteSpace: 'pre-wrap', // 👈 ¡Esto permite los saltos de línea!
-                    lineHeight: '1.4'       // Un poquito de espacio entre líneas para que se lea mejor
-                  }}
-                >
-                  {act.dias}
-                </p>
-              </div>
-              <div
-                style={{
-                  backgroundColor: 'white',
-                  padding: '20px',
-                  borderRadius: '24px',
-                  border: '1px solid #f1f5f9',
-                }}
-              >
-                <p
-                  style={{
-                    margin: 0,
-                    fontSize: '0.7rem',
-                    color: '#94a3b8',
-                    fontWeight: '800',
-                    textTransform: 'uppercase',
-                  }}
-                >
-                  ⏰ Horario
-                </p>
-                <p
-                  style={{
-                    margin: '5px 0 0',
-                    fontWeight: '700',
-                    color: '#1e293b',
-                    fontSize: '1.1rem',
-                  }}
-                >
-                  {act.horario}
-                </p>
-              </div>
-            </div>
-
-            {/* 🎒 Material y Descripción */}
-            <div
-              style={{
-                backgroundColor: 'white',
-                padding: '30px',
-                borderRadius: '32px',
-                border: '1px solid #f1f5f9',
-                marginBottom: '25px',
-              }}
-            >
-<h4 style={{ color: '#1e293b', marginBottom: '10px' }}>
-                Sobre la actividad
-              </h4>
-              <p
-                style={{
-                  color: '#475569',
-                  lineHeight: '1.8',
-                  fontSize: '1.05rem',
-                  whiteSpace: 'pre-wrap', 
-                  wordBreak: 'break-word' 
-                }}
-              >
-                {/* 🧹 ¡LIMPIEZA MÁGICA SEGURA!: Quitamos la palabra "item" y dejamos solo "act.info" para que no dé ningún error */}
-                {act.info && act.info.includes('https://firebasestorage.googleapis.com')
-                  ? act.info.split('https://firebasestorage.googleapis.com')[0].trim()
-                  : act.info || ''} 
-              </p>
-
-              {/* 🎽 ¡LA FOTO SE QUEDA AQUÍ ABAJO PRECIOSA!: Supersegura y sin "item" */}
-              {act.info && act.info.includes('firebasestorage.googleapis.com') && (
-                <div style={{ marginTop: '20px', textAlign: 'center' }}>
-                  <img 
-                    src="https://firebasestorage.googleapis.com/v0/b/extraescolarescsb.firebasestorage.app/o/futbol-pack.jpg.png?alt=media&token=5c92d35d-7d50-4a82-8c14-1323a82e7ee2" 
-                    alt="Pack Equipación Fútbol" 
-                    style={{
-                      maxWidth: '100%',
-                      height: 'auto',
-                      borderRadius: '16px',
-                      boxShadow: '0 4px 14px rgba(0, 0, 0, 0.12)',
-                      border: '3px solid #3b82f6'
-                    }}
-                  />
-                </div>
-              )}
-              {act.material && (
-                <div
-                  style={{
-                    marginTop: '25px',
-                    padding: '20px',
-                    backgroundColor: '#fff7ed',
-                    borderRadius: '20px',
-                    borderLeft: '6px solid #f97316',
-                  }}
-                >
-                  <p
-                    style={{
-                      margin: 0,
-                      fontWeight: '800',
-                      color: '#9a3412',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                    }}
-                  >
-                    <span>🎒</span> Material Necesario
-                  </p>
-                  <p
-                    style={{
-                      margin: '8px 0 0',
-                      color: '#c2410c',
-                      fontWeight: '600',
-                    }}
-                  >
-                    {act.material}
-                  </p>
-                </div>
-              )}
-            </div>
-
-            {/* 🏢 Empresa e Inscripción */}
-            {act.empresa && (
-              <div
-                style={{
-                  padding: '30px',
-                  backgroundColor: '#ffffff',
-                  borderRadius: '32px',
-                  border: '1px solid #e2e8f0',
-                  textAlign: 'center',
-                  marginBottom: '30px',
-                }}
-              >
-                {/* 📸 ¡Aquí vuelve a estar tu logo! */}
-                {act.logoEmpresa && (
-                  <img
-                    src={act.logoEmpresa}
-                    style={{
-                      width: '80px',
-                      height: '80px',
-                      borderRadius: '50%',
-                      objectFit: 'contain',
-                      marginBottom: '15px',
-                      border: '3px solid #f1f5f9',
-                      padding: '5px',
-                    }}
-                    alt="Logo empresa"
-                  />
-                )}
-
-                <p
-                  style={{
-                    margin: 0,
-                    fontSize: '0.75rem',
-                    color: '#94a3b8',
-                    fontWeight: '800',
-                    textTransform: 'uppercase',
-                  }}
-                >
-                  Impartido por
-                </p>
-                <h4
-                  style={{
-                    margin: '5px 0 20px',
-                    fontSize: '1.4rem',
-                    color: '#1e293b',
-                  }}
-                >
-                  {act.empresa}
-                </h4>
-
-                {act.contacto && (
-                  <button
-                    onClick={() => {
-                      const mail = act.contacto
-                        .replace(/\s/g, '')
-                        .toLowerCase();
-                      const asunto = encodeURIComponent(
-                        `Consulta: ${act.nombre}`
-                      );
-                      window.open(
-                        `https://mail.google.com/mail/?view=cm&fs=1&to=${mail}&su=${asunto}`,
-                        '_blank'
-                      );
-                    }}
-                    style={{
-                      width: '100%',
-                      padding: '15px',
-                      backgroundColor: '#f1f5f9',
-                      color: '#3b82f6',
-                      border: 'none',
-                      borderRadius: '16px',
-                      fontWeight: '800',
-                      cursor: 'pointer',
-                      transition: '0.2s',
-                    }}
-                  >
-                    ✉️ Contactar con la empresa
-                  </button>
-                )}
-              </div>
-            )}
-
-            {act.enlace && (
-              <a
-                href={act.enlace}
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{
-                  display: 'block',
-                  textAlign: 'center',
-                  padding: '22px',
-                  backgroundColor: '#ff6b6b',
-                  color: 'white',
-                  borderRadius: '24px',
-                  textDecoration: 'none',
-                  fontWeight: '800',
-                  fontSize: '1.3rem',
-                  boxShadow: '0 15px 30px rgba(255, 107, 107, 0.4)',
-                  marginBottom: '60px',
-                }}
-              >
-                📝 ¡INSCRIBIRSE AHORA!
-              </a>
-            )}
-          </div>
-        )}
-
-        {pestaña === 'mapa' && (
-          <div style={{ animation: 'fadeIn 0.3s' }}>
-            <div style={{ marginBottom: '25px' }}>
-              <p
-                style={{
-                  margin: '0 0 12px',
-                  fontSize: '0.8rem',
-                  fontWeight: '800',
-                  color: '#64748b',
-                  textTransform: 'uppercase',
-                }}
-              >
-                📍 Localización en el centro
-              </p>
-              <MapaActividad
-                posActividad={[
-                  act.latAct || 40.407937755274425,
-                  act.lngAct || -3.7469348757382366,
-                ]}
-                posMonitores={
-                  act.latMon && act.latMon !== 40.407937755274425
-                    ? [act.latMon, act.lngMon]
-                    : null
-                }
-                posFamilias={
-                  act.latFam && act.latFam !== 40.407937755274425
-                    ? [act.latFam, act.lngFam]
-                    : null
-                }
-                nombreAct={act.nombre}
-                fotoAct={act.fotoAct}
-                fotoMon={act.fotoMon}
-                fotoFam={act.fotoFam}
-                destinoVuelo={destino}
-              />
-            </div>
-
-           {/* 📍 Logística (Recogidas) */}
-           <div
-              style={{
-                backgroundColor: '#ffffff',
-                padding: '25px',
-                borderRadius: '28px',
-                border: '1px solid #f1f5f9',
-                marginBottom: '60px',
-              }}
-            >
-              {/* 1. LUGAR (Vuela a la actividad) */}
-              <div
-                onClick={esActValido ? () => setDestino([act.latAct, act.lngAct]) : undefined}
-                style={{ display: 'flex', gap: '15px', marginBottom: '20px', cursor: esActValido ? 'pointer' : 'default' }}
-              >
-                <div style={{ fontSize: '1.5rem', minWidth: '35px' }}>📍</div>
-                <div>
-                  <p style={{ margin: 0, fontWeight: '800', color: '#1e293b' }}>
-                    Lugar {esActValido && '(Ver en mapa)'}
-                  </p>
-                  <p style={{ margin: 0, color: '#64748b' }}>{act.lugar}</p>
-                </div>
-              </div>
-
-              {/* 2. MONITORES (Vuela al punto de monitores) */}
-              <div
-                onClick={esMonValido ? () => setDestino([act.latMon, act.lngMon]) : undefined}
-                style={{
-                  display: 'flex',
-                  gap: '15px',
-                  marginBottom: '20px',
-                  padding: '15px',
-                  backgroundColor: '#f8fafc',
-                  borderRadius: '20px',
-                  cursor: esMonValido ? 'pointer' : 'default', // 👈 ¡Botón mágico solo si es válido!
-                  transition: 'transform 0.1s active'
-                }}
-              >
-                <div style={{ fontSize: '1.5rem', minWidth: '35px' }}>👨‍🏫</div>
-                <div>
-                  <p style={{ margin: 0, fontWeight: '800', color: '#1e293b' }}>
-                    {esMonValido ? 'Monitores (Toca para ubicar 📍)' : 'Monitores'}
-                  </p>
-                  <p 
-                    style={{ 
-                      margin: 0, 
-                      color: '#64748b',
-                      whiteSpace: 'pre-wrap', 
-                      lineHeight: '1.4' 
-                    }}
-                  >
-                    {esMonValido ? (act.recogidaMonitores || 'Consultar') : 'Punto de recogida general'}
-                  </p>
-                </div>
-              </div>
-
-              {/* 3. FAMILIAS (Vuela al punto de familias) */}
-              <div 
-                onClick={esFamValido ? () => setDestino([act.latFam, act.lngFam]) : undefined}
-                style={{ 
-                  display: 'flex', 
-                  gap: '15px', 
-                  cursor: esFamValido ? 'pointer' : 'default',
-                  padding: '5px',
-                  borderRadius: '15px' 
-                }}
-              >
-                <div style={{ fontSize: '1.5rem', minWidth: '35px' }}>👪</div>
-                <div>
-                  <p style={{ margin: 0, fontWeight: '800', color: '#1e293b' }}>
-                    {esFamValido ? 'Familias (Toca para ubicar 📍)' : 'Familias'}
-                  </p>
-                  <p style={{ margin: 0, color: '#64748b' }}>
-                    {esFamValido ? (act.recogidaFamilias || 'Consultar') : 'Punto de recogida general'}
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-        {/* 🌟 NOTIFICACIONES TOASTS */}
-        <ToastContainer toasts={toasts} />
-      </div>
-    );
-  }
-// 🚩 NUEVA PANTALLA EXCLUSIVA PARA LAS PREGUNTAS FRECUENTES (FAQ)
-if (vista === 'faq') {
-  return (
-    <div style={{ 
-      fontFamily: 'sans-serif',
-      backgroundColor: modoOscuro ? '#0a0f1d' : '#f1f5f9', 
-      color: modoOscuro ? '#f1f5f9' : '#1e293b',
-      minHeight: '100vh', 
-      display: 'flex', 
-      flexDirection: 'column', 
-      justifyContent: 'space-between',
-      position: 'relative',
-      overflowX: 'hidden',
-      transition: 'all 0.3s ease',
-    }}>
-      {/* 🔮 Toques de luz de fondo */}
-      <div style={{ position: 'absolute', top: '10%', left: '-10%', width: '400px', height: '400px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(59,130,246,0.1) 0%, rgba(0,0,0,0) 70%)', filter: 'blur(40px)', pointerEvents: 'none' }} />
-      <div style={{ position: 'absolute', bottom: '20%', right: '-10%', width: '400px', height: '400px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(217,70,239,0.08) 0%, rgba(0,0,0,0) 70%)', filter: 'blur(40px)', pointerEvents: 'none' }} />
-
-      <div style={{ zIndex: 1, width: '100%' }}>
-        {/* 🗂️ Barra superior */}
-        <div style={{ 
-          padding: '15px 20px', 
-          backgroundColor: 'rgba(30, 41, 59, 0.95)', 
-          display: 'flex', 
-          alignItems: 'center', 
-          justifyContent: 'space-between',
-          boxShadow: '0 4px 15px rgba(0,0,0,0.2)', 
-        }}>
-          <span style={{ color: 'white', fontWeight: '800', fontSize: '1.1rem' }}>Colegio San Buenaventura</span>
-          <button 
-            onClick={() => setVista('catalogo')}
-            style={{ 
-              padding: '10px 20px', borderRadius: '12px', border: 'none', 
-              backgroundColor: '#3b82f6', color: 'white', fontWeight: 'bold', cursor: 'pointer',
-              boxShadow: '0 4px 10px rgba(59,130,246,0.3)'
-            }}
-          >
-            ⬅️ Volver al Catálogo
-          </button>
-        </div>
-
-        {/* 💬 Contenedor de preguntas */}
-        <div style={{ maxWidth: '750px', margin: '50px auto 40px', padding: '0 20px' }}>
-          <h2 style={{ textAlign: 'center', color: modoOscuro ? '#f8fafc' : '#0f172a', fontSize: '2rem', fontWeight: '900', marginBottom: '30px', letterSpacing: '-0.5px' }}>
-            💬 Preguntas Frecuentes
-          </h2>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-            {preguntasFrecuentes.map((faq) => {
-              // 🌟 ¡SÚPER ESCUDO! Comprobamos de forma segura si esta pregunta está abierta
-              const estaAbierta = preguntaAbierta === faq.id;
-
-              return (
-                <div 
-                  key={faq.id}
-                  style={{
-                    background: modoOscuro ? 'rgba(30, 41, 59, 0.9)' : 'rgba(255, 255, 255, 0.95)',
-                    borderRadius: '18px',
-                    border: modoOscuro ? '1px solid rgba(255,255,255,0.08)' : '1px solid rgba(255, 255, 255, 0.8)',
-                    boxShadow: estaAbierta ? (modoOscuro ? '0 15px 30px rgba(0,0,0,0.4)' : '0 15px 30px rgba(0,0,0,0.06)') : '0 4px 6px -1px rgba(0,0,0,0.02)',
-                    overflow: 'hidden',
-                    transition: 'all 0.3s ease'
-                  }}
-                >
-                  <button
-                    onClick={() => setPreguntaAbierta(estaAbierta ? null : faq.id)}
-                    style={{
-                      width: '100%', padding: '20px', background: 'none', border: 'none',
-                      textAlign: 'left', cursor: 'pointer', display: 'flex', 
-                      justifyContent: 'space-between', alignItems: 'center', gap: '15px'
-                    }}
-                  >
-                    <span style={{ fontSize: '1rem', fontWeight: '800', color: estaAbierta ? '#3b82f6' : (modoOscuro ? '#cbd5e1' : '#0f172a') }}>
-                      {faq.pregunta}
-                    </span>
-                    <span style={{ 
-                      fontSize: '1.1rem', transform: estaAbierta ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.3s ease',
-                      color: estaAbierta ? '#3b82f6' : '#94a3b8'
-                    }}>
-                      👇
-                    </span>
-                  </button>
-
-                  <div style={{
-                    maxHeight: estaAbierta ? '220px' : '0px', opacity: estaAbierta ? 1 : 0,
-                    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                    backgroundColor: modoOscuro ? '#1e293b' : '#f8fafc', 
-                    borderTop: estaAbierta ? (modoOscuro ? '1px solid rgba(255,255,255,0.05)' : '1px solid rgba(0,0,0,0.04)') : 'none'
-                  }}>
-                    <p style={{ margin: 0, padding: '20px', fontSize: '0.95rem', color: modoOscuro ? '#94a3b8' : '#334155', lineHeight: '1.6', fontWeight: '500' }}>
-                      {faq.respuesta}
-                    </p>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-
-      {/* 🛡️ FOOTER PREMIUM GLASSMORPHIC */}
-      <footer style={{
-        background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)', // 🌌 Azul oscuro degradado premium
-        backdropFilter: 'blur(15px) saturate(160%)',
-        WebkitBackdropFilter: 'blur(15px) saturate(160%)',
-        borderTop: '1.5px solid rgba(255, 255, 255, 0.08)',
-        padding: '40px 20px 30px',
-        borderRadius: '32px 32px 0 0',
-        marginTop: '50px',
-        position: 'relative',
-        boxShadow: '0 50vh 0 #0f172a', // 🎨 Relleno oscuro infinito
-        color: '#cbd5e1', // Texto claro legible
-        transition: 'all 0.3s ease',
-        marginBottom: '0px',
-      }}>
-        <div 
-          className="footer-grid"
-          style={{
-            maxWidth: '1100px',
-            margin: '0 auto',
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-            gap: '30px',
-            textAlign: 'left'
-          }}
-        >
-          {/* Columna 1: Identidad */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <img 
-                src="https://firebasestorage.googleapis.com/v0/b/extraescolarescsb.firebasestorage.app/o/logo%20BLANCO.png?alt=media&token=753d085f-d9d1-4b78-9d54-26e88578c35b" 
-                alt="Escudo Cole" 
-                style={{ 
-                  width: '140px', // 🛡️ Agrandado premium
-                  height: 'auto',
-                  objectFit: 'contain',
-                  filter: 'drop-shadow(0 2px 8px rgba(0,0,0,0.25))'
-                }} 
-              />
-            </div>
-            <p style={{ fontSize: '0.85rem', color: '#94a3b8', margin: '0', lineHeight: '1.5', fontWeight: '500' }}>
-              Portal oficial de actividades extraescolares
-            </p>
-          </div>
-
-          {/* Columna 2: Contacto Premium */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            <span style={{ fontSize: '0.75rem', fontWeight: '900', color: '#60a5fa', letterSpacing: '1px', textTransform: 'uppercase' }}>
-              Contacto Directo
-            </span>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <a 
-                href="https://maps.google.com/?q=Calle+de+El+Greco+16,+Madrid"
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{ 
-                  fontSize: '0.85rem', 
-                  color: '#cbd5e1', 
-                  textDecoration: 'none',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  transition: 'color 0.2s',
-                  wordBreak: 'break-word'
-                }}
-                onMouseEnter={(e) => e.currentTarget.style.color = '#60a5fa'}
-                onMouseLeave={(e) => e.currentTarget.style.color = '#cbd5e1'}
-              >
-                <span>📍</span> Calle de El Greco 16, Madrid
-              </a>
-              <a 
-                href="tel:915267161"
-                style={{ 
-                  fontSize: '0.85rem', 
-                  color: '#cbd5e1', 
-                  textDecoration: 'none',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  transition: 'color 0.2s'
-                }}
-                onMouseEnter={(e) => e.currentTarget.style.color = '#60a5fa'}
-                onMouseLeave={(e) => e.currentTarget.style.color = '#cbd5e1'}
-              >
-                <span>📞</span> 915 267 161
-              </a>
-              <a 
-                href="mailto:extraescolares@sanbuenaventura.org"
-                style={{ 
-                  fontSize: '0.85rem', 
-                  color: '#cbd5e1', 
-                  textDecoration: 'none',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  transition: 'color 0.2s',
-                  wordBreak: 'break-all'
-                }}
-                onMouseEnter={(e) => e.currentTarget.style.color = '#60a5fa'}
-                onMouseLeave={(e) => e.currentTarget.style.color = '#cbd5e1'}
-              >
-                <span>📧</span> extraescolares@sanbuenaventura.org
-              </a>
-              <a 
-                href="mailto:extraescolarespiscina@sanbuenaventura.org"
-                style={{ 
-                  fontSize: '0.85rem', 
-                  color: '#cbd5e1', 
-                  textDecoration: 'none',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  transition: 'color 0.2s',
-                  wordBreak: 'break-all'
-                }}
-                onMouseEnter={(e) => e.currentTarget.style.color = '#60a5fa'}
-                onMouseLeave={(e) => e.currentTarget.style.color = '#cbd5e1'}
-              >
-                <span>📧</span> extraescolarespiscina@sanbuenaventura.org
-              </a>
-            </div>
-          </div>
-
-          {/* Columna 3: Enlaces Rápidos y Copyright */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', justifyContent: 'space-between' }}>
-            <div>
-              <span style={{ fontSize: '0.75rem', fontWeight: '900', color: '#60a5fa', letterSpacing: '1px', textTransform: 'uppercase' }}>
-                Navegación Rápida
-              </span>
-              <div style={{ display: 'flex', gap: '15px', marginTop: '8px', flexWrap: 'wrap' }}>
-                <button 
-                  type="button"
-                  onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-                  style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: '0.8rem', fontWeight: '700', padding: 0, transition: 'color 0.2s', outline: 'none' }}
-                  onMouseEnter={(e) => e.currentTarget.style.color = '#60a5fa'}
-                  onMouseLeave={(e) => e.currentTarget.style.color = '#94a3b8'}
-                >
-                  ↑ Inicio
-                </button>
-                <button 
-                  type="button"
-                  onClick={() => setVista('catalogo')}
-                  style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: '0.8rem', fontWeight: '700', padding: 0, transition: 'color 0.2s', outline: 'none' }}
-                  onMouseEnter={(e) => e.currentTarget.style.color = '#60a5fa'}
-                  onMouseLeave={(e) => e.currentTarget.style.color = '#94a3b8'}
-                >
-                  🎒 Catálogo
-                </button>
-                <button 
-                  type="button"
-                  onClick={() => setVista('mapa')}
-                  style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: '0.8rem', fontWeight: '700', padding: 0, transition: 'color 0.2s', outline: 'none' }}
-                  onMouseEnter={(e) => e.currentTarget.style.color = '#60a5fa'}
-                  onMouseLeave={(e) => e.currentTarget.style.color = '#94a3b8'}
-                >
-                  📍 Mapa
-                </button>
-              </div>
-            </div>
-
-            <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '10px' }}>
-              © {new Date().getFullYear()} Extraescolares Colegio San Buenaventura.
-            </div>
-          </div>
-        </div>
-      </footer>
-      {/* 🌟 NOTIFICACIONES TOASTS */}
-      <ToastContainer toasts={toasts} />
-    </div>
-  );
-}
+{/* 🧭 ÍNDICE VISUAL DE SECCIONES (3 ARRIBA, 2 ABAJO) */}
+<div className="bg-slate-50 p-6 rounded-[32px] border border-slate-100 shadow-sm mb-10 max-w-4xl mx-auto">
+  <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mb-6 text-center">
+    Navegación Rápida
+  </p>
   
-  if (vista === 'panel') {
-    return (
-      <div
-        className="admin-panel-card"
-        style={{
-          padding: '30px',
-          maxWidth: '600px',
-          margin: '0 auto',
-          fontFamily: 'sans-serif',
-          backgroundColor: 'white',
-          borderRadius: '20px',
-          boxShadow: '0 10px 20px rgba(0,0,0,0.1)',
-        }}
+  <div className="flex flex-col gap-4">
+    {/* Fila superior */}
+    <div className="grid grid-cols-3 gap-4">
+      <a href="#mapa" className="flex flex-col items-center justify-center gap-2 p-4 bg-white rounded-2xl shadow-sm border border-slate-100 hover:text-blue-600 transition-all">
+        <span className="text-2xl">🗺️</span>
+        <span className="font-black text-[10px] uppercase tracking-widest">Mapa</span>
+      </a>
+      <a href="#material" className="flex flex-col items-center justify-center gap-2 p-4 bg-white rounded-2xl shadow-sm border border-slate-100 hover:text-blue-600 transition-all min-w-0">
+  <span className="text-2xl">🎒</span>
+  <span className="font-black text-[9px] uppercase tracking-wider leading-none text-center">
+    Equipamiento
+  </span>
+</a>
+      <a href="#normativa" className="flex flex-col items-center justify-center gap-2 p-4 bg-white rounded-2xl shadow-sm border border-slate-100 hover:text-blue-600 transition-all">
+        <span className="text-2xl">📅</span>
+        <span className="font-black text-[10px] uppercase tracking-widest">Normas</span>
+      </a>
+    </div>
+
+    {/* Fila inferior */}
+    <div className="flex justify-center gap-4">
+      <a href="#faq" className="flex flex-col items-center justify-center gap-2 p-4 bg-white rounded-2xl shadow-sm border border-slate-100 hover:text-blue-600 transition-all w-full max-w-[31%]">
+        <span className="text-2xl">🤔</span>
+        <span className="font-black text-[10px] uppercase tracking-widest">Preguntas</span>
+      </a>
+      <a href="#contacto" className="flex flex-col items-center justify-center gap-2 p-4 bg-white rounded-2xl shadow-sm border border-slate-100 hover:text-blue-600 transition-all w-full max-w-[31%]">
+        <span className="text-2xl">📞</span>
+        <span className="font-black text-[10px] uppercase tracking-widest">Contacto</span>
+      </a>
+    </div>
+  </div>
+</div>
+
+               {/* MAPA */}
+               <div id="mapa" className="bg-white p-6 rounded-xl shadow border border-gray-200 scroll-mt-20">
+                  <h3 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">🗺️ Mapa de Accesos</h3>
+                  <div className="w-full bg-gray-100 rounded-lg overflow-hidden border relative flex justify-center p-4">
+                      <img src={MAPA_IMAGEN_URL} className="max-h-[500px] object-contain rounded shadow-sm" alt="Mapa" />
+                  </div>
+                  <p className="text-center text-xs text-gray-500 mt-2">Acceso por el portón azul al final del patio.</p>
+               </div>
+
+              {/* MATERIAL NECESARIO - REDISEÑO PROFESIONAL */}
+<div id="material" className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden my-8 scroll-mt-20">
+  {/* Cabecera con gradiente sutil */}
+  <div className="bg-gradient-to-r from-blue-700 to-blue-600 p-5 text-white">
+    <div className="flex items-center gap-3">
+      <span className="text-2xl">🎒</span>
+      <div>
+        <h3 className="font-black uppercase tracking-wider text-sm">Equipamiento</h3>
+        <p className="text-blue-100 text-[10px] font-medium opacity-90">REQUERIDO PARA CADA CLASE</p>
+      </div>
+    </div>
+  </div>
+
+  {/* Grid de Materiales */}
+  <div className="p-6 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
+    {[
+      { icon: "🩲", label: "Bañador", desc: "Deportivo" },
+      { icon: "🧣", label: "Toalla", desc: "O Albornoz" },
+      { icon: "🥽", label: "Gafas", desc: "Ajustadas" },
+      { icon: "🧢", label: "Gorro", desc: "Silicona/Lycra" },
+      { icon: "🩴", label: "Chanclas", desc: "Goma" },
+    ].map((item, idx) => (
+      <div 
+        key={idx} 
+        className="group p-4 rounded-2xl border border-gray-50 bg-gray-50/30 hover:bg-blue-50 hover:border-blue-100 transition-all duration-300 flex flex-col items-center shadow-sm hover:shadow-md"
       >
-        <h2 style={{ textAlign: 'center', color: '#1e293b' }}>
-          {editandoId ? 'Editar Actividad' : 'Nueva Actividad'}
-        </h2>
-        
-        <div style={{ display: 'grid', gap: '12px' }}>
-          {/* 📝 NOMBRE */}
-          <input
-            placeholder="Nombre de la Actividad"
-            value={nuevaAct.nombre}
-            onChange={(e) =>
-              setNuevaAct({ ...nuevaAct, nombre: e.target.value })
-            }
-            style={estiloInput}
-          />
-
-          {/* 📁 CATEGORÍA (CONTROL TOTAL MANUAL) */}
-          <div style={{ display: 'grid', gap: '4px' }}>
-            <label style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#64748b' }}>
-              Categoría de la Actividad (Control Total Manual)
-            </label>
-            <select
-              value={nuevaAct.categoria || ''}
-              onChange={(e) => setNuevaAct({ ...nuevaAct, categoria: e.target.value })}
-              style={{
-                ...estiloInput,
-                backgroundColor: 'white',
-                cursor: 'pointer'
-              }}
-            >
-              <option value="">-- Clasificación Automática Inteligente ✨ --</option>
-              <option value="Deportes">Deportes ⚽</option>
-              <option value="Idiomas">Idiomas 🗣️</option>
-              <option value="Arte/expresión">Arte/expresión 🎨</option>
-              <option value="Tecnología/manualidades">Tecnología/manualidades 💻</option>
-            </select>
-          </div>
-
-          {/* 🏁 NUEVO SELECTOR MULTI-ETAPA (Sustituye al viejo <select>) */}
-          <div style={{ 
-            backgroundColor: '#f8fafc', 
-            padding: '15px', 
-            borderRadius: '12px', 
-            border: '1px solid #e2e8f0',
-            marginTop: '5px'
-          }}>
-            <p style={{ margin: '0 0 10px 0', fontSize: '0.85rem', fontWeight: 'bold', color: '#64748b' }}>
-              ¿DÓNDE DEBE APARECER? (MARCA VARIAS SI QUIERES)
-            </p>
-            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-              {['Infantil', 'Primaria', 'ESO', 'Adultos', 'Clubes Amigos'].map((et) => (
-                <label 
-                key={et} 
-                style={{ 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  gap: '6px', 
-                  cursor: 'pointer', 
-                  padding: '8px 12px',
-                  borderRadius: '10px',
-                  // 🛡️ ESCUDO: Si 'nuevaAct.etapas' no existe, usamos el color gris claro (#f1f5f9)
-                  backgroundColor: (nuevaAct.etapas && nuevaAct.etapas.includes(et)) ? '#3b82f6' : '#f1f5f9',
-                  
-                  // 🛡️ ESCUDO: Lo mismo para el color del texto
-                  color: (nuevaAct.etapas && nuevaAct.etapas.includes(et)) ? 'white' : '#475569',
-                  
-                  transition: 'all 0.2s ease',
-                  fontSize: '0.8rem',
-                  fontWeight: '700',
-                  border: '1px solid',
-                  
-                  // 🛡️ ESCUDO: Y para el borde
-                  borderColor: (nuevaAct.etapas && nuevaAct.etapas.includes(et)) ? '#2563eb' : '#e2e8f0'
-                }}
-              >
-                <input
-                  type="checkbox"
-                  style={{ cursor: 'pointer' }}
-                  // 🛡️ ESCUDO: Aquí también para que el check no falle
-                  checked={nuevaAct.etapas ? nuevaAct.etapas.includes(et) : false}
-                  onChange={(e) => {
-                    // 📝 Creamos una lista segura (si es undefined, usamos [])
-                    const listaActual = nuevaAct.etapas || [];
-                    const listaNueva = e.target.checked
-                      ? [...listaActual, et]
-                      : listaActual.filter((x) => x !== et);
-                    setNuevaAct({ ...nuevaAct, etapas: listaNueva });
-                  }}
-                />
-                {et}
-              </label>
-              ))}
-            </div>
-          </div>
-
-          {/* 📅 Días - Ahora puedes poner uno debajo de otro */}
-          <textarea
-            placeholder="Días (ej: 
-Lunes
-Miércoles)"
-            value={nuevaAct.dias}
-            onChange={(e) => setNuevaAct({ ...nuevaAct, dias: e.target.value })}
-            style={{ ...estiloInput, height: '80px', paddingTop: '10px' }}
-          />
-
-          {/* ⏰ Horario - También con espacio por si hay varios turnos */}
-          <textarea
-            placeholder="Horario (ej: 16:00 a 17:00)"
-            value={nuevaAct.horario}
-            onChange={(e) => setNuevaAct({ ...nuevaAct, horario: e.target.value })}
-            style={{ ...estiloInput, height: '60px', paddingTop: '10px' }}
-          />
-
-          {/* 📍 Lugar - Para explicar bien dónde está el aula */}
-          <textarea
-            placeholder="Lugar o Aula"
-            value={nuevaAct.lugar}
-            onChange={(e) => setNuevaAct({ ...nuevaAct, lugar: e.target.value })}
-            style={{ ...estiloInput, height: '60px', paddingTop: '10px' }}
-          />
-
-          {/* 💰 El Precio lo dejamos como input porque suele ser cortito */}
-          <input
-            placeholder="Precio mensual (ej: 34€)"
-            value={nuevaAct.precio}
-            onChange={(e) => setNuevaAct({ ...nuevaAct, precio: e.target.value })}
-            style={estiloInput}
-          />
-
-          {/* 🔗 ENLACE DE INSCRIPCIÓN */}
-          <div
-            style={{
-              backgroundColor: '#f5f3ff',
-              padding: '15px',
-              borderRadius: '15px',
-              border: '2px dashed #7c3aed',
-            }}
-          >
-            <p
-              style={{
-                margin: '0 0 10px',
-                fontSize: '0.9rem',
-                fontWeight: 'bold',
-                color: '#5b21b6',
-              }}
-            >
-              🔗 Enlace al formulario (Google Forms):
-            </p>
-            <input
-              placeholder="Pega aquí el link del formulario"
-              value={nuevaAct.enlace || ''}
-              onChange={(e) =>
-                setNuevaAct({ ...nuevaAct, enlace: e.target.value })
-              }
-              style={estiloInput}
-            />
-          </div>
-
-          {/* 🔗 SECCIÓN DE ENLACES MÚLTIPLES POR CATEGORÍA / CURSO */}
-          <div style={{ 
-            backgroundColor: '#f8fafc', 
-            padding: '15px', 
-            borderRadius: '15px', 
-            border: '1px dashed #cbd5e1',
-            textAlign: 'left'
-          }}>
-            <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '10px', fontSize: '0.9rem', color: '#1e293b' }}>
-              🔗 Enlaces por Categoría / Curso (Opcional)
-            </label>
-            
-            {/* Dibujamos cada fila de enlace */}
-            {(nuevaAct.linksMultiples || []).map((link, index) => (
-              <div key={index} style={{ display: 'flex', gap: '8px', marginBottom: '8px', alignItems: 'center' }}>
-                <input
-                  type="text"
-                  placeholder="Ej: Prebenjamín (1º/2º)"
-                  value={link.etiqueta}
-                  onChange={(e) => {
-                    const nuevosLinks = [...(nuevaAct.linksMultiples || [])];
-                    nuevosLinks[index].etiqueta = e.target.value;
-                    setNuevaAct({ ...nuevaAct, linksMultiples: nuevosLinks });
-                  }}
-                  style={{ flex: 1, padding: '8px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.85rem', color: '#1e293b' }}
-                />
-                <input
-                  type="text"
-                  placeholder="https://enlace-formulario.com"
-                  value={link.url}
-                  onChange={(e) => {
-                    const nuevosLinks = [...(nuevaAct.linksMultiples || [])];
-                    nuevosLinks[index].url = e.target.value;
-                    setNuevaAct({ ...nuevaAct, linksMultiples: nuevosLinks });
-                  }}
-                  style={{ flex: 2, padding: '8px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.85rem', color: '#1e293b' }}
-                />
-                <button
-                  type="button"
-                  onClick={() => {
-                    const nuevosLinks = (nuevaAct.linksMultiples || []).filter((_, i) => i !== index);
-                    setNuevaAct({ ...nuevaAct, linksMultiples: nuevosLinks });
-                  }}
-                  style={{ padding: '8px 12px', backgroundColor: '#fee2e2', color: '#ef4444', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}
-                >
-                  ❌
-                </button>
-              </div>
-            ))}
-
-            <button
-              type="button"
-              onClick={() => {
-                setNuevaAct({
-                  ...nuevaAct,
-                  linksMultiples: [...(nuevaAct.linksMultiples || []), { etiqueta: '', url: '' }]
-                });
-              }}
-              style={{
-                marginTop: '5px', padding: '8px 12px', backgroundColor: '#e0f2fe', color: '#0369a1',
-                border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.85rem',
-                display: 'flex', alignItems: 'center', gap: '5px'
-              }}
-            >
-              ➕ Añadir otra categoría/enlace
-            </button>
-          </div>
-
-          {/* 📁 FOTO */}
-          <div
-            style={{
-              backgroundColor: '#fff7ed',
-              padding: '15px',
-              borderRadius: '15px',
-              border: '2px dashed #f97316',
-            }}
-          >
-            <p
-              style={{
-                margin: '0 0 10px',
-                fontSize: '0.9rem',
-                fontWeight: 'bold',
-                color: '#9a3412',
-              }}
-            >
-              🖼️ Foto de la actividad:
-            </p>
-            <input
-              placeholder="Enlace de la foto"
-              value={nuevaAct.imagen || ''}
-              onChange={(e) =>
-                setNuevaAct({ ...nuevaAct, imagen: e.target.value })
-              }
-              style={estiloInput}
-            />
-            {nuevaAct.imagen && (nuevaAct.imagen.startsWith('http') || nuevaAct.imagen.startsWith('data:image')) && (
-              <div style={{ marginTop: '10px', display: 'flex', justifyContent: 'center' }}>
-                <img 
-                  src={nuevaAct.imagen} 
-                  alt="Vista previa actividad" 
-                  style={{ maxHeight: '110px', maxWidth: '100%', borderRadius: '10px', border: '1px solid #cbd5e1', objectFit: 'contain', padding: '3px', backgroundColor: 'white' }} 
-                />
-              </div>
-            )}
-          </div>
-
-          <textarea
-            placeholder="Información para las familias..."
-            value={nuevaAct.info}
-            onChange={(e) => setNuevaAct({ ...nuevaAct, info: e.target.value })}
-            style={{ ...estiloInput, height: '80px' }}
-          />
-
-          {/* 🎒 MATERIAL */}
-          <div
-            style={{
-              backgroundColor: '#eff6ff',
-              padding: '15px',
-              borderRadius: '15px',
-              border: '2px dashed #3b82f6',
-            }}
-          >
-            <p
-              style={{
-                margin: '0 0 10px',
-                fontSize: '0.9rem',
-                fontWeight: 'bold',
-                color: '#1e40af',
-              }}
-            >
-              🎒 Material necesario:
-            </p>
-            <input
-              placeholder="Ej: Raqueta..."
-              value={nuevaAct.material || ''}
-              onChange={(e) =>
-                setNuevaAct({ ...nuevaAct, material: e.target.value })
-              }
-              style={estiloInput}
-            />
-          </div>
-
-          {/* 🏢 EMPRESA */}
-          <div
-            style={{
-              backgroundColor: '#f0fdf4',
-              padding: '15px',
-              borderRadius: '15px',
-              border: '2px dashed #22c55e',
-            }}
-          >
-            <p
-              style={{
-                margin: '0 0 10px',
-                fontSize: '0.9rem',
-                fontWeight: 'bold',
-                color: '#166534',
-              }}
-            >
-              🏢 Empresa y Contacto:
-            </p>
-            <input
-              placeholder="Nombre empresa"
-              value={nuevaAct.empresa || ''}
-              onChange={(e) =>
-                setNuevaAct({ ...nuevaAct, empresa: e.target.value })
-              }
-              style={estiloInput}
-            />
-            {/* 📸 ¡NUEVO!: Enlace para el logo de la empresa */}
-            <input
-                placeholder="URL del Logo de la empresa (Ej: https://...)"
-                value={nuevaAct.logoEmpresa || ''}
-                onChange={(e) =>
-                  setNuevaAct({ ...nuevaAct, logoEmpresa: e.target.value })
-                }
-                style={estiloInput}
-              />
-            {nuevaAct.logoEmpresa && (nuevaAct.logoEmpresa.startsWith('http') || nuevaAct.logoEmpresa.startsWith('data:image')) && (
-              <div style={{ marginTop: '5px', marginBottom: '10px', display: 'flex', justifyContent: 'center' }}>
-                <img 
-                  src={nuevaAct.logoEmpresa} 
-                  alt="Vista previa logo empresa" 
-                  style={{ maxHeight: '60px', maxWidth: '100%', borderRadius: '8px', border: '1px solid #cbd5e1', objectFit: 'contain', padding: '2px', backgroundColor: 'white' }} 
-                />
-              </div>
-            )}
-            <input
-              placeholder="Email contacto"
-              value={nuevaAct.contacto || ''}
-              onChange={(e) =>
-                setNuevaAct({ ...nuevaAct, contacto: e.target.value })
-              }
-              style={estiloInput}
-            />
-          </div>
-
-          {/* 🙋‍♂️ Recogida Monitores - Con espacio para explicarse bien */}
-          <textarea
-  placeholder="Punto de recogida Monitores (ej: 
-- Puerta principal
-- Patio cubierto)"
-  value={nuevaAct.recogidaMonitores}
-  onChange={(e) => setNuevaAct({ ...nuevaAct, recogidaMonitores: e.target.value })}
-  style={{
-    ...estiloInput,
-    height: '100px',
-    padding: '12px',
-    lineHeight: '1.5',    // ↔️ Espacio justo entre líneas
-    fontFamily: 'inherit',
-    whiteSpace: 'pre-wrap' // 👈 Para que tú veas los saltos mientras escribes
-  }}
-/>
-          <input
-            placeholder="Punto de entrega a Familias"
-            value={nuevaAct.recogidaFamilias}
-            onChange={(e) =>
-              setNuevaAct({ ...nuevaAct, recogidaFamilias: e.target.value })
-            }
-            style={estiloInput}
-          />
-
-          {/* 📍 SECCIÓN DE COORDENADAS (POR FIN LIBRES Y FUERA DEL BOTÓN) */}
-          <div
-            style={{
-              marginTop: '10px',
-              padding: '15px',
-              backgroundColor: '#f8fafc',
-              borderRadius: '15px',
-              border: '2px solid #3b82f6',
-              display: 'grid',
-              gap: '10px',
-            }}
-          >
-            <p
-              style={{
-                margin: '0',
-                fontWeight: 'bold',
-                color: '#1e293b',
-                fontSize: '0.9rem',
-              }}
-            >
-              📍 Coordenadas exactas para el mapa:
-            </p>
-
-            {/* Actividad */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px' }}>
-              <span style={{ fontSize: '0.8rem', color: '#475569', fontWeight: 'bold' }}>🎒 UBICACIÓN ACTIVIDAD</span>
-              <button
-                type="button"
-                onClick={() => {
-                  setCapturandoCoordenadasPara('actividad');
-                  setVista('mapa');
-                  lanzarToast('📡 Redirigiendo al mapa... Pincha sobre la ubicación de la actividad.', 'info');
-                }}
-                style={{
-                  padding: '4px 10px',
-                  borderRadius: '8px',
-                  border: '1px solid #3b82f6',
-                  backgroundColor: capturandoCoordenadasPara === 'actividad' ? '#2563eb' : 'transparent',
-                  color: capturandoCoordenadasPara === 'actividad' ? 'white' : '#3b82f6',
-                  fontWeight: 'bold',
-                  fontSize: '0.75rem',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s',
-                  outline: 'none'
-                }}
-              >
-                {capturandoCoordenadasPara === 'actividad' ? '📡 Esperando clic...' : '🎯 Pinchar en mapa'}
-              </button>
-            </div>
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: '1fr 1fr',
-                gap: '8px',
-              }}
-            >
-              <input
-                placeholder="Lat. Actividad"
-                value={nuevaAct.latAct || ''}
-                onChange={(e) =>
-                  setNuevaAct({ ...nuevaAct, latAct: e.target.value })
-                }
-                style={estiloInput}
-              />
-              <input
-                placeholder="Long. Actividad"
-                value={nuevaAct.lngAct || ''}
-                onChange={(e) =>
-                  setNuevaAct({ ...nuevaAct, lngAct: e.target.value })
-                }
-                style={estiloInput}
-              />
-            </div>
-
-            {/* Monitores */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px' }}>
-              <span style={{ fontSize: '0.8rem', color: '#475569', fontWeight: 'bold' }}>🚶‍♂️ PUNTO RECOGIDA MONITORES</span>
-              <button
-                type="button"
-                onClick={() => {
-                  setCapturandoCoordenadasPara('monitores');
-                  setVista('mapa');
-                  lanzarToast('📡 Redirigiendo al mapa... Pincha sobre el punto de recogida de monitores.', 'info');
-                }}
-                style={{
-                  padding: '4px 10px',
-                  borderRadius: '8px',
-                  border: '1px solid #3b82f6',
-                  backgroundColor: capturandoCoordenadasPara === 'monitores' ? '#2563eb' : 'transparent',
-                  color: capturandoCoordenadasPara === 'monitores' ? 'white' : '#3b82f6',
-                  fontWeight: 'bold',
-                  fontSize: '0.75rem',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s',
-                  outline: 'none'
-                }}
-              >
-                {capturandoCoordenadasPara === 'monitores' ? '📡 Esperando clic...' : '🎯 Pinchar en mapa'}
-              </button>
-            </div>
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: '1fr 1fr',
-                gap: '8px',
-              }}
-            >
-              <input
-                placeholder="Lat. Monitores"
-                value={nuevaAct.latMon || ''}
-                onChange={(e) =>
-                  setNuevaAct({ ...nuevaAct, latMon: e.target.value })
-                }
-                style={estiloInput}
-              />
-              <input
-                placeholder="Long. Monitores"
-                value={nuevaAct.lngMon || ''}
-                onChange={(e) =>
-                  setNuevaAct({ ...nuevaAct, lngMon: e.target.value })
-                }
-                style={estiloInput}
-              />
-            </div>
-
-            {/* Familias */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px' }}>
-              <span style={{ fontSize: '0.8rem', color: '#475569', fontWeight: 'bold' }}>👨‍👩‍👧 PUNTO ENTREGA FAMILIAS</span>
-              <button
-                type="button"
-                onClick={() => {
-                  setCapturandoCoordenadasPara('familias');
-                  setVista('mapa');
-                  lanzarToast('📡 Redirigiendo al mapa... Pincha sobre el punto de recogida de familias.', 'info');
-                }}
-                style={{
-                  padding: '4px 10px',
-                  borderRadius: '8px',
-                  border: '1px solid #3b82f6',
-                  backgroundColor: capturandoCoordenadasPara === 'familias' ? '#2563eb' : 'transparent',
-                  color: capturandoCoordenadasPara === 'familias' ? 'white' : '#3b82f6',
-                  fontWeight: 'bold',
-                  fontSize: '0.75rem',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s',
-                  outline: 'none'
-                }}
-              >
-                {capturandoCoordenadasPara === 'familias' ? '📡 Esperando clic...' : '🎯 Pinchar en mapa'}
-              </button>
-            </div>
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: '1fr 1fr',
-                gap: '8px',
-              }}
-            >
-              <input
-                placeholder="Lat. Familias"
-                value={nuevaAct.latFam || ''}
-                onChange={(e) =>
-                  setNuevaAct({ ...nuevaAct, latFam: e.target.value })
-                }
-                style={estiloInput}
-              />
-              <input
-                placeholder="Long. Familias"
-                value={nuevaAct.lngFam || ''}
-                onChange={(e) =>
-                  setNuevaAct({ ...nuevaAct, lngFam: e.target.value })
-                }
-                style={estiloInput}
-              />
-            </div>
-          </div>
-          {/* 📸 FOTOS DE LOS PUNTOS */}
-          <div
-            style={{
-              marginTop: '10px',
-              padding: '15px',
-              backgroundColor: '#f0f9ff',
-              borderRadius: '15px',
-              border: '2px solid #0ea5e9',
-              display: 'grid',
-              gap: '10px',
-            }}
-          >
-            <p
-              style={{
-                margin: '0',
-                fontWeight: 'bold',
-                color: '#0369a1',
-                fontSize: '0.9rem',
-              }}
-            >
-              📸 Fotos para los globos del mapa (URLs):
-            </p>
-            <input
-              placeholder="URL Foto Actividad"
-              value={nuevaAct.fotoAct || ''}
-              onChange={(e) =>
-                setNuevaAct({ ...nuevaAct, fotoAct: e.target.value })
-              }
-              style={estiloInput}
-            />
-            {nuevaAct.fotoAct && (nuevaAct.fotoAct.startsWith('http') || nuevaAct.fotoAct.startsWith('data:image')) && (
-              <div style={{ marginTop: '2px', marginBottom: '8px', display: 'flex', justifyContent: 'center' }}>
-                <img 
-                  src={nuevaAct.fotoAct} 
-                  alt="Vista previa foto actividad" 
-                  style={{ maxHeight: '60px', maxWidth: '100%', borderRadius: '8px', border: '1px solid #cbd5e1', objectFit: 'contain', padding: '2px', backgroundColor: 'white' }} 
-                />
-              </div>
-            )}
-            <input
-              placeholder="URL Foto Monitores"
-              value={nuevaAct.fotoMon || ''}
-              onChange={(e) =>
-                setNuevaAct({ ...nuevaAct, fotoMon: e.target.value })
-              }
-              style={estiloInput}
-            />
-            {nuevaAct.fotoMon && (nuevaAct.fotoMon.startsWith('http') || nuevaAct.fotoMon.startsWith('data:image')) && (
-              <div style={{ marginTop: '2px', marginBottom: '8px', display: 'flex', justifyContent: 'center' }}>
-                <img 
-                  src={nuevaAct.fotoMon} 
-                  alt="Vista previa foto monitores" 
-                  style={{ maxHeight: '60px', maxWidth: '100%', borderRadius: '8px', border: '1px solid #cbd5e1', objectFit: 'contain', padding: '2px', backgroundColor: 'white' }} 
-                />
-              </div>
-            )}
-            <input
-              placeholder="URL Foto Familias"
-              value={nuevaAct.fotoFam || ''}
-              onChange={(e) =>
-                setNuevaAct({ ...nuevaAct, fotoFam: e.target.value })
-              }
-              style={estiloInput}
-            />
-            {nuevaAct.fotoFam && (nuevaAct.fotoFam.startsWith('http') || nuevaAct.fotoFam.startsWith('data:image')) && (
-              <div style={{ marginTop: '2px', marginBottom: '8px', display: 'flex', justifyContent: 'center' }}>
-                <img 
-                  src={nuevaAct.fotoFam} 
-                  alt="Vista previa foto familias" 
-                  style={{ maxHeight: '60px', maxWidth: '100%', borderRadius: '8px', border: '1px solid #cbd5e1', objectFit: 'contain', padding: '2px', backgroundColor: 'white' }} 
-                />
-              </div>
-            )}
-          </div>
-
-          {/* 🚀 BOTÓN DE GUARDAR (FUERA DE TODO, SIN MOLESTAR) */}
-          <button
-            type="button"
-            onClick={guardarActividad}
-            style={{
-              padding: '18px',
-              backgroundColor: '#10ac84',
-              color: 'white',
-              border: 'none',
-              borderRadius: '15px',
-              fontWeight: 'bold',
-              cursor: 'pointer',
-              fontSize: '1.1rem',
-              width: '100%',
-              marginTop: '10px',
-            }}
-          >
-            🚀 GUARDAR ACTIVIDAD
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setVista('catalogo')}
-            style={{
-              padding: '10px',
-              background: 'none',
-              border: 'none',
-              color: '#94a3b8',
-              cursor: 'pointer',
-              width: '100%'
-            }}
-            
-          >
-            Volver sin guardar
-          </button>
-
-        </div> {/* 👈 AQUÍ CERRAMOS EL GRID DE LA ACTIVIDAD */}
-        {/* ======================================================== */}
-        {/* 📸 CAJA MÁGICA: SUBIR LA FOTO SUTIL DEL COLEGIO AL STORAGE */}
-        {/* ======================================================== */}
-        <div style={{
-          backgroundColor: modoOscuro ? 'rgba(30, 41, 59, 0.45)' : '#f8fafc',
-          padding: '25px',
-          borderRadius: '24px',
-          border: `2px dashed ${modoOscuro ? 'rgba(255, 255, 255, 0.15)' : '#cbd5e1'}`,
-          marginTop: '30px',
-          textAlign: 'left'
-        }}>
-          <h3 style={{ 
-            color: modoOscuro ? '#f8fafc' : '#1e293b', 
-            margin: '0 0 8px', 
-            fontSize: '1.2rem', 
-            fontWeight: '800', 
-            textAlign: 'center' 
-          }}>
-            🖼️ Configuración de Fotos y Cabeceras
-          </h3>
-          <p style={{ 
-            color: modoOscuro ? '#94a3b8' : '#64748b', 
-            fontSize: '0.8rem', 
-            margin: '0 0 20px', 
-            textAlign: 'center',
-            fontWeight: '500'
-          }}>
-            Pega los enlaces "https://..." de tus fotos de Firebase o internet para personalizar el portal.
-          </p>
-          
-          {/* Foto de Fondo General */}
-          <div style={{ marginBottom: '20px' }}>
-            <label style={{ 
-              display: 'block', 
-              fontSize: '0.85rem', 
-              fontWeight: '700', 
-              color: modoOscuro ? '#cbd5e1' : '#475569', 
-              marginBottom: '6px' 
-            }}>
-              🌌 Foto de Fondo del Header General
-            </label>
-            <input
-              placeholder="Pega aquí el enlace de la foto de fondo del colegio"
-              value={fotoFondoHeader}
-              onChange={(e) => setFotoFondoHeader(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '12px',
-                borderRadius: '12px',
-                border: `1px solid ${modoOscuro ? 'rgba(255, 255, 255, 0.15)' : '#cbd5e1'}`,
-                backgroundColor: modoOscuro ? '#1e293b' : 'white',
-                fontSize: '0.9rem',
-                color: modoOscuro ? '#f8fafc' : '#334155',
-                boxSizing: 'border-box'
-              }}
-            />
-          </div>
-
-          <div style={{ 
-            borderTop: `1px solid ${modoOscuro ? 'rgba(255, 255, 255, 0.08)' : '#e2e8f0'}`, 
-            paddingTop: '15px', 
-            marginBottom: '20px' 
-          }}>
-            <h4 style={{ 
-              color: modoOscuro ? '#f8fafc' : '#1e293b', 
-              margin: '0 0 12px', 
-              fontSize: '0.95rem', 
-              fontWeight: '800' 
-            }}>
-              📸 Fotos Portada de cada Etapa Escolar
-            </h4>
-            
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              {[
-                { label: '🧸 Educación Infantil', key: 'Infantil' },
-                { label: '🎒 Educación Primaria', key: 'Primaria' },
-                { label: '🎓 Secundaria y Bachillerato (ESO)', key: 'ESO' },
-                { label: '🧘 Actividades de Adultos', key: 'Adultos' },
-                { label: '🌟 Clubes Amigos', key: 'Clubes Amigos' }
-              ].map((etapa) => (
-                <div key={etapa.key} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label style={{ 
-                    fontSize: '0.8rem', 
-                    fontWeight: '600', 
-                    color: modoOscuro ? '#94a3b8' : '#64748b' 
-                  }}>
-                    {etapa.label}
-                  </label>
-                  <input
-                    placeholder={`Enlace de la imagen para la etapa ${etapa.key}`}
-                    value={fotosEtapas[etapa.key]}
-                    onChange={(e) => setFotosEtapas(prev => ({ ...prev, [etapa.key]: e.target.value }))}
-                    style={{
-                      width: '100%',
-                      padding: '10px 12px',
-                      borderRadius: '10px',
-                      border: `1px solid ${modoOscuro ? 'rgba(255, 255, 255, 0.1)' : '#e2e8f0'}`,
-                      backgroundColor: modoOscuro ? '#0f172a' : 'white',
-                      fontSize: '0.85rem',
-                      color: modoOscuro ? '#f8fafc' : '#334155',
-                      boxSizing: 'border-box'
-                    }}
-                  />
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={async () => {
-              if (!isAdmin) return lanzarToast('🛑 ¡Acceso denegado! No tienes permisos de administrador. 🔐', 'error');
-              try {
-                lanzarToast('⏳ Guardando la configuración de fotos...', 'info');
-                const { doc, setDoc } = await import('firebase/firestore');
-                
-                await setDoc(doc(db, "actividades_cole", "configuracion_header"), { 
-                  fotoFondoHeader: fotoFondoHeader,
-                  fotoEtapaInfantil: fotosEtapas.Infantil,
-                  fotoEtapaPrimaria: fotosEtapas.Primaria,
-                  fotoEtapaESO: fotosEtapas.ESO,
-                  fotoEtapaAdultos: fotosEtapas.Adultos,
-                  fotoEtapaClubes: fotosEtapas['Clubes Amigos']
-                }, { merge: true });
-                
-                lanzarToast('🎉 ¡Configuración de fotos guardada con éxito!', 'exito');
-              } catch (error) {
-                console.error("Error al guardar las fotos:", error);
-                lanzarToast('❌ ¡Vaya! Algo ha fallado al guardar las fotos.', 'error');
-              }
-            }}
-            style={{
-              padding: '12px 18px',
-              backgroundColor: '#3b82f6',
-              color: 'white',
-              border: 'none',
-              borderRadius: '12px',
-              fontWeight: 'bold',
-              cursor: 'pointer',
-              fontSize: '0.9rem',
-              width: '100%',
-              boxShadow: '0 4px 12px rgba(59, 130, 246, 0.2)',
-              transition: 'all 0.2s ease-in-out'
-            }}
-          >
-            💾 GUARDAR TODA LA CONFIGURACIÓN DE FOTOS
-          </button>
+        <div className="w-14 h-14 bg-white rounded-full flex items-center justify-center text-3xl shadow-sm group-hover:scale-110 transition-transform duration-300 mb-3">
+          {item.icon}
         </div>
-        {/* ======================================================== */}
+        <span className="font-black text-gray-800 text-[11px] uppercase tracking-wide">
+          {item.label}
+        </span>
+        <span className="text-[9px] text-gray-400 font-bold group-hover:text-blue-500 transition-colors uppercase mt-1">
+          {item.desc}
+        </span>
+      </div>
+    ))}
+  </div>
 
-        {/* 📍 AHORA EL MAPA ESTÁ FUERA, EN SU PROPIA ISLA AZUL */}
-        <div style={{ 
-          marginTop: '40px', 
-          padding: '25px', 
-          backgroundColor: '#eff6ff', 
-          borderRadius: '20px',
-          border: '2px dashed #3b82f6' 
-        }}>
-          <h3 style={{ color: '#1e293b', margin: '0 0 10px', textAlign: 'center' }}>📍 Gestionar Mapa Maestro</h3>
-          <p style={{ fontSize: '0.8rem', color: '#64748b', textAlign: 'center', marginBottom: '20px' }}>
-            (Estos puntos son independientes de las actividades)
+  {/* Recordatorio de Higiene sutil */}
+  <div className="bg-gray-50 p-3 border-t border-gray-100 text-center">
+    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">
+      ✨ Recuerda ducharte antes de entrar al agua
+    </p>
+  </div>
+</div>
+
+              {/* RECOGIDA ALUMNOS (TEXTOS COMPLETOS) */}
+              <div className="grid md:grid-cols-1 gap-6">
+                <div className="bg-white p-6 rounded-xl shadow-sm border-l-4 border-blue-400">
+                  <h4 className="font-bold text-lg mb-2 text-blue-900">👶 Infantil</h4>
+                  <p className="text-gray-700 text-sm leading-relaxed">
+                    Los alumnos de Educación Infantil serán recogidos directamente en sus aulas por los monitores, quienes también se encargarán de ayudarles a cambiarse. Al finalizar la clase, los niños serán entregados a sus familias con la ropa de calle, <strong>en la puerta del vestuario correspondiente.</strong>
+                  </p>
+                </div>
+                <div className="bg-white p-6 rounded-xl shadow-sm border-l-4 border-blue-600">
+                  <h4 className="font-bold text-lg mb-2 text-blue-900">🧒 Primaria (16:15)</h4>
+                  <p className="text-gray-700 text-sm leading-relaxed">
+                    El monitor recogerá a los alumnos en el <strong>portón azul</strong> al final del patio. Al finalizar la clase, los niños serán entregados a sus familias con la ropa de calle en el mismo punto.
+                  </p>
+                </div>
+              </div>
+
+              {/* AVISOS Y AMPLIACIÓN */}
+              <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                <ul className="space-y-4 text-gray-700 text-sm">
+                  <li className="flex gap-4">
+                    <span className="text-2xl">🕓</span> 
+                    <span><strong>Resto de actividades:</strong> El alumnado deberá ir directamente a la piscina con suficiente antelación para cambiarse.</span>
+                  </li>
+                  <li className="flex gap-4 p-4 bg-orange-50 rounded-lg border border-orange-100">
+                    <span className="text-2xl">🕰️</span> 
+                    <div>
+                      <p className="font-bold text-orange-900 mb-1">Servicio de Ampliación</p>
+                      <p>
+                        Se ruega puntualidad a la hora de la recogida. En caso de llegar tarde, <strong>hasta las 18:00</strong> podrán recogerlos en el servicio de ampliación (consultar coste en secretaría).
+                      </p>
+                    </div>
+                  </li>
+                </ul>
+              </div>
+
+{/* ======================================================== */}
+{/* ⚠️ GESTIÓN DE ALTAS Y BAJAS - DISEÑO PROFESIONAL       */}
+{/* ======================================================== */}
+<div id="normativa" className="bg-white rounded-2xl shadow-sm border border-amber-100 overflow-hidden my-10 scroll-mt-20">
+  {/* Encabezado de Advertencia */}
+  <div className="bg-gradient-to-r from-amber-600 to-amber-500 p-5 text-white">
+    <div className="flex items-center gap-3">
+      <span className="text-2xl">📅</span>
+      <div>
+        <h3 className="font-black uppercase tracking-wider text-sm">Calendario Administrativo</h3>
+        <p className="text-amber-100 text-[10px] font-medium opacity-90">NORMAS DE INSCRIPCIÓN Y CANCELACIÓN</p>
+      </div>
+    </div>
+  </div>
+
+  <div className="p-6 md:p-8 space-y-8">
+    {/* SECCIÓN BAJAS */}
+    <div className="relative pl-8 border-l-2 border-amber-200">
+      <div className="absolute -left-[9px] top-0 w-4 h-4 bg-amber-500 rounded-full border-4 border-white shadow-sm"></div>
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="max-w-xl">
+          <h4 className="font-black text-amber-900 text-lg uppercase tracking-tight flex items-center gap-2">
+            Solicitud de Bajas
+          </h4>
+          <p className="text-amber-800/80 text-sm mt-2 leading-relaxed font-medium">
+            La fecha límite para procesar cualquier baja es el <span className="bg-amber-200 text-amber-900 px-1.5 py-0.5 rounded font-black">Día 25</span> de cada mes.
           </p>
-          
-          <div style={{ display: 'grid', gap: '12px' }}>
-            <input
-              placeholder="Nombre del sitio (Ej: Secretaría)"
-              style={estiloInput}
-              id="nuevoPuntoNombre"
-            />
-            <input
-              placeholder="Breve descripción"
-              style={estiloInput}
-              id="nuevoPuntoDesc"
-            />
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-              <input placeholder="Latitud" style={estiloInput} id="nuevoPuntoLat" />
-              <input placeholder="Longitud" style={estiloInput} id="nuevoPuntoLng" />
+        </div>
+        <div className="bg-amber-100/50 px-4 py-3 rounded-xl border border-amber-200 flex flex-col items-center min-w-[140px]">
+          <span className="text-[10px] font-black text-amber-600 uppercase">Corte mensual</span>
+          <span className="text-2xl font-black text-amber-900 leading-none mt-1">Día 25</span>
+        </div>
+      </div>
+      <p className="mt-4 text-[11px] text-amber-700/60 font-bold uppercase tracking-wide bg-amber-50 p-3 rounded-lg border border-amber-100/50">
+        ⚠️ Comunicaciones posteriores al día 25 implican el cobro de la siguiente mensualidad completa.
+      </p>
+    </div>
+
+   {/* SECCIÓN ALTAS - MEJORADA (MÁS LEGIBLE) */}
+   <div className="relative pl-8 border-l-2 border-blue-500">
+      {/* Círculo indicador más grande */}
+      <div className="absolute -left-[11px] top-0 w-5 h-5 bg-blue-600 rounded-full border-4 border-white shadow-sm"></div>
+      
+      <h4 className="font-black text-slate-900 text-xl uppercase tracking-tight">
+        Altas y Mensualidades
+      </h4>
+      
+      <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Bloque 1 */}
+        <div className="p-5 bg-blue-50/50 rounded-2xl border border-blue-100">
+          <span className="text-xs font-black text-blue-600 uppercase tracking-widest">Política de Pago</span>
+          <p className="text-slate-800 text-base font-bold mt-2 leading-relaxed">
+            Las incorporaciones con el mes ya iniciado requieren el abono de la <span className="text-blue-700 underline decoration-2 underline-offset-4">mensualidad completa</span>.
+          </p>
+        </div>
+
+        {/* Bloque 2 */}
+        <div className="p-5 bg-slate-50 rounded-2xl border border-slate-100">
+          <span className="text-xs font-black text-slate-400 uppercase tracking-widest">Aviso de Prorrateos</span>
+          <p className="text-slate-800 text-base font-bold mt-2 leading-relaxed">
+            No se realizan descuentos ni devoluciones por días sueltos o falta de asistencia.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {/* Espaciador inferior limpio (Sustituye al bloque negro de Transparencia) */}
+  <div className="h-4 bg-gray-50/50"></div>
+</div>
+ {/* ❓ SECCIÓN AMPLIADA: PREGUNTAS FRECUENTES (FAQ)         */}
+{/* ======================================================== */}
+<div id="faq" className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden my-10 scroll-mt-24">
+  <div className="bg-gradient-to-r from-slate-800 to-slate-700 p-5 text-white text-left">
+    <div className="flex items-center gap-3">
+      <span className="text-2xl">🤔</span>
+      <div>
+        <h3 className="font-black uppercase tracking-wider text-sm">Preguntas Frecuentes</h3>
+        <p className="text-slate-300 text-[10px] font-medium opacity-90">TODO LO QUE NECESITAS SABER SOBRE NOSOTROS</p>
+      </div>
+    </div>
+  </div>
+
+  <div className="p-6 space-y-6">
+    
+    {/* CATEGORÍA: ACCESOS Y RECOGIDAS */}
+    <div>
+      <h4 className="text-[10px] font-black text-blue-600 uppercase tracking-[0.2em] mb-3 text-left">📍 Accesos y Recogidas</h4>
+      <div className="space-y-3">
+        {[
+          {
+            q: "¿Dónde se recoge a los alumnos al finalizar la clase?",
+            a: "La recogida se realiza en la puerta de las instalaciones de la piscina. Podrá acceder por el Portón Azul hasta las 18:30. A partir de esa hora, el acceso se realizará exclusivamente por la puerta del parking."
+          },
+          {
+            q: "¿Por dónde entran y salen los alumnos a partir de las 18:30?",
+            a: "El acceso principal al colegio se cierra. La entrada y salida se realiza exclusivamente por la puerta que está al final del parking del colegio. Pueden encontrar un mapa en la parte superior de esta sección."
+          },
+          {
+            q: "¿Cómo es la recogida de los alumnos de Infantil?",
+            a: "Para los alumnos de Infantil que terminan su clase, los monitores los recogen directamente en su clase."
+          },
+          {
+            q: "¿Pueden entrar los padres a los vestuarios?",
+            a: "Siguiendo la normativa de autonomía y seguridad, el acceso de adultos a vestuarios está limitado. Los alumnos de Primaria deben cambiarse solos para fomentar su independencia. En Infantil, se permite asistencia mínima si es estrictamente necesario."
+          }
+        ].map((item, idx) => (
+          <details key={idx} className="group border border-slate-100 rounded-xl">
+            <summary className="flex justify-between items-center p-4 bg-slate-50/50 cursor-pointer list-none hover:bg-white">
+              <span className="text-sm font-bold text-slate-700 text-left leading-tight">{item.q}</span>
+              <span className="text-blue-500 transition-transform group-open:rotate-180 ml-2">▼</span>
+            </summary>
+            <div className="p-4 bg-white text-sm text-slate-600 leading-relaxed border-t border-slate-50 text-left">
+              {item.a}
             </div>
-            <button
-              type="button"
-              onClick={() => {
-                setCapturandoCoordenadasPara('maestro');
-                setVista('mapa');
-                lanzarToast('📡 Redirigiendo al mapa... Pincha en el punto para capturar sus coordenadas.', 'info');
-              }}
-              style={{
-                padding: '10px 14px',
-                borderRadius: '12px',
-                border: '1px solid #3b82f6',
-                backgroundColor: capturandoCoordenadasPara === 'maestro' ? '#2563eb' : 'transparent',
-                color: capturandoCoordenadasPara === 'maestro' ? 'white' : '#3b82f6',
-                fontWeight: 'bold',
-                fontSize: '0.85rem',
-                cursor: 'pointer',
-                transition: 'all 0.2s',
-                outline: 'none',
-                boxShadow: capturandoCoordenadasPara === 'maestro' ? '0 4px 10px rgba(37, 99, 235, 0.3)' : 'none'
-              }}
-            >
-              {capturandoCoordenadasPara === 'maestro' ? '📡 Esperando clic en el mapa...' : '🎯 Pinchar en el mapa para capturar coordenadas'}
-            </button>
-            <input
-              placeholder="URL de la foto del lugar"
-              style={estiloInput}
-              id="nuevoPuntoFoto"
-            />
-            
-            <button
-              type="button"
-              onClick={async (e) => {
-                e.preventDefault();
-                e.stopPropagation(); // 🛡️ ¡Súper escudo! Evita que el clic suba a la actividad
-                if (!isAdmin) return lanzarToast('🛑 ¡Acceso denegado! No tienes permisos de administrador. 🔐', 'error');
+          </details>
+        ))}
+      </div>
+    </div>
+
+    {/* CATEGORÍA: INSCRIPCIONES Y PAGOS */}
+    <div>
+      <h4 className="text-[10px] font-black text-orange-600 uppercase tracking-[0.2em] mb-3 text-left">💳 Inscripciones y Pagos</h4>
+      <div className="space-y-3">
+        {[
+          {
+            q: "¿Cómo me doy de baja en la actividad?",
+            a: "Las bajas deben comunicarse antes del día 25 del mes anterior al que se desea hacer efectiva la baja. La baja se tramita desde el áera privada de cada usuario."
+          },
+          {
+            q: "¿Qué pasa si devuelvo un recibo mensual?",
+            a: "La devolución de un recibo genera gastos bancarios que deberán ser abonados por la familia. Si el impago persiste, el alumno perderá la plaza automáticamente."
+          },
+          {
+            q: "¿Hay que pagar matrícula cada año?",
+            a: "No, no hay matrícula."
+          }
+        ].map((item, idx) => (
+          <details key={idx} className="group border border-slate-100 rounded-xl">
+            <summary className="flex justify-between items-center p-4 bg-slate-50/50 cursor-pointer list-none hover:bg-white">
+              <span className="text-sm font-bold text-slate-700 text-left leading-tight">{item.q}</span>
+              <span className="text-blue-500 transition-transform group-open:rotate-180 ml-2">▼</span>
+            </summary>
+            <div className="p-4 bg-white text-sm text-slate-600 leading-relaxed border-t border-slate-50 text-left">
+              {item.a}
+            </div>
+          </details>
+        ))}
+      </div>
+    </div>
+
+    {/* CATEGORÍA: DINÁMICA DE CLASES */}
+    <div>
+      <h4 className="text-[10px] font-black text-green-600 uppercase tracking-[0.2em] mb-3 text-left">🏊‍♂️ Sobre las Clases</h4>
+      <div className="space-y-3">
+        {[
+          {
+            q: "¿Cuál es el número máximo de alumnos por grupo y qué horarios hay disponibles?",
+            a: "Puedes consultar el detalle actualizado de horarios, días de clase y ratios de alumnos por monitor en la sección de 'Actividades' al principio de esta página. Allí encontrarás la información específica para cada nivel y edad."
+          },
+          {
+            q: "¿A qué temperatura está el agua de la piscina?",
+            a: "Nuestras instalaciones son de uso deportivo, por lo que el agua se mantiene en el rango óptimo recomendado para la actividad física: entre 27°C y 28°C. Esta temperatura garantiza el confort térmico del alumno durante el ejercicio, evitando tanto el sobrecalentamiento como la fatiga prematura."
+          },
+          {
+            q: "¿Necesito hacer prueba de nivel si soy nuevo?",
+            a: "Sí, todos los alumnos nuevos (de actividades que lo requieran) deben realizar una prueba de nivel previa para asignarles el grupo que mejor se adapte a su habilidad actual y asegurar su aprendizaje."
+          },
+          {
+            q: "¿Qué material debe traer el alumno siempre?",
+            a: "Bañador, gorro de silicona o lycra, gafas de natación, chanclas y toalla o albornoz. Todo marcado con el nombre del alumno a ser posible."
+          },
+          {
+            q: "¿Puedo cambiar de horario a mitad de curso?",
+            a: "Solo si hay plazas disponibles en el nivel correspondiente del nuevo horario solicitado. Deberá consultarse con el coordinador de la actividad."
+          }
+        ].map((item, idx) => (
+          <details key={idx} className="group border border-slate-100 rounded-xl">
+            <summary className="flex justify-between items-center p-4 bg-slate-50/50 cursor-pointer list-none hover:bg-white">
+              <span className="text-sm font-bold text-slate-700 text-left leading-tight">{item.q}</span>
+              <span className="text-blue-500 transition-transform group-open:rotate-180 ml-2">▼</span>
+            </summary>
+            <div className="p-4 bg-white text-sm text-slate-600 leading-relaxed border-t border-slate-50 text-left">
+              {item.a}
+            </div>
+          </details>
+        ))}
+      </div>
+    </div>
+
+  </div>
+</div>
+
+{/* ======================================================== */}
+              {/* 📞 SECCIÓN: CONTACTO Y UBICACIÓN (VERSIÓN MEJORADA)      */}
+              {/* ======================================================== */}
+              <div id="contacto" className="grid md:grid-cols-2 gap-6 pt-4 scroll-mt-20">
                 
-                const nombre = document.getElementById('nuevoPuntoNombre').value;
-                const desc = document.getElementById('nuevoPuntoDesc').value;
-                const lat = document.getElementById('nuevoPuntoLat').value;
-                const lng = document.getElementById('nuevoPuntoLng').value;
-                const foto = document.getElementById('nuevoPuntoFoto').value;
+                {/* TARJETA DE CONTACTO */}
+                <div className="bg-white border-l-4 border-blue-600 rounded-xl p-6 shadow-md hover:shadow-lg transition">
+                  <h3 className="text-xl font-black text-blue-900 mb-6 flex items-center gap-2 uppercase tracking-tighter">📞 Contacto y Redes</h3>
+                  
+                  <div className="space-y-6">
+                    {/* Teléfono */}
+                    <div className="flex items-center gap-4">
+                        <div className="bg-blue-100 w-12 h-12 flex items-center justify-center rounded-full text-xl shadow-sm">☎️</div>
+                        <div>
+                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Secretaría General</p>
+                            <a href="tel:915267161" className="text-2xl font-black text-blue-700 hover:text-blue-900 transition">
+                                915 26 71 61
+                            </a>
+                        </div>
+                    </div>
+                   
 
-                if(!nombre || !lat || !lng) return lanzarToast('¡Oye! Faltan datos (Nombre, Lat y Lng) 📝', 'advertencia');
+                    {/* NUEVOS ENLACES: WEB E INSTAGRAM (REORDENADOS Y FUNCIONALES) */}
+<div className="grid grid-cols-2 gap-3 pt-2">
+    {/* Botón Web Colegio */}
+    <a 
+      href="https://www.sanbuenaventura.org/" 
+      target="_blank" 
+      rel="noopener noreferrer" 
+      className="flex items-center justify-center gap-2 p-3 bg-slate-50 rounded-xl border border-slate-100 hover:bg-blue-50 transition shadow-sm group"
+    >
+        <span className="text-lg group-hover:scale-110 transition-transform">🌐</span>
+        <span className="text-[10px] font-black text-gray-600 uppercase">Web Colegio</span>
+    </a>
 
-                try {
-                    const datos = {
-                      nombre,
-                      descripcion: desc,
-                      lat: parseFloat(lat),
-                      lng: parseFloat(lng),
-                      foto: foto || '',
-                      color: 'red'
-                    };
+{/* Botón Instagram: Versión API Universal */}
+<a 
+  href="https://www.instagram.com/cs_buenaventura" 
+  target="_blank" 
+  rel="noopener noreferrer" 
+  className="flex items-center justify-center gap-2 p-3 bg-slate-50 rounded-xl border border-slate-100 hover:bg-white transition shadow-sm group w-full"
+  onClick={(e) => {
+    // Si estamos en móvil, intentamos este truco de "doble salto"
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    if (isMobile) {
+      // Este es el enlace que "despierta" a la app en el perfil directamente
+      window.location.href = "instagram://user?username=cs_buenaventura";
+      // Evitamos que el navegador siga el enlace normal si ya abrió la app
+      setTimeout(() => {
+        // Si no ha saltado la app, no hacemos nada y el target="_blank" hará su trabajo
+      }, 300);
+    }
+  }}
+>
+    <svg 
+        viewBox="0 0 24 24" 
+        className="w-5 h-5 group-hover:scale-110 transition-transform"
+    >
+        <defs>
+            <radialGradient id="insta_final_api" r="150%" cx="30%" cy="107%">
+                <stop offset="0%" stopColor="#fdf497" />
+                <stop offset="45%" stopColor="#fd5949" />
+                <stop offset="60%" stopColor="#d6249f" />
+                <stop offset="90%" stopColor="#285AEB" />
+            </radialGradient>
+        </defs>
+        <path 
+            fill="url(#insta_final_api)" 
+            d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z" 
+        />
+    </svg>
+    <span className="text-[10px] font-black text-gray-600 uppercase">Instagram</span>
+</a>
+</div>
 
-                    if (editandoPuntoId) {
-                      await updateDoc(doc(db, 'puntos_interes_cole', editandoPuntoId), datos);
-                      lanzarToast('¡Chincheta actualizada con éxito! 📝📍', 'exito');
-                    } else {
-                      await addDoc(collection(db, 'puntos_interes_cole'), datos);
-                      lanzarToast('¡Chincheta guardada con éxito! 📍', 'exito');
-                    }
-                    
-                    setEditandoPuntoId(null);
-                    cargarPuntosInteres();
-                    
-                    // ✨ ¡ESTA ES LA LÍNEA MÁGICA! 
-                    // Te saca del panel y te lleva al catálogo automáticamente
-                    setVista('catalogo'); 
-                    
-                    // Limpiar los campos (por si acaso vuelves luego)
-                    document.getElementById('nuevoPuntoNombre').value = '';
-                    document.getElementById('nuevoPuntoDesc').value = '';
-                    document.getElementById('nuevoPuntoLat').value = '';
-                    document.getElementById('nuevoPuntoLng').value = '';
-                    document.getElementById('nuevoPuntoFoto').value = '';
-                    
-                    if (typeof cargarPuntosInteres === 'function') cargarPuntosInteres();
-                  } catch (error) {
-                    console.error("Error al guardar punto:", error);
-                    lanzarToast(`❌ Error al guardar: ${error.message || error}`, "error");
-                  }
-              }}
-              style={{
-                padding: '15px',
-                backgroundColor: '#3b82f6',
-                color: 'white',
-                border: 'none',
-                borderRadius: '15px',
-                fontWeight: 'bold',
-                cursor: 'pointer',
-                marginTop: '10px'
-              }}
-            >
-              {editandoPuntoId ? '📝 ACTUALIZAR CHINCHETA' : '🚀 GUARDAR SOLO LA CHINCHETA'}
-            </button>
-            {/* 🗑️ LISTA PARA BORRAR PUNTOS (Pégalo justo aquí) */}
-            <div style={{ 
-              marginTop: '25px', 
-              paddingTop: '20px', 
-              borderTop: '1px solid #cbd5e1' 
-            }}>
-              <p style={{ fontWeight: 'bold', fontSize: '0.9rem', color: '#1e293b', marginBottom: '10px' }}>
-                🗑️ Tus puntos actuales (Toca para editar o borrar):
-              </p>
-              
-              <div style={{ display: 'grid', gap: '8px' }}>
-                {puntosInteres.map((p) => (
-                  <div key={p.id} style={{ 
-                    display: 'flex', 
-                    justifyContent: 'space-between', 
-                    alignItems: 'center',
-                    backgroundColor: 'white',
-                    padding: '10px 15px',
-                    borderRadius: '12px',
-                    fontSize: '0.85rem',
-                    border: '1px solid #e2e8f0',
-                    boxShadow: '0 2px 4px rgba(0,0,0,0.02)'
-                  }}>
-                    <span style={{ fontWeight: 'bold', color: '#334155' }}>📍 {p.nombre}</span>
-                    <div style={{ display: 'flex', gap: '6px' }}>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          setEditandoPuntoId(p.id);
-                          document.getElementById('nuevoPuntoNombre').value = p.nombre;
-                          document.getElementById('nuevoPuntoDesc').value = p.descripcion || '';
-                          document.getElementById('nuevoPuntoLat').value = p.lat;
-                          document.getElementById('nuevoPuntoLng').value = p.lng;
-                          document.getElementById('nuevoPuntoFoto').value = p.foto || '';
-                          lanzarToast('📝 Chincheta cargada para editar. ¡Modifica los campos arriba! 📍', 'info');
-                          
-                          const formEl = document.getElementById('nuevoPuntoNombre');
-                          if (formEl) formEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                        }}
-                        style={{
-                          backgroundColor: '#dbeafe',
-                          color: '#2563eb',
-                          border: 'none',
-                          padding: '6px 12px',
-                          borderRadius: '8px',
-                          cursor: 'pointer',
-                          fontWeight: 'bold',
-                          fontSize: '0.75rem'
-                        }}
-                      >
-                        EDITAR
-                      </button>
-                      <button
-                        type="button"
-                        onClick={async (e) => {
-                          e.preventDefault();
-                          if (!isAdmin) return lanzarToast('🛑 ¡Acceso denegado! No tienes permisos de administrador. 🔐', 'error');
-                           if (confirm(`⚠️ ¿Quieres eliminar permanentemente el punto de interés "${p.nombre}"?\n\nSe borrará de los mapas de todas las familias de forma definitiva.`)) {
-                            try {
-                              const { deleteDoc, doc } = await import('firebase/firestore');
-                              await deleteDoc(doc(db, 'puntos_interes_cole', p.id));
-                              lanzarToast('¡Punto borrado! ✨', 'exito');
-                              if (editandoPuntoId === p.id) {
-                                setEditandoPuntoId(null);
-                                document.getElementById('nuevoPuntoNombre').value = '';
-                                document.getElementById('nuevoPuntoDesc').value = '';
-                                document.getElementById('nuevoPuntoLat').value = '';
-                                document.getElementById('nuevoPuntoLng').value = '';
-                                document.getElementById('nuevoPuntoFoto').value = '';
-                              }
-                              cargarPuntosInteres(); // Esto hace que la lista se actualice sola
-                            } catch (error) {
-                              lanzarToast('No se pudo borrar', 'error');
-                            }
-                          }
-                        }}
-                        style={{
-                          backgroundColor: '#fee2e2',
-                          color: '#ef4444',
-                          border: 'none',
-                          padding: '6px 12px',
-                          borderRadius: '8px',
-                          cursor: 'pointer',
-                          fontWeight: 'bold',
-                          fontSize: '0.75rem'
-                        }}
-                      >
-                        ELIMINAR
-                      </button>
+                    {/* Emails */}
+                    <div className="flex items-start gap-3 border-t border-gray-100 pt-6">
+                        <div className="bg-orange-100 w-10 h-10 flex items-center justify-center rounded-full text-lg shrink-0">📧</div>
+                        <div className="flex flex-col gap-2 w-full">
+                             <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Correos Electrónicos</p>
+                            <a href="mailto:extraescolarespiscina@sanbuenaventura.org" className="text-[13px] font-bold text-gray-700 hover:text-blue-600 transition break-all leading-tight">
+                                • extraescolarespiscina@sanbuenaventura.org
+                            </a>
+                            <a href="mailto:extraescolares@sanbuenaventura.org" className="text-[13px] font-bold text-gray-700 hover:text-blue-600 transition break-all leading-tight">
+                                • extraescolares@sanbuenaventura.org
+                            </a>
+                        </div>
                     </div>
                   </div>
-                ))}
+                </div>
+                {/* ======================================================== */}
+
+
+                {/* TARJETA DE UBICACIÓN */}
+                <div className="bg-white border-l-4 border-green-600 rounded-xl p-6 shadow-md hover:shadow-lg transition flex flex-col justify-between">
+                  <div>
+                    <h3 className="text-xl font-black text-green-900 mb-6 flex items-center gap-2 uppercase tracking-tighter">📍 Ubicación</h3>
+                    
+                    <div className="flex items-start gap-4 mb-6">
+                        <div className="bg-green-100 w-12 h-12 flex items-center justify-center rounded-xl text-2xl shadow-sm shrink-0">🏫</div>
+                        <div>
+                            <p className="font-black text-gray-900 uppercase text-sm tracking-tight">Colegio San Buenaventura</p>
+                            <p className="text-base font-medium text-gray-600 mt-1 leading-relaxed">
+                                C. de El Greco, 16,<br/>
+                                Latina, 28011 Madrid
+                            </p>
+                        </div>
+                    </div>
+                  </div>
+
+                  <a 
+                    href="https://www.google.com/maps/dir/?api=1&destination=Colegio+San+Buenaventura+Madrid" 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-center gap-3 w-full bg-slate-900 text-white font-black py-4 rounded-2xl hover:bg-green-700 transition shadow-xl transform active:scale-95 uppercase tracking-widest text-sm"
+                  >
+                    🗺️ Cómo llegar (Maps)
+                  </a>
+                </div>
+
               </div>
+
+            </div>
+          )}
+
+{/* VISTA INSTALACIONES (ESTRUCTURA CORREGIDA) */}
+{tab === 'instalaciones' && (
+  <div className="flex flex-col animate-fade-in w-full space-y-12">
+    
+    {/* 1. PANEL DE ESTADO TÉCNICO (Ocupa todo el ancho) */}
+    <div className="flex flex-col w-full">
+      {/* Grid de 4 tarjetas técnicas */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {(() => {
+          const now = new Date();
+          const seed = now.getDate() + now.getHours();
+          const getFluctuation = (base, range, seedValue) => {
+            const hash = Math.sin(seedValue) * 10000;
+            const random = hash - Math.floor(hash);
+            return (base + random * range).toFixed(1);
+          };
+
+          const stats = [
+            { label: 'Temperatura Agua', val: getFluctuation(27.4, 0.6, seed) + '°C', status: 'ÓPTIMO', icon: '🌡️', color: 'text-blue-600', bg: 'bg-blue-50/50' },
+            { label: 'Nivel de pH', val: getFluctuation(7.1, 0.3, seed + 1), status: 'EQUILIBRADO', icon: '🧪', color: 'text-emerald-600', bg: 'bg-emerald-50/50' },
+            { label: 'Calidad Aire', val: '98%', status: 'EXCELENTE', icon: '💨', color: 'text-cyan-600', bg: 'bg-cyan-50/50' },
+            { label: 'Estado Vaso', val: 'FILTRANDO', status: 'CONTINUO', icon: '🔄', color: 'text-indigo-500', bg: 'bg-indigo-50/50' }
+          ];
+
+          return stats.map((item, idx) => (
+            <div key={idx} className="relative overflow-hidden bg-white/75 backdrop-blur-md p-6 rounded-3xl border border-white/50 shadow-lg shadow-slate-200/50 flex flex-col items-center text-center transition-all duration-300 hover:scale-[1.03] hover:shadow-xl hover:border-blue-200">
+              <div className={`absolute -top-4 -right-4 w-16 h-16 ${item.bg} rounded-full blur-2xl opacity-60`}></div>
+              <span className="text-3xl mb-3 relative z-10 drop-shadow-sm">{item.icon}</span>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2 relative z-10">{item.label}</p>
+              <p className={`text-2xl font-black ${item.color} leading-none mb-2 relative z-10 drop-shadow-[0_2px_4px_rgba(0,0,0,0.02)]`}>{item.val}</p>
+              <div className="flex items-center gap-2 bg-slate-50/80 px-3 py-1 rounded-full relative z-10 border border-slate-100/50">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                </span>
+                <span className="text-[8px] font-black text-slate-500 uppercase tracking-tighter">{item.status}</span>
+              </div>
+            </div>
+          ));
+        })()}
+      </div>
+
+{/* Bloque de sincronización (AHORA A LA IZQUIERDA Y SIN ERRORES) */}
+<div className="flex justify-start items-center gap-4 mt-6 px-4 py-3 bg-blue-50/30 rounded-2xl border border-blue-100/50 max-w-fit mr-auto">
+        {/* Barra lateral azul a la izquierda */}
+        <div className="h-10 w-[3px] bg-gradient-to-b from-blue-400 to-blue-600 rounded-full shadow-sm"></div>
+        
+        <div className="flex flex-col items-start text-left">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
+            </span>
+            <span className="text-[10px] font-black text-blue-700 uppercase tracking-[0.2em]">
+              Monitorización en Tiempo Real
+            </span>
+          </div>
+          <p className="text-xs text-slate-500 font-bold uppercase tracking-tight">
+            Sincronizado con centralita: <span className="text-blue-600 font-black">{new Date().getHours()}:00h</span>
+          </p>
+          <p className="text-[8px] text-slate-400 font-medium italic">
+            * Parámetros actualizados automáticamente cada 60 minutos.
+          </p>
+        </div>
+      </div>
+    </div> {/* <--- ESTE ES EL DIV QUE CIERRA EL CONTENEDOR DE LA PESTAÑA */}
+
+    {/* 2. GALERÍA DE FOTOS (Independiente del panel de arriba) */}
+    <div className="w-full">
+      <div className="flex items-center gap-3 mb-8">
+        <div className="h-px bg-slate-100 flex-1"></div>
+        <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.4em]">Explora la instalación</p>
+        <div className="h-px bg-slate-100 flex-1"></div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+        {GALERIA.map((foto, index) => (
+          <div key={index} className="group flex flex-col">
+            {/* Contenedor Imagen */}
+            <div className="overflow-hidden rounded-[24px] shadow-sm border border-gray-100 bg-gray-50 aspect-[4/3]">
+              <img 
+                src={foto.url} 
+                className="w-full h-full object-cover group-hover:scale-110 transition duration-500" 
+                alt={foto.nombre} 
+              />
+            </div>
+            
+            {/* Textos debajo */}
+            <div className="mt-4 px-1">
+              <h4 className="font-black text-slate-800 uppercase text-[12px] tracking-widest text-left">
+                {foto.nombre}
+              </h4>
+              <p className="text-[10px] text-blue-600 font-bold uppercase mt-1 text-left tracking-tight">
+                {foto.zona}
+              </p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  </div>
+)}
+
+        </div>
+      </div>
+
+{/* 🏛️ FOOTER ESTILO ORIGINAL (FULL WIDTH) */}
+<footer className="bg-gray-900 text-white py-8 mt-12 w-full border-t border-white/5">
+        <div className="max-w-6xl mx-auto px-6 flex flex-col md:flex-row items-center justify-between gap-6">
+          
+          {/* Escudo a la izquierda con efecto blanco sutil */}
+          <div className="flex items-center gap-4">
+            <img 
+              src="https://i.ibb.co/KjCWNLrc/CSB.png" 
+              className="h-12 w-auto brightness-0 invert opacity-90 transition-opacity hover:opacity-100" 
+              alt="CSB" 
+            />
+            <div className="h-8 w-[1px] bg-gray-700 hidden md:block"></div>
+          </div>
+
+          {/* Texto Central con mayor tracking */}
+          <div className="text-center md:text-left flex-1 md:ml-6">
+            <p className="text-sm font-medium text-gray-400 tracking-[0.1em]">
+              © {new Date().getFullYear()} <span className="text-white font-black uppercase ml-1">Colegio San Buenaventura</span> — Natación
+            </p>
+            <p className="text-xs text-gray-500 mt-1">Calle de El Greco, 16, 28011 Madrid</p>
+          </div>
+
+          {/* Lado derecho: Un detalle extra de calidad */}
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.8)]"></span>
+            <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Madrid</span>
+          </div>
+          
+        </div>
+      </footer>
+
+    </div>
+  );
+}
+
+// ==========================================
+// 🛡️ ADMIN DASHBOARD (PANEL DE GESTIÓN)
+// ==========================================
+const AdminDashboard = ({ userRole, logout, userEmail }) => {
+  // --- 1. ESTADOS ---
+  const [alumnos, setAlumnos] = useState([]);
+  const [padres, setPadres] = useState({});
+  const [avisos, setAvisos] = useState([]);
+  const [equipo, setEquipo] = useState([]);
+  
+  const [tab, setTab] = useState('global');
+  const [busqueda, setBusqueda] = useState('');
+  const [filtroGrupo, setFiltroGrupo] = useState('');
+  const [filtroRadar, setFiltroRadar] = useState(null);
+  const [nuevoAviso, setNuevoAviso] = useState('');
+  
+  const [newStaff, setNewStaff] = useState({ email: '', password: '', role: 'profe' });
+  const [loadingStaff, setLoadingStaff] = useState(false);
+
+  // ESTADO PARA LA FICHA (ALUMNO SELECCIONADO)
+  const [alumnoSeleccionado, setAlumnoSeleccionado] = useState(null);
+  const [vistaMes, setVistaMes] = useState('actual');
+  const [radarHueco, setRadarHueco] = useState(null);
+  // --- 👑 JERARQUÍA DE PODERES ---
+const emailJefe = 'extraescolares@sanbuenaventura.org';
+const emailCoordinador = 'extraescolarespiscina@sanbuenaventura.org'; 
+
+const soySuperAdmin = userEmail === emailJefe;
+const soyCoordinador = userEmail === emailCoordinador;
+
+// Ambos pueden crear monitores y ver datos sensibles
+const puedeGestionarTodo = soySuperAdmin || soyCoordinador;
+
+// --- 🏊‍♂️ IDENTIFICACIÓN DEL MONITOR ---
+// Buscamos si el que ha entrado está en la lista de equipo como monitor
+const datosMonitor = equipo.find(m => m.email === userEmail);
+const soyMonitor = datosMonitor?.rol === 'monitor';
+  // --- 🔔 SISTEMA DE NOTIFICACIONES PUSH (CEREBRO) ---
+  const solicitarPermisoNotificaciones = async () => {
+    if (!("Notification" in window)) {
+      showToast("Este navegador no soporta notificaciones de escritorio.", "warning");
+      return;
+    }
+    const permiso = await Notification.requestPermission();
+    if (permiso === "granted") {
+      new Notification("🚀 ¡Sistema Activado!", {
+        body: "Ahora recibirás avisos importantes de la piscina en este dispositivo.",
+        icon: "https://cdn-icons-png.flaticon.com/512/5822/5822050.png" 
+      });
+    }
+  };
+
+  const enviarPushLocal = (titulo, mensaje) => {
+    if (Notification.permission === "granted") {
+      new Notification(titulo, {
+        body: mensaje,
+        icon: "https://cdn-icons-png.flaticon.com/512/5822/5822050.png"
+      });
+    }
+  }; 
+// --- 1.5 FUNCIONES DE ACCIÓN ---
+const confirmarInscripcion = async (alumnoId) => {
+  try {
+    const alumnoRef = doc(db, 'students', alumnoId);
+    await updateDoc(alumnoRef, { revisadoAdmin: true });
+  } catch (error) {
+    console.error("Error al confirmar:", error);
+    showToast("No se pudo confirmar el grupo.", "error");
+  }
+};
+  // --- 2. CARGA DE DATOS (EFECTOS) ---
+  useEffect(() => {
+    // 1. Radar de Alumnos (Intacto)
+    const unsubStudents = onSnapshot(query(collection(db, 'students')), (s) => 
+      setAlumnos(s.docs.map(d => ({ id: d.id, ...d.data() })))
+    );
+    
+    // 2. Radar de Padres (Ahora solo para familias)
+    const unsubUsers = onSnapshot(query(collection(db, 'users')), (s) => {
+        const p = {};
+        s.forEach(d => { p[d.id] = d.data(); });
+        setPadres(p); 
+    });
+
+    // 3. 🚀 NUEVO: Radar de Equipo (Monitores y Coordinadores)
+    // Solo se activa si el usuario tiene permisos de gestión
+    let unsubEquipo = () => {};
+    if (puedeGestionarTodo) {
+      unsubEquipo = onSnapshot(query(collection(db, 'equipo'), orderBy('nombre', 'asc')), (s) => {
+        setEquipo(s.docs.map(d => ({ id: d.id, ...d.data() })));
+      });
+    }
+
+    // 4. Radar de Avisos (Intacto)
+    const unsubAvisos = onSnapshot(query(collection(db, 'avisos'), orderBy('fecha', 'desc')), (s) => 
+      setAvisos(s.docs.map(d => ({ id: d.id, ...d.data() })))
+    );
+
+    // 🧹 Limpieza al salir
+    return () => { 
+      unsubStudents(); 
+      unsubUsers(); 
+      unsubEquipo(); 
+      unsubAvisos(); 
+    };
+  }, [puedeGestionarTodo]); // 🚩 IMPORTANTE: Añadimos esto para que se refresque si cambian los permisos
+// 🏊‍♂️ FILTRO DE ALUMNOS PARA EL MONITOR (NUEVO)
+  // ---------------------------------------------------------
+  const alumnosAsignados = alumnos.filter(alumno => {
+    if (!soyMonitor) return false; // Si no es monitor, la lista está vacía
+    const susGrupos = datosMonitor?.gruposAsignados || [];
+    return susGrupos.includes(alumno.actividad) && alumno.estado === 'inscrito';
+  });
+ 
+  // --- 3. FUNCIONES ---
+  // 🎯 FUNCIÓN PARA ACEPTAR DESDE PRUEBAS DE NIVEL (INTELIGENTE: RESERVA VS CURSO)
+  const aceptarAlumnoDirecto = async (e, alumno) => {
+    if (e && e.stopPropagation) e.stopPropagation();
+
+    const grupoDestino = alumno.actividad || 'Sin asignar';
+    if (grupoDestino === 'Sin asignar') return showToast("El alumno no tiene un grupo asignado.", "warning");
+
+    if (!confirm(`¿Inscribir a ${alumno.nombre} en ${grupoDestino}?`)) return;
+
+    try {
+      const alumnoRef = doc(db, 'students', alumno.id);
+      
+      const hoy = new Date();
+      const mesActual = hoy.getMonth() + 1; // 1-12
+      const esPeriodoReserva = mesActual >= 6 && mesActual <= 9;
+      const academicInfo = getDynamicAcademicYear();
+      let fechaParaDB = "";
+
+      // 1. 🛡️ COMPROBACIÓN DE TEMPORADA (Si hoy es periodo de reserva de junio a septiembre)
+      if (esPeriodoReserva) {
+        fechaParaDB = academicInfo.isoStartDate; // Modo Reserva: Todo al estreno del curso
+      } 
+      // 2. 🏊‍♂️ MODO CURSO ACTIVO (Si ya es Octubre a Mayo)
+      else {
+        const diaActual = hoy.getDate();
+        const añoActual = hoy.getFullYear();
+        const preferencia = String(alumno.inicioDeseado || 'proximo').toLowerCase();
+
+        if (diaActual > 20 || preferencia.includes('prox')) {
+          let mSig = mesActual + 1; let aSig = añoActual;
+          if (mSig > 12) { mSig = 1; aSig++; }
+          fechaParaDB = `${aSig}-${String(mSig).padStart(2, '0')}-01`;
+        } else {
+          fechaParaDB = hoy.toISOString().split('T')[0];
+        }
+      }
+
+      // Actualizamos al alumno blindando todos los campos para el cartel azul
+      await updateDoc(alumnoRef, {
+        estado: 'inscrito',
+        grupo: grupoDestino,
+        fechaValidacion: hoy.toISOString(),
+        fechaAlta: fechaParaDB, 
+        fecha_alta: fechaParaDB,
+        inicioDeseado: fechaParaDB,
+        fechaSolicitud: fechaParaDB, // 🚩 Esto es vital para el visor
+        revisadoAdmin: true,
+        validadoAdmin: true 
+      });
+
+      // ACTUALIZAMOS EL AFORO
+      const grupoRef = doc(db, 'clases', grupoDestino); 
+      try {
+        // await updateDoc(grupoRef, { cupo: increment(-1) });
+      } catch (errAforo) { console.warn("Aforo no actualizado"); }
+
+      // 📧 ENVÍO DE EMAIL
+      const padreId = alumno.parentId || alumno.user;
+      const emailPadre = padres[padreId]?.email || alumno.email;
+      if (emailPadre) {
+        const detalleGrupoCompleto = `${alumno.actividad} — ${alumno.dias} a las ${alumno.horario}`;
+        await enviarEmailConfirmacion(emailPadre, alumno.nombre, detalleGrupoCompleto, 'alta', fechaParaDB);
+      }
+
+      // 🚩 LOG DE AUDITORÍA
+      await addDoc(collection(db, 'logs'), {
+        fecha: hoy.getTime(),
+        alumnoId: alumno.id,
+        alumnoNombre: alumno.nombre,
+        accion: "ACEPTAR_PRUEBA",
+        detalles: `Alta confirmada para: ${fechaParaDB}`,
+        adminEmail: userEmail || 'admin' 
+      });
+
+      showToast(`¡Perfecto! La ficha de ${alumno.nombre} se ha activado para el: ${fechaParaDB.split('-').reverse().join('/')}`, "success");
+      
+      // ✨ ¡MAGIA! Hemos quitado window.location.reload();
+      // Si tienes el radar de nombres abierto abajo, lo cerramos para limpiar la vista:
+      if (typeof setFiltroRadar === 'function') setFiltroRadar(null);
+
+    } catch (error) {
+      console.error("Error al aceptar:", error);
+      showToast("No se pudo procesar: " + error.message, "error");
+    }
+  };
+  
+  // Abrir Ficha: Combina datos del alumno con los del padre
+  const abrirFicha = (alumno) => {
+    // 1. Identificamos al padre
+    const padreId = alumno.parentId || alumno.user; 
+    const datosPadre = padres[padreId] || {};
+    
+    // 2. Buscamos el nombre en "cascada" (si no está en uno, busca en el siguiente)
+    const nombreFinal = 
+        datosPadre.nombre ||              // Campo unificado nuevo
+        datosPadre.personaContacto ||     // Campo de registro interno
+        datosPadre.nombrePagador ||       // Campo de registro externo
+        alumno.nombrePagador ||           // A veces se guarda en el alumno
+        alumno.personaContacto ||         // A veces se guarda en el alumno
+        datosPadre.displayName ||         // Nombre de Google/Auth
+        'No indicado';
+
+    // 3. Hacemos lo mismo con el DNI
+    const dniFinal = 
+        datosPadre.dni || 
+        datosPadre.dniPagador || 
+        alumno.dniPagador || 
+        'No indicado';
+
+    setAlumnoSeleccionado({ 
+        ...alumno, 
+        nombreTutor: nombreFinal,
+        dniTutor: dniFinal,
+        datosPadre: datosPadre 
+    });
+};
+
+const imprimirListaAsistencia = (datos, infoGrupo) => {
+  const ventana = window.open('', '_blank');
+  
+  // Construimos una tabla HTML sencilla y compacta para la impresión
+  const filas = datos.map((a, i) => `
+    <tr style="border-bottom: 1px solid #e2e8f0; height: 32px;">
+      <td style="padding: 6px 10px; text-align: center; font-size: 11px; font-weight: bold; color: #475569; border-right: 1px solid #e2e8f0;">${i + 1}</td>
+      <td style="padding: 6px 12px; font-size: 12px; font-weight: 700; color: #0f172a; border-right: 1px solid #e2e8f0;">${a.nombre}</td>
+      <td style="padding: 6px 12px; font-size: 10px; font-weight: 600; color: #475569; text-transform: uppercase; border-right: 1px solid #e2e8f0;">${a.curso}</td>
+      ${Array(4).fill('<td style="border-right: 1px solid #cbd5e1; width: 45px;"></td>').join('')} 
+    </tr>
+  `).join('');
+
+  ventana.document.write(`
+    <html>
+      <head>
+        <title>Lista de Asistencia - ${infoGrupo.nombre}</title>
+        <style>
+          @page { size: A4; margin: 15mm; }
+          body { 
+            font-family: -apple-system, system-ui, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
+            color: #0f172a;
+            margin: 0;
+            padding: 0;
+            line-height: 1.4;
+          }
+          .header { 
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid #2563eb;
+            padding-bottom: 12px;
+            margin-bottom: 20px;
+          }
+          .header-left h1 {
+            font-size: 18px;
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: -0.5px;
+            margin: 0;
+            color: #1e3a8a;
+          }
+          .header-left p {
+            font-size: 11px;
+            margin: 3px 0 0 0;
+            color: #475569;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+          }
+          .header-right {
+            text-align: right;
+          }
+          .header-right .badge {
+            background: #f1f5f9;
+            border: 1px solid #e2e8f0;
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-size: 10px;
+            font-weight: 800;
+            color: #1e3a8a;
+            text-transform: uppercase;
+          }
+          table { 
+            width: 100%; 
+            border-collapse: collapse; 
+            margin-top: 15px; 
+            border: 1px solid #cbd5e1;
+          }
+          th { 
+            background: #f8fafc; 
+            color: #1e3a8a;
+            font-size: 10px; 
+            font-weight: 900; 
+            text-transform: uppercase; 
+            letter-spacing: 0.5px;
+            padding: 8px 10px; 
+            text-align: left; 
+            border-bottom: 2px solid #cbd5e1;
+            border-right: 1px solid #cbd5e1;
+          }
+          .footer-signature {
+            margin-top: 40px;
+            display: flex;
+            justify-content: space-between;
+            font-size: 10px;
+            color: #64748b;
+            font-weight: bold;
+          }
+          .signature-box {
+            width: 200px;
+            border-top: 1px dashed #cbd5e1;
+            text-align: center;
+            padding-top: 6px;
+            margin-top: 30px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <div class="header-left">
+            <h1>Colegio San Buenaventura</h1>
+            <p>🏊 Control de Asistencia - Natación Extraescolar</p>
+          </div>
+          <div class="header-right">
+            <span class="badge">Natación CSB</span>
+          </div>
+        </div>
+        
+        <div style="background: #f8fafc; border: 1px solid #e2e8f0; padding: 12px; border-radius: 12px; display: flex; justify-content: space-between; gap: 15px; font-size: 11px;">
+          <div>Grupo: <strong style="color: #1e3a8a; text-transform: uppercase;">${infoGrupo.nombre}</strong></div>
+          <div>Día de Clase: <strong style="color: #1e3a8a; text-transform: uppercase;">${infoGrupo.dia}</strong></div>
+          <div>Fecha Impresión: <strong style="color: #475569;">${new Date().toLocaleDateString('es-ES')}</strong></div>
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 35px; text-align: center;">#</th>
+              <th>Alumno</th>
+              <th style="width: 110px;">Curso</th>
+              <th style="width: 45px; text-align: center;">Sem 1</th>
+              <th style="width: 45px; text-align: center;">Sem 2</th>
+              <th style="width: 45px; text-align: center;">Sem 3</th>
+              <th style="width: 45px; text-align: center;">Sem 4</th>
+            </tr>
+          </thead>
+          <tbody>${filas}</tbody>
+        </table>
+
+        <div class="footer-signature">
+          <div>Incidencias: ________________________________________________________________</div>
+          <div class="signature-box">Firma del Monitor</div>
+        </div>
+
+        <script>window.print();</script>
+      </body>
+    </html>
+  `);
+  ventana.document.close();
+};
+// --- 🚩 PASO 1: LÓGICA DE FECHAS DE ALTA (BLINDADA) ---
+const obtenerInfoAlta = () => {
+  const hoy = new Date();
+  const diaActual = hoy.getDate();
+  
+  // 1. Datos Mes Actual
+  const mesActualNom = hoy.toLocaleString('es-ES', { month: 'long' });
+  const fechaTecnicaHoy = hoy.toISOString().split('T')[0];
+
+  // 2. Datos Mes Siguiente (Calculado de forma segura)
+  const proximoMesDate = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 1);
+  const mesSiguienteNom = proximoMesDate.toLocaleString('es-ES', { month: 'long' });
+  const fechaTecnicaProximoMes = proximoMesDate.toISOString().split('T')[0];
+
+  const mesActualNum = hoy.getMonth() + 1; // 1-12
+  const esPeriodoReserva = mesActualNum >= 6 && mesActualNum <= 9;
+
+  return {
+    esPeriodoReserva,
+    diaCortePasado: diaActual > 20,
+    mesActual: mesActualNom,
+    mesSiguiente: mesSiguienteNom,
+    fechaInicioSiguiente: `1 de ${mesSiguienteNom}`,
+    // 🚩 CLAVE: Devolvemos ya las fechas listas para Firebase
+    tecnicaHoy: fechaTecnicaHoy,
+    tecnicaProximoMes: fechaTecnicaProximoMes
+  };
+};
+const validarPlaza = async (alumno) => {
+  if (userRole !== 'admin') return showToast("Solo coordinadores.", "error");
+  
+  // 1. 🔍 BUSCADOR DE IDs (Limpiado)
+  let actId = alumno.actividadId;
+  const actText = (alumno.actividad || "").toLowerCase();
+  if (!actId) {
+      if (actText.includes('chapoteo')) actId = 'chapoteo';
+      else if (actText.includes('16:15')) actId = 'primaria_1615';
+      else if (actText.includes('1º-3º')) actId = 'primaria_123_tarde';
+      else if (actText.includes('4º-6º')) actId = 'primaria_456_tarde';
+      else if (actText.includes('waterpolo')) actId = 'waterpolo';
+      else if (actText.includes('nado') || actText.includes('libre')) actId = 'nado_libre';
+      else if (actText.includes('eso') || actText.includes('bach')) actId = 'eso_bach';
+      else if (actText.includes('adulto')) actId = 'adultos';
+      else if (actText.includes('aquagym')) actId = 'aquagym';
+  }
+
+  // --- 📅 2. LÓGICA DE FECHAS ÚNICA Y BLINDADA ---
+  const info = obtenerInfoAlta();
+  const hoy = new Date();
+  let fechaParaDB = "";
+  let textoInicioReal = "";
+
+  if (info.esPeriodoReserva) {
+      const academicInfo = getDynamicAcademicYear();
+      fechaParaDB = academicInfo.isoStartDate;
+      textoInicioReal = `Inicio de Curso (${academicInfo.formattedStartDate})`;
+  } else if (info.diaCortePasado) {
+      // CASO A: Día 21 al 31 -> Siempre 1 del mes que viene
+      const proximo = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 1);
+      fechaParaDB = `${proximo.getFullYear()}-${String(proximo.getMonth() + 1).padStart(2, '0')}-01`;
+      textoInicioReal = info.fechaInicioSiguiente;
+  } else {
+      // CASO B: Día 1 al 20
+      if (alumno.inicioDeseado === 'inmediato') {
+          fechaParaDB = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-${String(hoy.getDate()).padStart(2, '0')}`;
+          textoInicioReal = `Inmediato (Mes de ${info.mesActual})`;
+      } else {
+          const proximo = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 1);
+          fechaParaDB = `${proximo.getFullYear()}-${String(proximo.getMonth() + 1).padStart(2, '0')}-01`;
+          textoInicioReal = info.fechaInicioSiguiente;
+      }
+  }
+
+  // 3. CONFIRMACIÓN
+  if (!confirm(`✅ ¿Validar plaza definitiva para ${alumno.nombre}?\n\n📅 INICIO: ${textoInicioReal}\n📍 GRUPO: ${alumno.actividad}`)) return;
+
+  try {
+      const idCorrecto = String(alumno.id || alumno.docId || alumno.uid || "").trim();
+      if (!idCorrecto || idCorrecto === "undefined") throw new Error("ID no localizado.");
+
+      const padreId = alumno.parentId || alumno.user;
+      const emailPadre = padres[padreId]?.email;
+      
+      // 🎯 GUARDADO ÚNICO
+      await setDoc(doc(db, 'students', idCorrecto), { 
+        estado: 'inscrito',
+        actividadId: actId || 'sin_asignar',
+        validadoAdmin: true,
+        fechaAlta: fechaParaDB, // 👈 Aquí se guarda el texto real: "2026-03-06" o "2026-04-01"
+        revisadoAdmin: true,
+        fechaInicioReal: textoInicioReal,
+        ultimaActualizacion: new Date().getTime()
+      }, { merge: true });
+
+      // 📧 4. EMAIL
+      if (emailPadre) {
+        try {
+          await enviarEmailConfirmacion(
+            emailPadre, 
+            alumno.nombre, 
+            `${alumno.actividad || 'Natación'} — ${alumno.dias || ''} ${alumno.horario || ''}`, 
+            'alta', 
+            fechaParaDB
+          );
+        } catch (e) { console.warn("Email falló: ", e); }
+      }
+
+      // 📜 5. LOGS
+      await addDoc(collection(db, 'logs'), {
+        fecha: new Date().getTime(),
+        alumnoId: idCorrecto,
+        alumnoNombre: alumno.nombre,
+        accion: "VALIDACIÓN_ADMIN",
+        detalles: `Alta confirmada para ${fechaParaDB}`,
+        adminEmail: userEmail || 'admin'
+      });
+
+      showToast(`GUARDADO CON ÉXITO. Fecha Alta: ${fechaParaDB}`, "success");
+      // La recarga ya no es necesaria gracias al listener en tiempo real onSnapshot
+
+  } catch (error) {
+      showToast("Error: " + error.message, "error");
+  }
+};
+
+// ---------------------------------------------------------
+  // 📉 GESTIÓN DE BAJAS (LÓGICA CORREGIDA)
+  // ---------------------------------------------------------
+
+// A) TRAMITAR: Busca el email en el usuario Padre y envía el correo con éxito
+const tramitarBaja = async (alumno) => {
+  if (userRole !== 'admin') return showToast("Solo coordinadores.", "error");
+  
+  const hoy = new Date();
+  const mesesASumar = hoy.getDate() > 25 ? 2 : 1;
+  const fechaObj = new Date(hoy.getFullYear(), hoy.getMonth() + mesesASumar, 1);
+  
+  const y = fechaObj.getFullYear();
+  const m = String(fechaObj.getMonth() + 1).padStart(2, '0');
+  const d = String(fechaObj.getDate()).padStart(2, '0');
+  const fechaCalculada = `${y}-${m}-${d}`;
+  const fechaFormateada = `${d}/${m}/${y}`;
+
+  if (confirm(`📉 ¿Aceptar baja de ${alumno.nombre}?\n\n📅 Fecha efectiva: ${fechaCalculada}\n\n(Se enviará un correo de confirmación a la familia)`)) {
+      try {
+          // 1. Actualizamos el estado del alumno a baja
+          await updateDoc(doc(db, 'students', alumno.id), {
+              estado: 'baja_finalizada', 
+              fechaBaja: fechaCalculada
+          });
+
+          // 2. BÚSQUEDA OPTIMIZADA A COSTE CERO DEL EMAIL DEL PADRE
+          const padreId = alumno.parentId || alumno.user;
+          const emailDestino = padres[padreId]?.email || padres[padreId]?.emailContacto || padres[padreId]?.emailPagador || alumno.emailContacto || alumno.emailPagador || alumno.email || null;
+
+          console.log("🎯 Email final encontrado para enviar:", emailDestino);
+
+          // 4. SI YA TENEMOS EL EMAIL, CREAMOS EL PAPELITO EN FIREBASE
+          if (emailDestino) {
+              await addDoc(collection(db, 'mail'), {
+                  to: [emailDestino],
+                  message: {
+                      subject: `📉 Confirmación de Baja: ${alumno.nombre}`,
+                      html: `
+                          <div style="font-family: sans-serif; padding: 20px; color: #333; border: 1px solid #ddd; border-radius: 15px; max-width: 600px;">
+                              <h2 style="color: #dc2626; border-bottom: 2px solid #dc2626; padding-bottom: 10px; margin-top: 0;">
+                                 🏊 Tramitación de Baja Efectiva
+                              </h2>
+                              <p>Hola familia de <strong>${alumno.nombre}</strong>,</p>
+                              <p>Te escribimos para confirmarte que hemos procesado correctamente la solicitud de baja en la actividad de natación extraescolar.</p>
+
+                              <div style="background: #FEF2F2; padding: 15px; border-radius: 10px; margin: 20px 0; border: 1px solid #FCA5A5;">
+                                  <p style="margin: 0; color: #991B1B; font-weight: bold;">📍 Detalles del Trámite:</p>
+                                  <p style="margin: 10px 0 0 0; font-size: 16px;"><strong>Alumno:</strong> ${alumno.nombre}</p>
+                                  <p style="margin: 5px 0 0 0; font-size: 16px; color: #b91c1c;"><strong>📅 Fecha de efecto:</strong> ${fechaFormateada}</p>
+                                  <p style="margin: 5px 0 0 0; font-size: 14px; color: #4b5563;"><strong>Estado:</strong> Baja Tramitada Correctamente</p>
+                              </div>
+
+                              <p style="font-size: 14px; color: #374151; line-height: 1.5;">
+                                  Sentimos mucho que no puedas continuar con nosotros este trimestre. ¡Esperamos volver a verte muy pronto con las gafas de bucear puestas! 🌊
+                              </p>
+                              <p style="margin-top: 25px;">Saludos,<br><strong>Coordinación de Extraescolares CSB</strong></p>
+                              <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;" />
+                              <p style="font-size: 11px; color: #999;">Este es un mensaje automático generado por el sistema de gestión de piscina.</p>
+                          </div>
+                      `
+                  }
+              });
+              console.log("🚀 ¡Perfecto! Documento de correo creado en la colección 'mail'.");
+          } else {
+              console.log("⚠️ Alerta: No se encontró ningún email ni en el alumno ni en el usuario padre.");
+          }
+
+          showToast("✅ Baja tramitada correctamente.", "success");
+
+      } catch (error) {
+          console.error("❌ Error en el proceso de baja:", error);
+          showToast("❌ Hubo un error al tramitar la baja: " + error.message, "error");
+      }
+  }
+};
+
+// B) ARCHIVAR: Borrar definitivamente de la lista
+const archivarBaja = async (alumno) => {
+    if (userRole !== 'admin') return;
+    if (confirm(`🗑️ ¿Eliminar DEFINITIVAMENTE a ${alumno.nombre} de la lista?\n\nLa plaza quedará libre.`)) {
+        await updateDoc(doc(db, 'students', alumno.id), {
+            estado: 'sin_inscripcion', // Aquí desaparece de la lista
+            actividad: null, dias: null, horario: null, precio: null,
+            citaId: null, citaNivel: null, citaFecha: null, citaHora: null,
+            validadoAdmin: null, fechaSolicitudBaja: null,
+            fechaAlta: null, fechaBaja: null, grupo: null, revisadoAdmin: null
+        });
+    }
+};
+
+  const borrarAlumno = async (e, id) => { 
+      e.stopPropagation(); // Evita abrir ficha al borrar
+      if (userRole !== 'admin') return; 
+      if(confirm('⚠️ ¿Borrar definitivamente?')) await deleteDoc(doc(db, 'students', id)); 
+  }
+  
+  const agregarAviso = async (e) => { e.preventDefault(); if (!nuevoAviso) return; await addDoc(collection(db, 'avisos'), { texto: nuevoAviso, fecha: new Date().toISOString() }); setNuevoAviso(''); };
+  const borrarAviso = async (id) => { if (confirm('¿Borrar aviso?')) await deleteDoc(doc(db, 'avisos', id)); };
+  // PEGA ESTO EN EL HUECO:
+  const handleCrearStaff = async (e) => { 
+    e.preventDefault(); 
+    
+    // 1. Comprobamos que eres admin
+    if (userRole !== 'admin') return showToast("⛔ Solo coordinadores pueden crear usuarios.", "error");
+    
+    setLoadingStaff(true); 
+    try { 
+        // 2. Crea el usuario (Email + Contraseña)
+        const credencial = await createUserWithEmailAndPassword(auth, newStaff.email, newStaff.password);
+        
+        // 3. Guarda el Rol (Profe/Admin) en la base de datos
+        await setDoc(doc(db, 'users', credencial.user.uid), {
+            email: newStaff.email,
+            role: newStaff.role,
+            createdAt: new Date().toISOString()
+        });
+
+        showToast(`✅ Usuario ${newStaff.email} creado. Cierra sesión y entra como Admin.`, "success");
+        setNewStaff({ email: '', password: '', role: 'profe' }); 
+
+    } catch (error) { 
+        console.error(error);
+        showToast("❌ Error: " + error.message, "error"); 
+    } finally { 
+        setLoadingStaff(false); 
+    } 
+};
+  const borrarMiembroEquipo = async (miembro) => { if (miembro.email === userEmail) return showToast("No puedes borrarte a ti mismo", "warning"); if (confirm("¿Borrar usuario?")) await deleteDoc(doc(db, 'users', miembro.id)); };
+  
+  const descargarExcel = () => {
+    // 1. Cabeceras
+    let cabecera = [];
+    if (soySuperAdmin) {
+      cabecera = ['Alumno,Curso,Letra,Tipo,Actividad,Días,Horario,Fecha Alta,Precio,Pagador,DNI Pagador,Email Pagador,CP,Población,Dirección,IBAN,Telefono\n'];
+    } else {
+      cabecera = ['Alumno,Curso,Letra,Tipo,Actividad,Días,Horario,Fecha Alta\n'];
+    }
+    
+    // 2. Mapeo de datos con CÁLCULO DE PRECIO REAL
+    const filas = listadoGlobal.map(a => {
+      const p = padres[a.parentId] || {}; 
+      
+      const nombre = (a.nombre || '').replace(new RegExp('"', 'g'), '""');
+      const actividad = (a.actividad || '-').replace(new RegExp('"', 'g'), '""');
+      const dias = (a.dias || '-').replace(new RegExp('"', 'g'), '""');
+      const horario = (a.horario || '-').replace(new RegExp('"', 'g'), '""');
+      const fAlta = (a.fechaAlta || '-').replace(new RegExp('"', 'g'), '""');
+      const tipoAlumno = (p.tipo === 'externo') ? 'EXTERNO' : 'INTERNO';
+
+      // 💰 LÓGICA DE PRECIO INTELIGENTE PARA EL EXCEL
+      let precioFinal = '0';
+      if (a.precio && parseInt(a.precio) > 0) {
+        precioFinal = a.precio;
+      } else {
+        // Si es 0 o está vacío, buscamos en el catálogo de actividades
+        const actividadMatch = OFERTA_ACTIVIDADES.find(act => 
+          act.nombre === a.actividad || act.id === a.actividadId
+        );
+        if (actividadMatch) {
+          const opcionMatch = actividadMatch.opciones?.find(op => op.dias === a.dias);
+          precioFinal = opcionMatch ? opcionMatch.precio : actividadMatch.precioResumen;
+        }
+      }
+      // Limpiamos el símbolo € por si acaso para que en el Excel sea un número puro
+      precioFinal = String(precioFinal).replace('€', '').trim();
+
+      if (soySuperAdmin) {
+        const pagador = (p.nombrePagador || '').replace(new RegExp('"', 'g'), '""');
+        const iban = (p.iban || '').replace(new RegExp('"', 'g'), '""');
+        const direccion = (p.direccion || '').replace(new RegExp('"', 'g'), '""');
+        const tel = p.telefono1 || '';
+        const dni = (p.dniPagador || '').replace(new RegExp('"', 'g'), '""');
+        const mail = (p.email || '').replace(new RegExp('"', 'g'), '""');
+        const cp = (p.cp || '').replace(new RegExp('"', 'g'), '""');
+        const pob = (p.poblacion || '').replace(new RegExp('"', 'g'), '""');
+
+        return `"${nombre}","${a.curso}","${a.letra}","${tipoAlumno}","${actividad}","${dias}","${horario}","${fAlta}","${precioFinal}","${pagador}","${dni}","${mail}","${cp}","${pob}","${direccion}","${iban}","${tel}"`;
+      } else {
+        return `"${nombre}","${a.curso}","${a.letra}","${tipoAlumno}","${actividad}","${dias}","${horario}","${fAlta}"`;
+      }
+    });
+
+    // 3. Generación del archivo
+    const link = document.createElement("a"); 
+    link.href = "data:text/csv;charset=utf-8,\uFEFF" + encodeURI(cabecera + filas.join("\n")); 
+    
+    const nombreArchivo = soySuperAdmin ? "listado_PAGOS_completo.csv" : "listado_asistencia_profes.csv";
+    link.download = nombreArchivo; 
+    link.click();
+  };
+  // 🔄 FUNCIÓN PARA SINCRONIZAR IDs ANTIGUOS
+  const sincronizarAlumnosAntiguos = async () => {
+    const confirmacion = window.confirm("¿Sincronizar IDs y DÍAS de alumnos antiguos?");
+    if (!confirmacion) return;
+
+    const promesas = alumnos.map(async (alumno) => {
+      let updates = {};
+      const actText = (alumno.actividad || '').toLowerCase(); // <--- Esta es tu variable
+
+      // 1. Detectar ID (Si no lo tiene)
+      if (!alumno.actividadId) {
+          if (actText.includes('chapoteo')) updates.actividadId = 'chapoteo';
+          else if (actText.includes('16:15')) updates.actividadId = 'primaria_1615';
+          else if (actText.includes('1º-3º')) updates.actividadId = 'primaria_123_tarde';
+          else if (actText.includes('4º-6º')) updates.actividadId = 'primaria_456_tarde';
+          else if (actText.includes('waterpolo')) updates.actividadId = 'waterpolo';
+          else if (actText.includes('nado libre') || actText.includes('libre')) updates.actividadId = 'nado_libre';
+          // ⬇️ CORREGIDO: Usamos actText y no texto
+          else if (actText.includes('eso') || actText.includes('bach')) updates.actividadId = 'eso_bach';
+          else if (actText.includes('adulto')) updates.actividadId = 'adultos';
+          else if (actText.includes('aquagym')) updates.actividadId = 'aquagym';
+      }
+
+        // 2. Detectar DÍAS (Vital para el aforo diario)
+        // Si el texto de la actividad dice "Lunes", le asignamos "Lunes"
+        if (!alumno.dias) {
+            if (actText.includes('lunes')) updates.dias = 'Lunes';
+            if (actText.includes('martes')) updates.dias = 'Martes';
+            if (actText.includes('miércoles')) updates.dias = 'Miércoles';
+            if (actText.includes('jueves')) updates.dias = 'Jueves';
+            if (actText.includes('viernes')) updates.dias = 'Viernes';
+            // Para los packs
+            if (actText.includes('lunes y miércoles')) updates.dias = 'Lunes y Miércoles';
+            if (actText.includes('martes y jueves')) updates.dias = 'Martes y Jueves';
+        }
+
+        if (Object.keys(updates).length > 0) {
+            await updateDoc(doc(db, 'students', alumno.id), updates);
+        }
+    });
+
+    await Promise.all(promesas);
+    showToast("¡Sincronización de IDs y Días completada!", "success");
+};
+
+  // --- 4. LISTAS FILTRADAS ---
+  const gruposUnicos = [...new Set(alumnos.map(a => a.actividad).filter(g => g))].sort();
+// --- 📈 LÓGICA DE PREVISIÓN INTELIGENTE (REPARADA) ---
+const hoyD = new Date();
+const mesActualNum = hoyD.getMonth() + 1; 
+
+// 🎯 DETECTOR DE TEMPORADA: De Marzo a Septiembre, la previsión SIEMPRE mira a Octubre
+const esTemporadaReserva = mesActualNum >= 3 && mesActualNum <= 9;
+
+let mesSigNom = "";
+let patronMesSig = "";
+
+if (esTemporadaReserva) {
+    // 🚀 MODO RESERVA: Forzamos la vista al estreno del curso
+    mesSigNom = "octubre";
+    patronMesSig = getDynamicAcademicYear().rawPattern;
+} else {
+    // 🏊 MODO CURSO: Lógica normal de mes siguiente
+    const proximoMesDate = new Date(hoyD.getFullYear(), hoyD.getMonth() + 1, 1);
+    mesSigNom = proximoMesDate.toLocaleString('es-ES', { month: 'long' });
+    const añoRef = proximoMesDate.getFullYear();
+    const mesRef = String(proximoMesDate.getMonth() + 1).padStart(2, '0');
+    patronMesSig = `${añoRef}-${mesRef}`;
+}
+
+// 1. Limpiamos la base
+const alumnosReales = alumnos.filter(a => a.nombre && a.estado);
+
+// 2. ALTAS: Solo si su fecha de ALTA coincide con el patrón (ej: "2026-10") y están inscritos
+const previsAltas = alumnosReales.filter(a => 
+  a.estado === 'inscrito' && a.fechaAlta && String(a.fechaAlta).startsWith(patronMesSig)
+);
+
+// 3. BAJAS: Salen si su fecha de BAJA coincide con el patrón
+const previsBajas = alumnosReales.filter(a => {
+  const coincideFecha = a.fechaBaja && String(a.fechaBaja).startsWith(patronMesSig);
+  const esEstadoBaja = ['baja_pendiente', 'baja_finalizada'].includes(a.estado);
+  return coincideFecha && esEstadoBaja;
+});
+
+// 💰 FUNCIÓN PARA BUSCAR PRECIO REAL (Tu lógica original intacta)
+const obtenerPrecioReal = (alumno) => {
+  if (alumno.precio) return parseInt(alumno.precio);
+  const actividadMatch = OFERTA_ACTIVIDADES.find(act => 
+    act.nombre === alumno.actividad || act.id === alumno.actividadId
+  );
+  if (actividadMatch) {
+    const opcionMatch = actividadMatch.opciones?.find(op => op.dias === alumno.dias);
+    if (opcionMatch) return parseInt(opcionMatch.precio);
+    return parseInt(actividadMatch.precioResumen) || 0;
+  }
+  return 0;
+};
+
+// 📊 CÁLCULOS TOTALES (Basados en el mes inteligente)
+const ingresosAltas = previsAltas.reduce((total, a) => total + obtenerPrecioReal(a), 0);
+const perdidasBajas = previsBajas.reduce((total, a) => total + obtenerPrecioReal(a), 0);
+const balanceNeto = previsAltas.length - previsBajas.length;
+const balanceEconomico = ingresosAltas - perdidasBajas;
+// --- 1. LISTADO GLOBAL (VITAMINADO CON BUSCADOR DE PADRES) ---
+const listadoGlobal = alumnos.filter(a => {
+  // 1. Obtenemos los datos del padre usando el parentId del alumno
+  const p = padres[a.parentId] || {};
+  
+  const busq = busqueda.toLowerCase();
+  
+  // 2. ¿Coincide el nombre del niño?
+  const coincideNombreNiño = (a.nombre || '').toLowerCase().includes(busq);
+  
+  // 3. ¿Coincide algún dato del responsable? (Nombre, Contacto o Pagador)
+  // 🚩 Incluimos 'personaContacto' que es lo que añadimos ayer para registros internos
+  const coincideResponsable = 
+    (p.nombre || '').toLowerCase().includes(busq) || 
+    (p.personaContacto || '').toLowerCase().includes(busq) ||
+    (p.nombrePagador || '').toLowerCase().includes(busq);
+
+  // 4. Filtro de grupo y estados
+  const coincideGrupo = filtroGrupo ? a.actividad === filtroGrupo : true;
+  
+  // Mantenemos tus estados activos (sin lista de espera como querías)
+  const estadosActivos = ['inscrito', 'requiere_prueba', 'prueba_reservada', 'baja_pendiente']; 
+  const esAlumnoReal = estadosActivos.includes(a.estado);
+
+  // RESULTADO: Si coincide el niño O el padre, y el grupo/estado es correcto, se muestra
+  return (coincideNombreNiño || coincideResponsable) && coincideGrupo && esAlumnoReal;
+});
+
+// --- 2. LISTADO PRUEBAS (FILTRO BLINDADO) ---
+const listadoPruebas = alumnos.filter(a => {
+  // REGLA 1: Si ya está aceptado o revisado, FUERA (esto es lo que hace que desaparezcan al dar al botón)
+  if (a.estado === 'inscrito' || a.revisadoAdmin === true || a.validadoAdmin === true) return false;
+
+  // REGLA 2: Si es una baja o antiguo, FUERA (esto elimina a los fantasmas)
+  if (a.estado === 'baja_pendiente' || a.estado === 'baja_finalizada' || a.esAntiguoAlumno) return false;
+
+  // REGLA 3: Exclusiones por categoría (Waterpolo, Infantil, Adultos)
+  const act = (a.actividad || '').toUpperCase();
+  const cur = (a.curso || '').toUpperCase();
+  if (act.includes('INFANTIL') || cur.includes('INFANTIL') || 
+      act.includes('ADULTO') || cur.includes('ADULTO') || 
+      act.includes('WATERPOLO')) return false;
+
+  // REGLA 4: Solo entran los que están esperando prueba
+  // 🚩 CAMBIO: Añadimos check de citaNivel para evitar registros incompletos
+  return a.estado === 'prueba_reservada' && a.citaNivel;
+});
+
+// 2. CORRECCIÓN BAJAS: Añadimos 'baja_finalizada' para que no desaparezcan
+const listadoBajas = alumnos.filter(a => a.estado === 'baja_pendiente' || a.estado === 'baja_finalizada');
+
+  // --- 5. RENDERIZADO (HTML) ---
+  return (
+    <div className="min-h-screen bg-gray-100 p-6 font-sans relative">
+     {/* HEADER RESPONSIVO CORREGIDO */}
+<div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 bg-white p-4 rounded shadow gap-4">
+  <div>
+      <h1 className="text-xl font-black text-gray-800">Panel de Gestión</h1>
+      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">
+        {userEmail} <span className="text-blue-500 mx-1">•</span> {userRole}
+      </p>
+  </div>
+
+  <div className="flex flex-wrap gap-2 w-full md:w-auto justify-end">
+      {/* 🔄 BOTÓN DE SINCRONIZACIÓN */}
+      {userRole === 'admin' && (
+        <button 
+          onClick={sincronizarAlumnosAntiguos} 
+          className="flex-1 md:flex-none bg-amber-100 text-amber-700 px-3 py-2 md:py-1 rounded text-[10px] font-black border border-amber-200 hover:bg-amber-200 transition-colors uppercase whitespace-nowrap"
+        >
+          🔄 <span className="hidden xs:inline">Sincronizar</span>
+        </button>
+      )}
+
+      {/* 📊 BOTÓN EXCEL */}
+      {userRole === 'admin' && (
+        <button 
+          onClick={descargarExcel} 
+          className="flex-1 md:flex-none bg-green-600 text-white px-3 py-2 md:py-1 rounded text-xs font-bold shadow-sm hover:bg-green-700 transition-colors uppercase whitespace-nowrap"
+        >
+          Excel
+        </button>
+      )}
+      {/* 🔔 BOTÓN DE NOTIFICACIONES (NUEVO) */}
+      <button 
+        onClick={solicitarPermisoNotificaciones}
+        className={`p-2 rounded-full transition-all shadow-sm flex items-center justify-center border ${
+          Notification.permission === 'granted' 
+            ? 'bg-emerald-50 text-emerald-600 border-emerald-200' 
+            : 'bg-amber-50 text-amber-600 border-amber-200 animate-bounce'
+        }`}
+        title="Activar avisos en este equipo"
+      >
+        <span className="text-sm">{Notification.permission === 'granted' ? '🔔' : '🔕'}</span>
+      </button>
+
+      {/* 🚪 BOTÓN SALIR */}
+      <button 
+        onClick={logout} 
+        className="flex-1 md:flex-none text-red-500 border border-red-200 px-3 py-2 md:py-1 rounded text-xs font-bold hover:bg-red-50 transition-colors uppercase whitespace-nowrap"
+      >
+        Salir
+      </button>
+  </div>
+</div>
+
+{/* PESTAÑAS AJUSTADAS ESTILO CHIPS FLOTANTES GLASSMORPHIC */}
+<div className="flex gap-2 p-1.5 mb-8 overflow-x-auto scrollbar-hide bg-white/80 backdrop-blur-md border border-gray-100 rounded-2xl sticky top-2 z-40 shadow-sm">
+  {['global', 'ocupacion', 'pruebas', 'espera', 'prevision', 'bajas', 'equipo', 'avisos'].map(t => {
+     if ((t === 'equipo' || t === 'bajas' || t === 'prevision') && userRole !== 'admin') return null;
+     
+     let count = 0; 
+     if (t === 'pruebas') count = listadoPruebas.length; 
+     if (t === 'bajas') count = listadoBajas.length;
+     if (t === 'espera') count = alumnos.filter(a => a.estado === 'lista_espera').length;
+     if (t === 'prevision') count = previsAltas.length + previsBajas.length;
+
+     return (
+        <button 
+          key={t} 
+          onClick={() => setTab(t)} 
+          className={`
+            px-4 py-3 font-bold uppercase text-[9px] md:text-xs whitespace-nowrap 
+            flex items-center justify-center gap-2 rounded-xl transition-all duration-300 transform active:scale-95 flex-1 min-w-[100px]
+            ${tab === t 
+              ? (t === 'espera' ? 'bg-amber-500 text-white shadow-lg shadow-amber-500/25 border border-amber-500 font-extrabold' : 
+                 t === 'prevision' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/25 border border-indigo-600 font-extrabold' :
+                 'bg-blue-600 text-white shadow-lg shadow-blue-600/25 border border-blue-600 font-extrabold')
+              : 'text-slate-500 hover:text-slate-800 hover:bg-slate-100/70 border border-transparent'
+            }
+          `}
+        >
+            <span className="text-sm">
+  {t === 'global' && '👥'}
+  {t === 'ocupacion' && '📊'}
+  {t === 'pruebas' && '🎯'}
+  {t === 'espera' && '⏳'}
+  {t === 'prevision' && '📈'} 
+  {t === 'bajas' && '📉'}
+  {t === 'equipo' && '🛡️'}
+  {t === 'avisos' && '📢'}
+  {t === 'mis_clases' && '🏊‍♂️'} {/* 👈 AÑADE ESTA LÍNEA */}
+</span>
+            
+<span>
+  {t === 'ocupacion' ? 'PLAZAS' : 
+   t === 'espera' ? 'ESPERA' : 
+   t === 'prevision' ? 'PREVISIÓN' : 
+   t === 'mis_clases' ? 'MIS CLASES' : // 👈 Esta es la "traducción"
+   t.toUpperCase()}
+</span>
+
+{count > 0 && (
+  <span className={`
+    text-[9px] px-2 py-0.5 rounded-full font-black font-mono shadow-sm transition-colors duration-300
+    ${tab === t 
+      ? 'bg-white text-slate-900 shadow-inner' 
+      : (t === 'espera' ? 'bg-amber-100 text-amber-800' : t === 'prevision' ? 'bg-indigo-100 text-indigo-800' : 'bg-red-100 text-red-800')
+    }
+  `}>
+    {count}
+  </span>
+)}
+        </button>
+     );
+  })}
+</div>
+     {/* 📊 MATRIZ DE OCUPACIÓN DIARIA (INTELIGENTE TEMPORADA OCTUBRE) */}
+{tab === 'ocupacion' && (
+  <div className="space-y-4 animate-fade-in">
+    <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+      <div className="p-4 bg-slate-800 text-white flex justify-between items-center">
+        <h3 className="text-xs font-black uppercase tracking-widest flex items-center gap-2">
+          <span>🏊‍♂️</span> Control de Aforo Diario
+        </h3>
+        
+        {/* Selector de Mes Inteligente */}
+        <div className="flex bg-slate-700 p-1 rounded-lg">
+          <button 
+            onClick={() => setVistaMes('actual')}
+            className={`px-3 py-1 rounded text-[9px] font-black uppercase transition-all ${vistaMes === 'actual' ? 'bg-emerald-500 text-white' : 'text-slate-400'}`}
+          >
+            {new Date().toLocaleString('es-ES', { month: 'long' })} (Ahora)
+          </button>
+          <button 
+            onClick={() => setVistaMes('proximo')}
+            className={`px-3 py-1 rounded text-[9px] font-black uppercase transition-all ${vistaMes === 'proximo' ? 'bg-blue-500 text-white' : 'text-slate-400'}`}
+          >
+            {/* 🚩 CAMBIO CLAVE: Si hoy es antes de Octubre, forzamos el nombre a Octubre */}
+            {new Date() < new Date(`${getDynamicAcademicYear().startYear}-10-01`) 
+              ? 'PREVISIÓN OCTUBRE' 
+              : new Date(new Date().setMonth(new Date().getMonth() + 1)).toLocaleString('es-ES', { month: 'long' })}
+          </button>
+        </div>
+      </div>
+      
+      <div className="overflow-x-auto">
+        <table className="w-full text-left">
+          <thead>
+            <tr className="bg-gray-50 border-b">
+              <th className="p-4 text-[10px] font-black text-gray-400 uppercase border-r">Actividad</th>
+              {['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'].map(d => (
+                <th key={d} className="p-4 text-[10px] font-black text-gray-400 uppercase text-center">{d}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {[
+              { id: 'chapoteo', m: 16, n: 'Chapoteo (16:00)' },
+              { id: 'primaria_1615', m: 12, n: 'Primaria 1º-3º (16:15)', cursosRelacionados: ['1PRI', '2PRI', '3PRI'] },
+              { id: 'primaria_1615', m: 12, n: 'Primaria 4º-6º (16:15)', cursosRelacionados: ['4PRI', '5PRI', '6PRI'] },
+              { id: 'primaria_123_tarde', m: 8, n: '1º-3º Prim (17:30)' },
+              { id: 'primaria_456_tarde', m: 8, n: '4º-6º Prim (17:30)' },
+              { id: 'waterpolo', m: 12, n: 'Waterpolo' },
+              { id: 'eso_bach', m: 10, n: 'ESO / Bachillerato', cursosRelacionados: ['1ESO', '2ESO', '3ESO', '4ESO', '1BACH', '2BACH'] },
+              { id: 'adultos', m: 10, n: 'Adultos' },
+              { id: 'aquagym', m: 12, n: 'Aquagym' },
+              { id: 'nado_libre', m: 10, n: 'Nado Libre (18:30-19:00)' } 
+            ].map((g, index) => (
+              <tr key={g.n + index} className="border-b hover:bg-gray-50/50 transition-colors">
+                <td className="p-4 border-r bg-gray-50/30">
+                  <p className="text-xs font-bold text-gray-700 leading-tight">{g.n}</p>
+                  <p className="text-[9px] text-gray-400 font-bold uppercase mt-0.5">Límite: {g.m}</p>
+                </td>
+                {['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'].map(dia => {
+                  const ocupados = alumnos.filter(a => {
+                    const coincideId = a.actividadId === g.id;
+                    const coincideDia = a.dias?.toLowerCase().includes(dia.toLowerCase());
+                    const listaCursos = g.cursosRelacionados || g.cursos;
+                    const coincideCurso = listaCursos ? listaCursos.includes(a.curso) : true;
+                    
+                    if (!coincideId || !coincideDia || !coincideCurso) return false;
+
+                     // --- 🧠 NUEVA LÓGICA TEMPORAL PARA TEMPORADA DE RESERVA ---
+                    const hoy = new Date();
+                    const academicInfo = getDynamicAcademicYear();
+                    const fechaAlu = (a.fechaAlta || a.fechaInscripcion || "").toString();
+                    const esAltaOctubre = fechaAlu.includes(academicInfo.rawPattern);
+
+                    if (vistaMes === 'actual') {
+                      // VISTA ABRIL: Solo inscritos actuales. EXCLUIMOS a los de Octubre.
+                      return (a.estado === 'inscrito' || a.estado === 'baja_pendiente') && !esAltaOctubre;
+                    } else {
+                      // VISTA OCTUBRE (PREVISIÓN):
+                      if (hoy < new Date(academicInfo.isoStartDate)) {
+                        // Si estamos en pre-inscripción: Contamos los que están (y no son baja) + los de Octubre
+                        if (a.estado === 'baja_pendiente' || a.estado === 'baja_finalizada') return false;
+                        return a.estado === 'inscrito' || esAltaOctubre;
+                      } else {
+                        // Si ya pasamos Octubre: Lógica de mes siguiente normal
+                        const proximo = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 1);
+                        const mesSiguienteISO = `${proximo.getFullYear()}-${String(proximo.getMonth() + 1).padStart(2, '0')}`;
+                        if (a.estado === 'baja_pendiente') return false;
+                        return a.estado === 'inscrito' || fechaAlu.includes(mesSiguienteISO);
+                      }
+                    }
+                  }).length;
+
+                  const tieneBajasProximas = alumnos.some(a => {
+                    const coincideId = a.actividadId === g.id;
+                    const coincideDia = a.dias?.toLowerCase().includes(dia.toLowerCase());
+                    const listaCursos = g.cursosRelacionados || g.cursos;
+                    const coincideCurso = listaCursos ? listaCursos.includes(a.curso) : true;
+                    return coincideId && coincideDia && coincideCurso && a.estado === 'baja_pendiente';
+                  });
+                              
+                  const critico = ocupados >= g.m;
+
+                  return (
+                    <td key={dia} className="p-2">
+                      <div 
+                        onClick={() => ocupados > 0 && setFiltroRadar({ 
+                          id: g.id, 
+                          nombre: g.n, 
+                          dia: dia, 
+                          cursos: g.cursosRelacionados || g.cursos,
+                          mesVista: vistaMes
+                        })}
+                        className={`h-12 rounded-xl flex flex-col items-center justify-center border-2 transition-all cursor-pointer hover:shadow-inner active:scale-95 ${
+                          ocupados === 0 ? 'border-dashed border-gray-100 text-gray-200' :
+                          (vistaMes === 'actual' && tieneBajasProximas) ? 'bg-orange-500 border-orange-600 text-white font-black shadow-md' :
+                          critico ? 'bg-red-500 border-red-600 text-white font-black shadow-md' :
+                          ocupados > (g.m * 0.7) ? 'bg-amber-50 border-amber-200 text-amber-600' : 
+                          'bg-emerald-50 border-emerald-100 text-emerald-600 font-bold'
+                        }`}
+                      >
+                        <span className="text-sm leading-none">{ocupados > 0 ? ocupados : '-'}</span>
+                        {ocupados > 0 && <span className="text-[8px] mt-1 opacity-60">/{g.m}</span>}
+                      </div>
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+{/* 📋 LISTA DETALLADA DE ALUMNOS (Aparece abajo al pulsar un número) */}
+{filtroRadar && (
+      <div className="bg-blue-600 rounded-2xl shadow-lg p-4 text-white animate-in slide-in-from-bottom-4 duration-300">
+        <div className="flex justify-between items-center mb-4">
+          <div>
+            <h4 className="font-black text-sm uppercase tracking-tighter">Lista de Asistencia</h4>
+            <p className="text-[10px] opacity-80 font-bold uppercase">{filtroRadar.nombre} — {filtroRadar.dia}</p>
+          </div>
+          
+          {/* 🚩 CONTENEDOR DE BOTONES */}
+          <div className="flex items-center gap-2">
+            <button 
+              onClick={() => {
+                // Filtramos los alumnos exactamente igual que en el Radar dinámico
+                const hoy = new Date();
+                const proximo = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 1);
+                const mesSigISO = `${proximo.getFullYear()}-${String(proximo.getMonth() + 1).padStart(2, '0')}`;
+
+                const listaParaImprimir = alumnos.filter(a => {
+                  const coincideId = a.actividadId === filtroRadar.id;
+                  const coincideDia = a.dias?.toLowerCase().includes(filtroRadar.dia.toLowerCase());
+                  const coincideCurso = filtroRadar.cursos ? filtroRadar.cursos.includes(a.curso) : true;
+                  const fechaAlu = (a.fechaAlta || a.fechaInscripcion || "").toString();
+
+                  if (!coincideId || !coincideDia || !coincideCurso) return false;
+
+                  if (filtroRadar.mesVista === 'actual') {
+                    const esAltaFutura = fechaAlu.includes(mesSigISO);
+                    return (a.estado === 'inscrito' || a.estado === 'baja_pendiente') && !esAltaFutura;
+                  } else {
+                    if (a.estado === 'baja_pendiente') return false;
+                    return a.estado === 'inscrito' || fechaAlu.includes(mesSigISO);
+                  }
+                });
+                imprimirListaAsistencia(listaParaImprimir, filtroRadar);
+              }}
+              className="bg-emerald-500 hover:bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-[10px] font-black uppercase flex items-center gap-1.5 shadow-lg transition-all active:scale-95"
+            >
+              <span>🖨️</span> Imprimir
+            </button>
+
+            <button 
+              onClick={() => setFiltroRadar(null)}
+              className="bg-white/20 hover:bg-white/40 p-2 rounded-full transition"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+          {alumnos
+            .filter(a => {
+              const coincideId = a.actividadId === filtroRadar.id;
+              const coincideDia = a.dias?.toLowerCase().includes(filtroRadar.dia.toLowerCase());
+              const coincideCurso = filtroRadar.cursos ? filtroRadar.cursos.includes(a.curso) : true;
+              
+              if (!coincideId || !coincideDia || !coincideCurso) return false;
+
+              // Lógica dinámica de meses
+              const hoy = new Date();
+              const proximo = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 1);
+              const mesSigISO = `${proximo.getFullYear()}-${String(proximo.getMonth() + 1).padStart(2, '0')}`;
+              const fechaAlu = (a.fechaAlta || a.fechaInscripcion || "").toString();
+
+              if (filtroRadar.mesVista === 'actual') {
+                // Filtro para el mes en curso: Incluye inscritos/bajas pero quita altas futuras
+                const esAltaFutura = fechaAlu.includes(mesSigISO);
+                return (a.estado === 'inscrito' || a.estado === 'baja_pendiente') && !esAltaFutura;
+              } else {
+                // Filtro para el mes siguiente: Quita bajas y suma altas nuevas
+                if (a.estado === 'baja_pendiente') return false;
+                return a.estado === 'inscrito' || fechaAlu.includes(mesSigISO);
+              }
+            })
+            .map(a => (
+              <div 
+                key={a.id} 
+                onClick={() => { setFiltroRadar(null); abrirFicha(a); }}
+                className="bg-white/10 hover:bg-white/20 border border-white/10 p-2 rounded-lg cursor-pointer flex justify-between items-center transition relative"
+              >
+                <div className="overflow-hidden">
+                  <p className="text-xs font-bold truncate">{a.nombre}</p>
+                  <p className="text-[9px] opacity-60 italic">{a.curso}</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  {a.estado === 'baja_pendiente' && (
+                    <span className="bg-orange-500 text-[7px] px-1.5 py-0.5 rounded font-black uppercase">Baja</span>
+                  )}
+                  <span className="text-[10px] bg-white/20 px-1.5 py-0.5 rounded font-mono">ficha →</span>
+                </div>
+              </div>
+            ))}
+        </div>
+      </div>
+    )}
+  </div>
+)}
+{/* 🚀 TAB: PREVISIÓN (VERSION PRO CON DINERO Y RADAR) */}
+{tab === 'prevision' && (
+  <div className="space-y-6 animate-fade-in pb-20 text-left">
+    <div className="bg-slate-900 p-6 rounded-3xl text-white shadow-xl relative overflow-hidden">
+      <div className="relative z-10">
+        <h2 className="text-2xl font-black uppercase tracking-tighter italic">Previsión: {mesSigNom}</h2>
+        <p className="text-slate-400 text-[10px] font-bold uppercase tracking-widest mt-1">
+          Balance económico y gestión de plazas libres
+        </p>
+      </div>
+      <div className="absolute right-[-10px] top-[-10px] text-8xl opacity-10">📈</div>
+    </div>
+
+    {/* TARJETAS CON DINERO REAL */}
+    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="bg-white p-5 rounded-2xl shadow-sm border-b-4 border-emerald-500">
+        <p className="text-gray-400 text-[10px] font-black uppercase">Altas: +{ingresosAltas}€</p>
+        <div className="flex items-center justify-between mt-1">
+          <span className="text-3xl font-black text-slate-800">{previsAltas.length}</span>
+          <span className="text-emerald-500 text-xl font-black">↑</span>
+        </div>
+      </div>
+
+      <div className="bg-white p-5 rounded-2xl shadow-sm border-b-4 border-red-500">
+        <p className="text-gray-400 text-[10px] font-black uppercase">Bajas: -{perdidasBajas}€</p>
+        <div className="flex items-center justify-between mt-1">
+          <span className="text-3xl font-black text-slate-800">{previsBajas.length}</span>
+          <span className="text-red-500 text-xl font-black">↓</span>
+        </div>
+      </div>
+
+      <div className={`p-5 rounded-2xl shadow-sm border-b-4 ${balanceEconomico >= 0 ? 'border-indigo-500 bg-indigo-50' : 'border-orange-500 bg-orange-50'}`}>
+        <p className="text-gray-400 text-[10px] font-black uppercase">Balance Neto</p>
+        <div className="flex items-center justify-between mt-1">
+          <span className={`text-2xl font-black ${balanceEconomico >= 0 ? 'text-indigo-700' : 'text-orange-700'}`}>
+            {balanceEconomico > 0 ? `+${balanceEconomico}` : balanceEconomico}€
+          </span>
+          <span className="text-[10px] font-bold text-gray-500 uppercase italic">Caja</span>
+        </div>
+      </div>
+
+      <div className="bg-amber-500 p-5 rounded-2xl shadow-sm border-b-4 border-amber-700 text-white">
+        <p className="text-amber-100 text-[10px] font-black uppercase">Radar de Huecos</p>
+        <div className="flex items-center justify-between mt-1">
+          <span className="text-3xl font-black">{previsBajas.length}</span>
+          <span className="text-xs font-bold uppercase opacity-80 italic">Libres</span>
+        </div>
+      </div>
+    </div>
+
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+  {/* COLUMNA ENTRADAS (ALTAS) */}
+  <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
+    <div className="bg-emerald-500 p-4 text-white font-black text-[10px] uppercase tracking-[0.2em] text-center">
+      📥 Altas Confirmadas
+    </div>
+    <div className="divide-y divide-gray-50 max-h-[450px] overflow-y-auto">
+      {previsAltas.map(a => (
+        <div key={a.id} onClick={() => abrirFicha(a)} className="p-4 flex justify-between items-center hover:bg-gray-50 cursor-pointer group transition-colors text-left">
+          <div>
+            <p className="font-bold text-slate-800 text-sm">{a.nombre}</p>
+            {/* 🚩 CORRECCIÓN: Mostramos Actividad + Días */}
+            <p className="text-[10px] text-blue-600 font-black uppercase tracking-tight">
+              {a.actividad} <span className="text-gray-400 mx-1">•</span> {a.dias || 'Día no asignado'}
+            </p>
+          </div>
+          <div className="text-right">
+            <p className="text-emerald-600 font-bold text-xs">+{obtenerPrecioReal(a)}€</p>
+            <span className="bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded text-[8px] font-black uppercase">Nuevo</span>
+          </div>
+        </div>
+      ))}
+      {previsAltas.length === 0 && <p className="p-10 text-center text-gray-400 text-xs italic">No hay altas para este mes</p>}
+    </div>
+  </div>
+
+  {/* COLUMNA SALIDAS (BAJAS) */}
+  <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
+    <div className="bg-red-500 p-4 text-white font-black text-[10px] uppercase tracking-[0.2em] text-center">
+      📤 Huecos que se liberan
+    </div>
+    <div className="divide-y divide-gray-50 max-h-[450px] overflow-y-auto">
+      {previsBajas.map(a => {
+        const candidatos = alumnos.filter(esp => esp.estado === 'lista_espera' && esp.actividad === a.actividad);
+        
+        return (
+          <div key={a.id} className="p-4 flex flex-col gap-3 hover:bg-red-50/20 transition-all group text-left">
+            <div className="flex justify-between items-center" onClick={() => abrirFicha(a)}>
+              <div>
+                <p className="font-bold text-slate-800 text-sm">{a.nombre}</p>
+                {/* 🚩 CORRECCIÓN: Mostramos Actividad + Días */}
+                <p className="text-[10px] text-red-600 font-black uppercase tracking-tight">
+                  {a.actividad} <span className="text-gray-400 mx-1">•</span> {a.dias || 'Día no indicado'}
+                </p>
+
+                {/* 📅 CONTROL DE FECHAS SEGURO (NUEVO) */}
+                <div className="mt-2 grid grid-cols-2 gap-2 bg-gray-50 p-1.5 rounded-lg border border-gray-200/60 w-56">
+                  <div>
+                    <span className="block text-[8px] font-black text-gray-400 uppercase">📩 Solicitada:</span>
+                    <span className="text-[10px] font-bold text-blue-900">
+                      {a.fechaSolicitudBaja 
+                        ? a.fechaSolicitudBaja.split('-').reverse().join('/') 
+                        : 'No marcada'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="block text-[8px] font-black text-gray-400 uppercase">📅 Efectiva:</span>
+                    <span className="text-[10px] font-bold text-red-600">
+                      {a.fechaBaja 
+                        ? a.fechaBaja.split('-').reverse().join('/') 
+                        : 'Por tramitar'}
+                    </span>
+                  </div>
+                </div>
+
+              </div>
+              <div className="text-right">
+                <p className="text-red-500 font-bold text-xs">-{obtenerPrecioReal(a)}€</p>
+                <span className="bg-red-50 text-red-600 px-2 py-0.5 rounded text-[8px] font-black uppercase italic text-center">Salida</span>
+              </div>
+            </div>
+
+            {/* BOTÓN INTELIGENTE: RADAR DE HUECOS (Mantenemos la funcionalidad que ya te gustaba) */}
+            {candidatos.length > 0 && (
+              <button 
+                onClick={() => setRadarHueco(a)}
+                className="bg-amber-100 hover:bg-amber-200 text-amber-700 text-[9px] font-black py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 border border-amber-200 shadow-sm transition-all active:scale-95"
+              >
+                🎯 HAY {candidatos.length} CANDIDATOS PARA ESTE HUECO
+              </button>
+            )}
+          </div>
+        );
+      })}
+      {previsBajas.length === 0 && <p className="p-10 text-center text-gray-400 text-xs italic">No hay bajas tramitadas</p>}
+    </div>
+  </div>
+</div>  </div>
+)}
+    {/* TAB: GLOBAL (ACTUALIZADO CON LISTA DE ESPERA) */}
+    {tab === 'global' && (
+    <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden animate-fade-in text-left">
+        {/* CABECERA CON BUSCADOR GLASSMORPHIC MEJORADO */}
+        <div className="p-5 bg-gradient-to-r from-slate-50 to-slate-100/30 border-b border-slate-100 flex flex-col md:flex-row gap-4 items-center">
+            <div className="relative flex-1 w-full">
+                <span className="absolute left-3.5 top-3.5 text-slate-400 text-sm">🔍</span>
+                <input 
+                    className="w-full border border-slate-200 p-3 pl-10 rounded-2xl bg-white outline-none focus:ring-4 focus:ring-blue-100 focus:border-blue-500 transition-all shadow-sm text-sm font-medium text-slate-800" 
+                    placeholder="Buscar por alumno o tutor..." 
+                    value={busqueda} 
+                    onChange={e => setBusqueda(e.target.value)} 
+                />
+                {busqueda && (
+                  <button 
+                    onClick={() => setBusqueda('')} 
+                    className="absolute right-3 top-3 text-slate-400 hover:text-slate-600 p-1 rounded-full hover:bg-slate-100 transition-colors"
+                  >
+                    ✕
+                  </button>
+                )}
+            </div>
+            <select 
+                className="w-full md:w-1/3 border border-slate-200 p-3 rounded-2xl font-black text-slate-600 bg-white focus:ring-4 focus:ring-blue-100 focus:border-blue-500 outline-none transition-all shadow-sm text-xs tracking-wider uppercase cursor-pointer" 
+                value={filtroGrupo} 
+                onChange={e => setFiltroGrupo(e.target.value)}
+            >
+                <option value="">📂 Todos los Grupos</option>
+                {gruposUnicos.map(g => (<option key={g} value={g}>{g}</option>))}
+            </select>
+        </div>
+
+        <table className="w-full text-sm text-left">
+            <thead className="bg-slate-50 uppercase text-[10px] font-black tracking-widest text-slate-500 border-b border-slate-100">
+                <tr>
+                    <th className="p-4">Alumno / Responsable</th>
+                    <th className="p-4">Actividad / Alta</th>
+                    <th className="p-4 text-right">Acciones</th>
+                </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+                {listadoGlobal.length > 0 ? listadoGlobal.map(a => (
+                    <tr 
+                      key={a.id} 
+                      onClick={() => abrirFicha(a)} 
+                      className={`cursor-pointer transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md ${
+                          a.estado === 'baja_pendiente' ? 'bg-red-50/40 hover:bg-red-50/70' : 
+                          a.estado === 'lista_espera' ? 'bg-amber-50/40 hover:bg-amber-50/70' : 
+                          'hover:bg-blue-50/40'
+                      }`}
+                    >
+                        <td className="p-4">
+                          <div className="flex flex-col gap-1.5 items-start">
+                            <span className="font-bold text-slate-800 text-sm leading-tight">
+                              {a.nombre}
+                            </span>
+                            
+                            {/* 👤 NOMBRE DEL TUTOR */}
+                            <div className="text-[9px] text-slate-400 font-extrabold uppercase tracking-widest flex items-center gap-1">
+                               <span>👤</span> {padres[a.parentId]?.nombre || padres[a.parentId]?.personaContacto || padres[a.parentId]?.nombrePagador || 'Cargando tutor...'}
+                            </div>
+                            
+                            {/* BADGES DE ESTADO PREMIUM */}
+                            <div className="flex flex-wrap gap-1.5 mt-1">
+                              <span className="text-[9px] bg-blue-50 text-blue-700 px-2 py-0.5 rounded font-bold border border-blue-100/50 uppercase font-mono tracking-wider">
+                                  {a.curso} - {a.letra}
+                              </span>
+                              
+                              {a.estado === 'inscrito' && (
+                                <span className="text-[8px] bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full font-black border border-emerald-200/40 uppercase tracking-widest leading-none shadow-sm flex items-center gap-1">
+                                  ✅ ACTIVO
+                                </span>
+                              )}
+                              
+                              {a.estado === 'prueba_reservada' && (
+                                <span className="text-[8px] bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-full font-black border border-indigo-200/40 uppercase tracking-widest leading-none shadow-sm flex items-center gap-1">
+                                  🏊‍♂️ PRUEBA NIVEL
+                                </span>
+                              )}
+
+                              {a.estado === 'baja_pendiente' && (
+                                <span className="text-[8px] bg-rose-50 text-rose-700 px-2 py-0.5 rounded-full font-black border border-rose-200/40 uppercase tracking-widest leading-none shadow-sm flex items-center gap-1">
+                                  ⚠️ BAJA PENDIENTE
+                                </span>
+                              )}
+                              
+                              {a.estado === 'lista_espera' && (
+                                <span className="text-[8px] bg-amber-50 text-amber-700 px-2 py-0.5 rounded-full font-black border border-amber-200/40 uppercase tracking-widest leading-none shadow-sm flex items-center gap-1 animate-pulse">
+                                  ⏳ EN ESPERA
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </td>
+                        <td className="p-4">
+                          <div className="font-bold text-slate-700 text-sm">{a.actividad || '-'}</div>
+                          {a.dias && <div className="text-[10px] text-slate-400 mt-1 font-medium bg-slate-50 border border-slate-100 rounded px-2 py-0.5 w-fit">📅 {a.dias} | ⏰ {a.horario}</div>}
+                          
+                          <div className="text-[10px] mt-1.5">
+                            {(() => {
+                              let fechaLimpia = '---';
+                              try {
+                                const f = a.fechaAlta || a.fechaInscripcion;
+                                if (f) {
+                                  const iso = typeof f === 'string' ? f : (f.toDate ? f.toDate() : new Date(f)).toISOString();
+                                  fechaLimpia = iso.split('T')[0].split('-').reverse().join('/');
+                                }
+                              } catch (e) { fechaLimpia = 'Error fecha'; }
+
+                              if (a.estado === 'lista_espera') {
+                                return <span className="text-amber-600 font-bold italic">Solicitud: {fechaLimpia}</span>;
+                              } else if (a.fechaAlta || a.fechaInscripcion) {
+                                return <span className="text-green-600 font-bold italic">Alta: {fechaLimpia}</span>;
+                              } else {
+                                return <span className="text-slate-400">Sin fecha de alta</span>;
+                              }
+                            })()}
+                          </div>
+                        </td>
+                        <td className="p-4 text-right">
+                          <div className="flex items-center justify-end gap-2" onClick={(e) => e.stopPropagation()}>
+                            <button 
+                                onClick={() => a.estado === 'lista_espera' ? abrirFicha(a) : confirmarInscripcion(a.id)}
+                                className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase shadow-sm border transition duration-300 transform active:scale-95 ${
+                                    a.estado === 'lista_espera'
+                                    ? 'bg-amber-500 text-white border-amber-600 hover:bg-amber-600 shadow-amber-500/20 shadow-md'
+                                    : a.revisadoAdmin 
+                                      ? 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100' 
+                                      : 'bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100 shadow-orange-500/10 shadow-md'
+                                }`}
+                            >
+                                {a.estado === 'lista_espera' ? '🚀 Gestionar' : a.revisadoAdmin ? '✅ OK' : '⏳ Confirmar'}
+                            </button>
+
+                            {userRole === 'admin' && (
+                                <button onClick={(e) => borrarAlumno(e, a.id)} className="text-slate-400 hover:text-red-600 p-2 hover:bg-red-50 rounded-full transition-all duration-200">
+                                    🗑️
+                                </button>
+                            )}
+                          </div>
+                        </td>
+                    </tr>
+                )) : <tr><td colSpan="3" className="p-8 text-center text-slate-400 font-bold italic">No hay resultados en la búsqueda.</td></tr>}
+            </tbody>
+        </table>
+    </div>
+)}
+
+     {/* TAB: BAJAS (AHORA SE PUEDE ABRIR LA FICHA CON FECHAS SEGURAS) */}
+     {tab === 'bajas' && (
+          <div className="bg-white rounded shadow overflow-hidden">
+              <table className="w-full text-sm text-left">
+                  <thead className="bg-gray-100 uppercase text-xs">
+                      <tr>
+                          <th className="p-3">Alumno</th>
+                          <th className="p-3">Estado</th>
+                          <th className="p-3">Fecha Baja Efectiva</th>
+                          <th className="p-3 text-right">Acción</th>
+                      </tr>
+                  </thead>
+                  <tbody>
+                      {listadoBajas.map(a => (
+                          <tr 
+                            key={a.id} 
+                            onClick={() => abrirFicha(a)} // 👈 ESTO ABRE LA FICHA
+                            className={`border-b cursor-pointer transition ${
+                                a.estado === 'baja_finalizada' 
+                                ? 'bg-gray-100 text-gray-500 hover:bg-gray-200' 
+                                : 'bg-red-50 hover:bg-red-100'
+                            }`}
+                          >
+                              <td className="p-3 font-bold">
+                                  {a.nombre}
+                                  <div className="text-xs font-normal opacity-75">{a.actividad}</div>
+                                  
+                                  {/* 📩 NUEVO: Fecha en la que la familia pulsó el botón */}
+                                  <div className="text-[11px] text-blue-700 font-medium mt-0.5">
+                                    📩 Solicitada: {a.fechaSolicitudBaja 
+  ? (a.fechaSolicitudBaja.includes('T') 
+      ? a.fechaSolicitudBaja.split('T')[0].split('-').reverse().join('/') 
+      : a.fechaSolicitudBaja.split('-').reverse().join('/'))
+  : 'No registrada'}
+                                  </div>
+                              </td>
+                              <td className="p-3">
+                                  {a.estado === 'baja_pendiente' 
+                                    ? <span className="text-red-600 font-bold text-xs animate-pulse">🔴 PENDIENTE</span>
+                                    : <span className="text-gray-600 font-bold text-xs border border-gray-300 px-1 rounded">⚫ TRAMITADA</span>
+                                  }
+                              </td>
+                              <td className="p-3 font-mono text-xs font-bold">
+                                  {a.fechaBaja 
+                                    ? a.fechaBaja.split('-').reverse().join('/') 
+                                    : 'Por calcular'}
+                              </td>
+                              <td className="p-3 text-right">
+                                  {a.estado === 'baja_pendiente' ? (
+                                      <button 
+                                          onClick={(e) => { e.stopPropagation(); tramitarBaja(a); }} // 👈 stopPropagation evita abrir ficha
+                                          className="bg-red-600 text-white px-3 py-1 rounded font-bold text-xs shadow hover:bg-red-700"
+                                      >
+                                          Tramitar Baja
+                                      </button>
+                                  ) : (
+                                      <button 
+                                          onClick={(e) => { e.stopPropagation(); archivarBaja(a); }} // 👈 stopPropagation evita abrir ficha
+                                          className="bg-white text-gray-600 px-3 py-1 rounded font-bold text-xs border border-gray-300 hover:bg-gray-200"
+                                      >
+                                          🗑️ Eliminar
+                                      </button>
+                                  )}
+                              </td>
+                          </tr>
+                      ))}
+                      {listadoBajas.length === 0 && (
+                          <tr><td colSpan="4" className="p-4 text-center text-gray-400">No hay bajas pendientes ni tramitadas.</td></tr>
+                      )}
+                  </tbody>
+              </table>
+          </div>
+      )}
+{/* --- TAB: PRUEBAS DE NIVEL --- */}
+{tab === 'pruebas' && (
+    <div className="bg-white rounded shadow overflow-hidden">
+        <table className="w-full text-sm text-left">
+            <thead className="bg-gray-100 uppercase text-xs font-black text-gray-600">
+                <tr>
+                    <th className="p-3">Alumno</th>
+                    <th className="p-3">Grupo Solicitado</th>
+                    <th className="p-3">Cita Prueba</th>
+                    <th className="p-3 text-right">Acción</th>
+                </tr>
+            </thead>
+            <tbody>
+                {listadoPruebas.map(a => (
+                    <tr 
+                      key={a.id} 
+                      onClick={() => abrirFicha(a)} 
+                      className="border-b cursor-pointer hover:bg-blue-50 transition-colors"
+                    >
+                        <td className="p-3">
+                            <div className="font-bold text-gray-900 leading-tight">{a.nombre}</div>
+                            <div className="text-[10px] text-gray-500 uppercase font-bold">{a.curso}</div>
+                        </td>
+                        
+                        {/* 🚩 NUEVO: Grupo seleccionado */}
+                        <td className="p-3 font-bold text-blue-700">
+                            {a.actividad || '---'}
+                        </td>
+
+                        {/* 🚩 NUEVO: Datos de la cita */}
+                        <td className="p-3">
+    {a.citaNivel ? (
+        <div className="leading-tight">
+            <p className="font-bold text-gray-800">
+                📅 {a.citaNivel}
+            </p>
+            {/* Solo muestra el reloj y la hora si el campo existe y no está vacío */}
+            {(a.horaCita || a.hora || a.horaNivel || a.horaPrueba) && (
+                <p className="text-xs text-gray-500 mt-0.5">
+                    ⏰ {a.horaCita || a.hora || a.horaNivel || a.horaPrueba}
+                </p>
+            )}
+        </div>
+    ) : (
+        <span className="text-xs text-gray-400 italic font-medium">Sin cita</span>
+    )}
+</td>
+
+<td className="p-3 text-right">
+    <button 
+        /* 🚩 CAMBIAMOS EL NOMBRE AQUÍ PARA QUE COINCIDA CON EL PASO 1 */
+        onClick={(e) => aceptarAlumnoDirecto(e, a)}
+        className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg font-bold text-xs shadow-sm transition-transform active:scale-95"
+    >
+        ACEPTAR
+    </button>
+</td>
+                    </tr>
+                ))}
+                {listadoPruebas.length === 0 && (
+                    <tr><td colSpan="4" className="p-10 text-center text-gray-400 font-medium">No hay pruebas de nivel pendientes.</td></tr>
+                )}
+            </tbody>
+        </table>
+    </div>
+)}
+
+{/* --- TAB: LISTA DE ESPERA (ORDEN CRONOLÓGICO ESTRICTO) --- */}
+{tab === 'espera' && (
+    <div className="bg-white rounded shadow overflow-hidden border-t-4 border-amber-500">
+        <table className="w-full text-sm text-left">
+            <thead className="bg-amber-50 uppercase text-[10px] font-black text-amber-800">
+                <tr>
+                    <th className="p-3 w-16 text-center">Puesto</th>
+                    <th className="p-3">Alumno</th>
+                    <th className="p-3">Actividad Solicitada</th>
+                    <th className="p-3 text-right">Acción</th>
+                </tr>
+            </thead>
+            <tbody>
+                {alumnos
+                    .filter(a => a.estado === 'lista_espera')
+                    .sort((a, b) => {
+                        // 🚩 PRIORIDAD ÚNICA: Fecha de inscripción (Antigüedad)
+                        const fechaA = a.fechaInscripcion?.seconds || a.fechaInscripcion || 0;
+                        const fechaB = b.fechaInscripcion?.seconds || b.fechaInscripcion || 0;
+                        return fechaA - fechaB;
+                    })
+                    .map((a, index) => (
+                        <tr 
+                          key={a.id} 
+                          onClick={() => abrirFicha(a)} 
+                          className="border-b cursor-pointer hover:bg-amber-50 transition"
+                        >
+                            {/* PUESTO POR ORDEN DE LLEGADA */}
+                            <td className="p-3 text-center">
+                                <span className={`inline-block w-6 h-6 leading-6 rounded-full text-[10px] font-black ${index === 0 ? 'bg-amber-600 text-white shadow-md' : 'bg-slate-100 text-slate-500'}`}>
+                                    {index + 1}
+                                </span>
+                            </td>
+
+                            {/* ALUMNO */}
+                            <td className="p-3">
+                                <div className="font-bold text-gray-900">{a.nombre}</div>
+                                <div className="text-xs text-blue-600 font-bold">{a.curso}</div>
+                            </td>
+
+                            {/* ACTIVIDAD */}
+                            <td className="p-3">
+                                <div className="font-medium text-gray-800 uppercase text-xs">{a.actividad}</div>
+                                <div className="text-[10px] text-gray-500">📅 {a.dias} | ⏰ {a.horario}</div>
+                            </td>
+
+                            {/* ACCIÓN */}
+                            <td className="p-3 text-right">
+                            <button 
+    onClick={(e) => {
+        e.stopPropagation();
+        // CAMBIAMOS validarPlazaDirecto POR validarPlaza
+        validarPlaza(a); 
+        registrarLog("VALIDAR_PLAZA", `Validada plaza para ${a.nombre} (Puesto #${index + 1})`);
+    }}
+    className="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded font-black text-[10px] uppercase shadow transition-all active:scale-95"
+>
+    Validar Plaza
+</button>
+                            </td>
+                        </tr>
+                    ))}
+                
+                {alumnos.filter(a => a.estado === 'lista_espera').length === 0 && (
+                    <tr><td colSpan="4" className="p-8 text-center text-gray-400 italic">La lista de espera está vacía.</td></tr>
+                )}
+            </tbody>
+        </table>
+    </div>
+)}
+
+      {/* TABS EXTRA */}
+      {/* 👥 PESTAÑA DE EQUIPO Y MONITORES (VERSIÓN PRO) */}
+{tab === 'equipo' && puedeGestionarTodo && (
+  <div className="animate-fade-in space-y-6">
+    
+    {/* 1. PANEL DE ALTA RÁPIDA */}
+    <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 text-left">
+      <h2 className="text-xl font-black text-blue-900 uppercase tracking-tighter mb-4 flex items-center gap-2">
+        <span>🚀</span> Registro de Monitores
+      </h2>
+      
+      <form onSubmit={async (e) => {
+    e.preventDefault();
+    const nombre = e.target.nombre.value;
+    const email = e.target.email.value.toLowerCase().trim();
+    const password = e.target.password.value; // 👈 Capturamos la clave que tú inventes
+    
+    if(!nombre || !email || !password) return showToast("⚠️ ¡Ups! Falta información. Nombre, email y clave son obligatorios.", "warning");
+    if(password.length < 6) return showToast("⚠️ La contraseña debe tener al menos 6 caracteres.", "warning");
+
+    try {
+      await addDoc(collection(db, 'equipo'), {
+        nombre,
+        email,
+        password, // 👈 Se guarda en la ficha del monitor
+        rol: 'monitor',
+        gruposAsignados: [],
+        fechaAlta: new Date().toISOString(),
+        creadoPor: userEmail
+      });
+      showToast(`✅ ¡Monitor creado! Email: ${email}`, "success");
+      e.target.reset();
+    } catch (err) {
+      showToast("❌ Error al guardar: " + err.message, "error");
+    }
+  }} className="grid md:grid-cols-4 gap-4 items-end"> {/* 👈 Ahora son 4 columnas */}
+    <div>
+      <label className="block text-[10px] font-black text-blue-600 uppercase mb-1 ml-1 tracking-widest">Nombre del Profesor</label>
+      <input name="nombre" className="w-full border-2 border-gray-50 p-3 rounded-xl bg-gray-50 focus:bg-white outline-none focus:border-blue-500 transition-all" placeholder="Ej: Manuel García" />
+    </div>
+    <div>
+      <label className="block text-[10px] font-black text-blue-600 uppercase mb-1 ml-1 tracking-widest">Email de Acceso</label>
+      <input name="email" type="email" className="w-full border-2 border-gray-50 p-3 rounded-xl bg-gray-50 focus:bg-white outline-none focus:border-blue-500 transition-all" placeholder="profe@escuela.com" />
+    </div>
+    <div>
+      <label className="block text-[10px] font-black text-blue-600 uppercase mb-1 ml-1 tracking-widest">Contraseña Privada</label>
+      <input name="password" type="text" className="w-full border-2 border-gray-50 p-3 rounded-xl bg-gray-50 focus:bg-white outline-none focus:border-blue-500 transition-all" placeholder="Escribe una clave" />
+    </div>
+    <button type="submit" className="bg-blue-600 text-white p-4 rounded-xl font-black uppercase text-[10px] tracking-widest shadow-lg hover:bg-blue-700 transition-all active:scale-95">
+      Crear Monitor
+    </button>
+</form>
+    </div>
+
+    {/* 2. TABLA DE GESTIÓN Y ASIGNACIÓN */}
+    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+      <div className="p-4 border-b border-gray-50 bg-gray-50/50 flex justify-between items-center">
+        <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Miembros del Equipo</h3>
+        <span className="bg-blue-100 text-blue-600 text-[9px] font-black px-2 py-1 rounded-full uppercase">
+          {equipo.length} Personas
+        </span>
+      </div>
+      
+      <div className="divide-y divide-gray-50">
+        {/* 👑 1. TÚ (SUPER ADMIN) */}
+  <div className="p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gray-900 border-l-4 border-amber-500 mb-1 rounded-r-xl">
+    <div className="text-left">
+      <div className="flex items-center gap-2">
+        <p className="font-bold text-white text-sm">Director de Extraescolares</p>
+        <span className="bg-amber-500 text-white text-[8px] font-black px-1.5 py-0.5 rounded uppercase">Super Admin</span>
+      </div>
+      <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-0.5">extraescolares@sanbuenaventura.org</p>
+    </div>
+    <div className="text-xl">👑</div>
+  </div>
+
+  {/* 🛡️ 2. TU MANO DERECHA (EL COORDINADOR) */}
+  <div className="p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-blue-50 border-l-4 border-blue-600 mb-1 rounded-r-xl">
+    <div className="text-left">
+      <div className="flex items-center gap-2">
+        <p className="font-bold text-blue-900 text-sm">Coordinador de Piscina</p>
+        <span className="bg-blue-600 text-white text-[8px] font-black px-1.5 py-0.5 rounded">MANO DERECHA</span>
+      </div>
+      <p className="text-[10px] text-blue-400 font-bold uppercase mt-0.5">
+        extraescolarespiscina@sanbuenaventura.org
+      </p>
+    </div>
+    <div className="text-xl">⭐</div>
+  </div>
+        {equipo.length === 0 ? (
+          <div className="p-10 text-center text-gray-400 italic text-sm">No hay nadie en el equipo... ¡Añade al primero arriba!</div>
+        ) : (
+          equipo.map((miembro) => (
+            <div key={miembro.id} className="p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:bg-gray-50/50 transition-colors">
+              <div className="text-left min-w-[200px]">
+                <p className="font-bold text-gray-800">{miembro.nombre || 'Sin nombre'}</p>
+                <p className="text-[10px] text-gray-400 font-bold uppercase tracking-tighter">{miembro.email}</p>
+              </div>
+              
+              {/* 🏊 CLASES ASIGNADAS */}
+              <div className="flex-1 flex flex-wrap gap-1.5 justify-start">
+                {miembro.gruposAsignados?.length > 0 ? (
+                  miembro.gruposAsignados.map(g => (
+                    <span key={g} className="bg-blue-50 text-blue-600 text-[8px] font-black px-2 py-1 rounded-md border border-blue-100 uppercase">
+                      {g}
+                    </span>
+                  ))
+                ) : (
+                  <span className="text-[10px] text-gray-300 italic">Sin clases asignadas</span>
+                )}
+                
+                <button 
+                  onClick={() => {
+                    const grupo = prompt("Escribe el nombre del grupo para este monitor (Ej: Primaria 16:15 L-M):");
+                    if (grupo) {
+                      const actuales = miembro.gruposAsignados || [];
+                      updateDoc(doc(db, 'equipo', miembro.id), { gruposAsignados: [...actuales, grupo] });
+                    }
+                  }}
+                  className="text-[9px] font-black text-blue-500 hover:bg-blue-50 px-2 py-1 rounded-md border border-dashed border-blue-200 transition-colors"
+                >
+                  + ASIGNAR GRUPO
+                </button>
+              </div>
+
+              <button 
+                onClick={() => borrarMiembroEquipo(miembro)} 
+                className="text-gray-300 hover:text-red-500 transition-colors p-2 text-xl"
+                title="Eliminar del equipo"
+              >
+                🗑️
+              </button>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  </div>
+)}
+{/* 🏊‍♂️ PESTAÑA: MIS CLASES (PARA EL MONITOR) */}
+{tab === 'mis_clases' && (
+  <div className="animate-fade-in space-y-6">
+    {/* Cabecera */}
+    <div className="text-left bg-gradient-to-r from-blue-600 to-blue-400 p-6 rounded-3xl shadow-lg">
+      <h2 className="text-2xl font-black text-white uppercase tracking-tighter">🌊 Mis Clases</h2>
+      <p className="text-blue-100 text-sm font-medium">Panel de control para monitores de natación</p>
+    </div>
+
+    {/* Lista de Grupos */}
+    <div className="grid gap-6">
+      {datosMonitor?.gruposAsignados?.length > 0 ? (
+        datosMonitor.gruposAsignados.map(nombreGrupo => {
+          // Filtramos los alumnos que tienen esta actividad asignada
+          const alumnosDelGrupo = alumnos.filter(a => a.actividad === nombreGrupo && a.estado === 'inscrito');
+
+          return (
+            <div key={nombreGrupo} className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden text-left">
+              <div className="bg-gray-50 p-4 border-b border-gray-100 flex justify-between items-center">
+                <h3 className="font-black text-blue-900 uppercase text-xs tracking-widest">
+                  {nombreGrupo}
+                </h3>
+                <span className="bg-blue-100 text-blue-700 text-[10px] font-black px-3 py-1 rounded-full">
+                  {alumnosDelGrupo.length} ALUMNOS
+                </span>
+              </div>
+              
+              <div className="divide-y divide-gray-50">
+
+                {alumnosDelGrupo.length > 0 ? (
+                  alumnosDelGrupo.map(al => (
+                    <div key={al.id} className="p-4 flex justify-between items-center hover:bg-blue-50/50 transition-colors">
+                      <div>
+                        <p className="font-bold text-gray-800">{al.nombre}</p>
+                        <p className="text-[10px] text-gray-400 font-black uppercase tracking-tighter">
+                          {al.curso} {al.letra} | {al.tipo === 'interno' ? '🏫 COLEGIO' : '🌍 EXTERNO'}
+                        </p>
+                      </div>
+                      <div className="flex gap-2">
+                         {/* Aquí en el futuro podrías añadir un botón de "Pasar lista" */}
+                         <span className="text-[9px] font-black text-blue-500 border border-blue-200 px-2 py-1 rounded uppercase">Vigente</span>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <p className="p-8 text-center text-gray-400 italic text-sm">No hay alumnos todavía en este grupo.</p>
+                )}
+              </div>
+            </div>
+          );
+        })
+      ) : (
+        <div className="bg-amber-50 p-12 rounded-3xl border-2 border-dashed border-amber-200 text-center">
+          <p className="text-amber-700 font-black uppercase tracking-widest">⚠️ Sin clases asignadas</p>
+          <p className="text-amber-600 text-xs mt-2">Dile al coordinador que te asigne grupos en el panel de equipo.</p>
+        </div>
+      )}
+    </div>
+  </div>
+)}
+      {tab === 'avisos' && (<div className="p-4 bg-white rounded shadow"><form onSubmit={agregarAviso} className="flex gap-2 mb-4"><input className="border p-2 flex-1 rounded" value={nuevoAviso} onChange={e => setNuevoAviso(e.target.value)} placeholder="Escribe un aviso..." /><button className="bg-blue-600 text-white px-4 rounded font-bold">Publicar</button></form>{avisos.map(a => (<div key={a.id} className="bg-yellow-50 p-2 mb-2 border border-yellow-200 flex justify-between rounded"><span>{a.texto}</span>{userRole === 'admin' && <button onClick={() => borrarAviso(a.id)} className="text-red-500 font-bold ml-2">x</button>}</div>))}</div>)}
+
+      {/* COMPONENTE VISUAL: LA FICHA QUE SE ABRE */}
+      {alumnoSeleccionado && (
+        <FichaAlumno 
+            alumno={alumnoSeleccionado} 
+            cerrar={() => setAlumnoSeleccionado(null)}
+            userRole={userRole}
+        />
+      )}
+
+      {/* 🎯 PASO 2: PEGA EL RADAR AQUÍ ABAJO */}
+      {radarHueco && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white w-full max-w-md rounded-[32px] overflow-hidden shadow-2xl border border-white/20">
+            <div className="bg-amber-500 p-6 text-white text-left">
+              <div className="flex justify-between items-start">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.2em] opacity-80">Sustitución Inteligente</p>
+                  <h3 className="text-xl font-black uppercase mt-1 leading-tight">Cubrir hueco de:</h3>
+                  <p className="font-bold text-amber-900 bg-white/30 inline-block px-2 py-0.5 rounded mt-2">{radarHueco.actividad}</p>
+                </div>
+                <button onClick={() => setRadarHueco(null)} className="bg-white/20 hover:bg-white/40 p-2 rounded-full text-xl transition">✕</button>
+              </div>
+            </div>
+
+            <div className="p-6">
+              <p className="text-gray-500 text-xs font-medium mb-4 text-left">Candidatos en espera para este grupo:</p>
+              <div className="space-y-3 max-h-[300px] overflow-y-auto pr-2 scrollbar-hide">
+                {alumnos
+                  .filter(esp => esp.estado === 'lista_espera' && esp.actividad === radarHueco.actividad)
+                  .map((cand, idx) => (
+                    <div key={cand.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100 hover:border-amber-400 transition-all group">
+                      <div className="text-left">
+                        <p className="font-bold text-slate-800 text-sm">{cand.nombre}</p>
+                        <p className="text-[9px] text-gray-400 font-bold uppercase">{cand.curso}</p>
+                      </div>
+                      <button 
+                        onClick={() => { abrirFicha(cand); setRadarHueco(null); }}
+                        className="bg-white text-amber-600 border border-amber-200 hover:bg-amber-500 hover:text-white px-3 py-1.5 rounded-xl text-[10px] font-black uppercase transition-all shadow-sm"
+                      >
+                        Asignar
+                      </button>
+                    </div>
+                  ))}
+                {alumnos.filter(esp => esp.estado === 'lista_espera' && esp.actividad === radarHueco.actividad).length === 0 && (
+                  <div className="text-center py-10">
+                    <span className="text-3xl block mb-2">🏖️</span>
+                    <p className="text-gray-400 text-xs italic">No hay nadie en espera para este horario.</p>
+                  </div>
+                )}
+              </div>
+              <button 
+                onClick={() => setRadarHueco(null)} 
+                className="w-full mt-6 py-2 text-gray-400 font-bold text-[10px] uppercase tracking-widest hover:text-gray-600 transition-colors"
+              >
+                Cerrar Radar
+              </button>
             </div>
           </div>
         </div>
-        {/* 🌟 NOTIFICACIONES TOASTS */}
-        <ToastContainer toasts={toasts} />
-      </div> // 👈 CIERRA EL CONTENEDOR BLANCO DEL PANEL
+      )}
+    </div> // <--- Este es el cierre del AdminDashboard
+  );
+};
+
+// ==========================================
+// 📄 COMPONENTE FICHA (CON SÚPER BÚSQUEDA DE TELÉFONO)
+// ==========================================
+function FichaAlumno({ alumno, cerrar, userRole }) {
+  const { user } = useAuth();
+  if (!alumno) return null;
+  const p = alumno.datosPadre || {}; 
+// 📜 FUNCIÓN INTERNA PARA REGISTRAR MOVIMIENTOS
+const registrarLog = async (accion, detalles) => {
+  try {
+    await addDoc(collection(db, 'logs'), {
+      fecha: new Date().getTime(),
+      alumnoId: alumno.id,
+      alumnoNombre: alumno.nombre,
+      accion: accion, 
+      detalles: detalles,
+      adminEmail: user?.email || 'Sistema'
+    });
+  } catch (error) {
+    console.error("Error al registrar log:", error);
+  }
+};
+// 🚩 FUNCIÓN REFORZADA: Asegura el ID y refresca la vista
+const cambiarFecha = async (campo, e) => {
+  if (userRole !== 'admin') return;
+  
+  const valorNuevoTexto = e.target.value; 
+  // 🚩 ASEGURAMOS EL ID: Si uno falla, usamos el otro
+  const idReal = alumno.id || alumno.uid;
+
+  if (!idReal) {
+      return showToast("Error: No se encuentra el ID del alumno para guardar", "error");
+  }
+
+  try {
+      const alumnoRef = doc(db, 'students', idReal);
+      
+      await updateDoc(alumnoRef, { 
+          [campo]: valorNuevoTexto,
+          ultimaActualizacion: new Date().getTime() // Forzamos cambio en DB
+      });
+      
+      // Registro en el historial
+      registrarLog("EDICIÓN FECHA", `Cambio en ${campo}: a ${valorNuevoTexto}`);
+      
+      showToast("Fecha guardada correctamente", "success");
+      
+      // La recarga ya no es necesaria gracias al listener en tiempo real onSnapshot
+
+  } catch (error) {
+      console.error("Error al guardar fecha:", error);
+      showToast("Error al guardar: " + error.message, "error");
+  }
+};
+  const camposAlumno = Object.keys(alumno).join(', ');
+  const camposPadre = Object.keys(p).join(', ');
+
+  return (
+    <div className="fixed inset-0 bg-black/70 z-[60] flex justify-center items-center p-4 backdrop-blur-sm">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto border border-gray-200">
+        
+        {/* CABECERA: CURSO+LETRA JUNTOS, ACTIVIDAD Y DÍAS */}
+        <div className="bg-blue-900 p-5 text-white flex justify-between items-start sticky top-0 z-10">
+          <div>
+            <h2 className="text-2xl font-bold">{alumno.nombre}</h2>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              
+              {/* CURSO Y LETRA (UNIFICADOS) */}
+              <div className="flex items-center overflow-hidden rounded shadow-sm border border-blue-600 font-black text-[11px] uppercase tracking-wider">
+                <span className="bg-blue-700 px-3 py-1 border-r border-blue-600/50">
+                  {alumno.curso}
+                </span>
+                <span className="bg-yellow-400 text-yellow-900 px-3 py-1">
+                  {alumno.letra || '?'}
+                </span>
+              </div>
+
+              {/* ACTIVIDAD */}
+              <span className="bg-emerald-500 text-white px-3 py-1 rounded text-[11px] font-black uppercase tracking-widest shadow-sm border border-emerald-400">
+                {alumno.actividad || 'Sin Actividad'}
+              </span>
+
+              {/* DÍAS DE LA ACTIVIDAD */}
+              <span className="bg-slate-800/50 text-slate-200 px-3 py-1 rounded text-[11px] font-black uppercase tracking-widest border border-white/10 backdrop-blur-sm">
+                🗓️ {alumno.dias || 'Días no definidos'}
+              </span>
+
+            </div>
+          </div>
+          <button 
+            onClick={cerrar} 
+            className="bg-white/10 hover:bg-white/20 rounded-full p-2 text-white transition-all active:scale-90"
+          >
+            ✕
+          </button>
+        </div>
+
+
+        {/* CONTENIDO */}
+        <div className="p-6 space-y-6 text-gray-800">
+          
+{/* 1. FECHAS (BLOQUE REPARADO Y SIN ENGAÑOS) */}
+<div className="bg-gray-100 p-4 rounded border border-gray-300 grid grid-cols-2 gap-4 shadow-inner">
+    <div>
+        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">📅 Fecha de Alta Real</label>
+        <input 
+          type="date" 
+          defaultValue={alumno.fechaAlta || ""} 
+          disabled={userRole !== 'admin'}
+          onChange={(e) => {
+            cambiarFecha('fechaAlta', e);
+            // 🚩 Truco: Si cambias la fecha a mano, esto ayuda a que se guarde
+          }}
+          className={`w-full p-2 rounded border font-bold ${userRole === 'admin' ? 'bg-white border-blue-400' : 'bg-gray-200'}`}
+        />
+        {/* 🚩 CAMBIO: Usamos una condición más sólida */}
+        {(!alumno.fechaAlta || alumno.fechaAlta === "") && (
+          <p className="text-[9px] text-red-600 font-black mt-1 uppercase">
+            ⚠️ SIN FECHA (Saldrá en el mes anterior)
+          </p>
+        )}
+    </div>
+    <div>
+        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">
+          🏁 Fecha de Baja {alumno.estado === 'baja_pendiente' && "⚠️"}
+        </label>
+        <input 
+          type="date" 
+          defaultValue={alumno.fechaBaja || ""}
+          disabled={userRole !== 'admin'}
+          onChange={(e) => cambiarFecha('fechaBaja', e)}
+          className={`w-full p-2 rounded border font-bold bg-white`}
+        />
+    </div>
+</div>
+{/* 📜 HISTORIAL DE MOVIMIENTOS (AÑADIR JUSTO AQUÍ) */}
+{userRole === 'admin' && (
+  <div className="mt-8 border-t border-slate-200 pt-6 text-left">
+    <div className="flex items-center justify-between mb-4">
+      <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2">
+        <span className="text-sm">🕒</span> Historial de la ficha
+      </h3>
+      <span className="bg-slate-100 text-slate-500 text-[8px] font-black px-2 py-0.5 rounded-full uppercase">
+        Audit Log Activo
+      </span>
+    </div>
+    
+    <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100 shadow-inner">
+      <div className="flex flex-col items-center justify-center py-6 text-center">
+        <div className="w-10 h-10 bg-slate-200 rounded-full flex items-center justify-center mb-3">
+          <span className="text-lg">📋</span>
+        </div>
+        <p className="text-[10px] text-slate-500 font-bold uppercase italic">
+          Registro de auditoría vinculado
+        </p>
+        <p className="text-[9px] text-slate-400 mt-1 max-w-[250px] leading-relaxed">
+          Cualquier cambio manual en fechas o estados quedará guardado con el email del administrador responsable.
+        </p>
+      </div>
+      
+      {/* Botón de acceso rápido a la base de datos de logs */}
+      <button 
+        onClick={() => window.open(`https://console.firebase.google.com/project/${db._databaseId.projectId}/firestore/data/~2Flogs`, '_blank')}
+        className="w-full mt-4 py-3 bg-white border border-slate-200 rounded-xl text-[9px] font-black text-slate-500 uppercase hover:bg-slate-100 hover:text-slate-800 transition-all flex items-center justify-center gap-2"
+      >
+        <span>Consultar registros maestros</span>
+        <span className="text-[12px]">↗</span>
+      </button>
+    </div>
+  </div>
+)}
+
+          {/* 2. EL TELÉFONO (CUADRO VERDE - BUSCA EN TODAS PARTES) */}
+          <div className="bg-green-600 p-4 rounded-lg shadow-md flex justify-between items-center text-white">
+              <div>
+                  <h3 className="text-xs font-bold uppercase opacity-90 text-white">📞 Teléfono de Emergencia</h3>
+                  <p className="text-2xl font-black">
+                      {/* Aquí está el truco: busca en todos los campos posibles */}
+                      {alumno.telefono || alumno.telefono1 || p.telefono || p.telefono1 || alumno.telefonoContacto || 'Sin teléfono'}
+                  </p>
+              </div>
+              <a 
+                href={`tel:${alumno.telefono || alumno.telefono1 || p.telefono || p.telefono1}`}
+                className="bg-white text-green-600 p-3 rounded-full shadow-lg hover:scale-110 transition"
+              >
+                  <span className="text-xl">📞</span>
+              </a>
+          </div>
+
+          {/* 3. DATOS DE RESPONSABLE Y FACTURACIÓN (SOLO ADMIN) */}
+{userRole === 'admin' ? (
+  <div className="border-t pt-4 space-y-4">
+    <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">💳 Datos de Responsable</h3>
+    <div className="grid md:grid-cols-2 gap-4 text-sm">
+      
+      {/* NOMBRE DEL TUTOR / CONTACTO / PAGADOR */}
+      <div className="bg-blue-50 p-3 rounded border border-blue-200">
+        <span className="block text-blue-500 text-xs font-bold uppercase">Nombre Responsable</span>
+        <span className="font-bold text-lg text-gray-900">
+          {alumno.nombreTutor || alumno.nombrePagador || p.personaContacto || p.nombrePagador || p.nombre || '-'}
+        </span>
+      </div>
+
+      {/* DNI UNIFICADO */}
+      <div className="bg-gray-50 p-3 rounded border border-gray-300">
+        <span className="block text-gray-500 text-xs font-bold uppercase">DNI / NIE</span>
+        <span className="font-bold text-lg text-gray-900">
+          {alumno.dniTutor || alumno.dni || alumno.dniPagador || p.dni || p.dniPagador || '-'}
+        </span>
+      </div>
+
+      <div className="bg-gray-50 p-3 rounded border border-gray-300">
+        <span className="block text-gray-500 text-xs font-bold uppercase">Email Principal</span>
+        <span className="font-medium">{p.email || alumno.email || '-'}</span>
+      </div>
+
+      <div className="bg-gray-100 p-3 rounded font-mono text-gray-700 border md:col-span-2">
+        <span className="block text-gray-400 text-[10px] font-bold uppercase mb-1">IBAN de Cobro</span>
+        <span className="font-bold tracking-wider">{alumno.iban || p.iban || 'No indicado'}</span>
+      </div>
+    </div>
+  </div>
+) : (
+  <div className="bg-amber-50 p-4 rounded border border-amber-200 text-amber-800 text-sm italic">
+     🔒 Los datos bancarios y de facturación están protegidos.
+  </div>
+)}
+
+          {/* 4. SALUD (SIEMPRE VISIBLE) */}
+          {(alumno.alergias || alumno.observaciones) && (
+            <div className="grid gap-3 pt-2">
+               {alumno.alergias && <div className="bg-red-50 border-l-4 border-red-500 p-3"><span className="font-bold text-red-700 block text-xs uppercase">⚠️ Alergias / Médico</span><p className="text-red-900 text-sm font-medium">{alumno.alergias}</p></div>}
+               {alumno.observaciones && <div className="bg-yellow-50 border-l-4 border-yellow-400 p-3"><span className="font-bold text-yellow-800 block text-xs uppercase">📝 Observaciones</span><p className="text-yellow-900 text-sm">{alumno.observaciones}</p></div>}
+            </div>
+          )}
+        </div>
+
+        {/* PIE */}
+        <div className="p-4 bg-gray-50 border-t text-right sticky bottom-0 rounded-b-xl">
+          <button onClick={cerrar} className="px-6 py-2 bg-gray-900 text-white rounded hover:bg-black transition font-bold shadow-lg">Cerrar</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ==========================================
+// 👨‍👩‍👧‍👦 DASHBOARD FAMILIAS (VERSIÓN FINAL ARREGLADA)
+// ==========================================
+const Dashboard = ({ user, misHijos, logout }) => {
+  const [showForm, setShowForm] = useState(false);
+  const [alumnoSeleccionado, setAlumnoSeleccionado] = useState(null);
+  const [alumnoEditar, setAlumnoEditar] = useState(null);
+  const [modoModal, setModoModal] = useState(null);
+  const [avisos, setAvisos] = useState([]);
+  const [newPass, setNewPass] = useState('');
+  const [isChangingPass, setIsChangingPass] = useState(false);
+  const alumnoEnVivo = misHijos.find((h) => h.id === alumnoSeleccionado?.id);
+const handleUpdatePassword = async () => {
+    if (newPass.length < 6) return showToast("⚠️ La contraseña debe tener al menos 6 caracteres.", "warning");
+    try {
+      await updatePassword(auth.currentUser, newPass);
+      showToast("✅ Contraseña actualizada correctamente.", "success");
+      setNewPass('');
+      setIsChangingPass(false);
+    } catch (error) {
+      if (error.code === 'auth/requires-recent-login') {
+        showToast("🔒 Por seguridad, debes haber iniciado sesión recientemente para cambiar tu contraseña. Por favor, sal y vuelve a entrar.", "error");
+      } else {
+        showToast("❌ Error: " + error.message, "error");
+      }
+    }
+  };
+  useEffect(() => {
+    const unsub = onSnapshot(query(collection(db, 'avisos'), orderBy('fecha', 'desc')), (s) => 
+      setAvisos(s.docs.map((doc) => ({ id: doc.id, ...doc.data() })))
+    );
+    return () => unsub();
+  }, []);
+
+  // Localiza esto en tu Dashboard y cámbialo:
+  const alTerminarPrueba = (datosExtras) => {
+    // Actualizamos el alumno metiendo la actividad en su "mochila"
+    setAlumnoSeleccionado(prev => {
+      const alumnoConActividad = { ...prev, ...datosExtras };
+      
+      // 🚩 LA CLAVE: Abrimos el calendario SOLO cuando ya tenemos el objeto listo
+      setModoModal('prueba'); 
+      
+      return alumnoConActividad;
+    });
+  };
+
+  // 👇 1. FUNCIÓN NUEVA: CANCELAR SOLICITUD (Borrado rápido)
+  const cancelarSolicitud = async (hijo) => {
+    if (!window.confirm(`⚠️ ¿Cancelar la solicitud de ${hijo.nombre}?\n\nAl no estar inscrito todavía, se borrará la reserva inmediatamente y podrás empezar de cero.`)) return;
+
+    try {
+        await updateDoc(doc(db, 'students', hijo.id), {
+            estado: 'sin_inscripcion',
+            actividad: null,
+            dias: null,
+            horario: null,
+            precio: null,
+            citaId: null,
+            citaNivel: null,
+            citaFecha: null,
+            citaHora: null,
+            fechaInscripcion: null,
+            aceptaNormas: false,
+            autorizaFotos: false,
+            fechaAlta: null,
+            fechaBaja: null,
+            grupo: null,
+            revisadoAdmin: null
+        });
+        showToast('✅ Solicitud cancelada correctamente.', 'success');
+    } catch (e) {
+        showToast('Error al cancelar: ' + e.message, 'error');
+    }
+  };
+
+  // 👇 2. FUNCIÓN DE SIEMPRE: GESTIONAR BAJA (Trámite administrativo)
+  const gestionarBaja = async (hijo) => {
+    // Si por error llama a esto un 'sin_inscripcion', lo borramos directo
+    if (hijo.estado === 'sin_inscripcion') {
+        if (window.confirm(`🗑️ ¿Eliminar perfil de ${hijo.nombre}?`)) {
+            await deleteDoc(doc(db, 'students', hijo.id));
+        }
+        return;
+    }
+
+    const diaActual = new Date().getDate();
+
+    // Bloqueo después del día 25
+    if (diaActual > 25) {
+        return showToast('⛔ PLAZO CERRADO. Las bajas para el mes siguiente deben tramitarse antes del día 25.', 'error');
+    }
+
+    // Tramitación de Baja
+    if (window.confirm(`⚠️ ¿Solicitar BAJA de ${hijo.nombre}?\n\nℹ️ AVISO: Al ser día ${diaActual}, se cobrará el mes en curso completo. La baja será efectiva el último día de este mes.`)) {
+      await updateDoc(doc(db, 'students', hijo.id), {
+        estado: 'baja_pendiente',
+        fechaSolicitudBaja: new Date().toISOString()
+      });
+
+      // 📧 Encolar email de solicitud de baja recibida
+      if (user?.email) {
+        try {
+          await addDoc(collection(db, 'mail'), {
+            to: [user.email],
+            message: {
+              subject: `📉 Solicitud de Baja Recibida: ${hijo.nombre}`,
+              html: `
+                <div style="font-family: sans-serif; padding: 20px; color: #333; border: 1px solid #ddd; border-radius: 15px; max-width: 600px;">
+                  <h2 style="color: #ea580c; border-bottom: 2px solid #ea580c; padding-bottom: 10px; margin-top: 0;">
+                     🏊 Solicitud de Baja Registrada
+                  </h2>
+                  <p>Hola familia de <strong>${hijo.nombre}</strong>,</p>
+                  <p>Hemos recibido correctamente tu solicitud de baja para la actividad de natación extraescolar.</p>
+                  
+                  <div style="background: #FFF7ED; padding: 15px; border-radius: 10px; margin: 20px 0; border: 1px solid #FED7AA;">
+                    <p style="margin: 0; color: #C2410C; font-weight: bold;">📍 Detalles de la Solicitud:</p>
+                    <p style="margin: 10px 0 0 0; font-size: 16px;"><strong>Alumno:</strong> ${hijo.nombre}</p>
+                    <p style="margin: 5px 0 0 0; font-size: 14px; color: #4b5563;"><strong>Estado:</strong> Baja Pendiente (Tramitando)</p>
+                    <p style="margin: 5px 0 0 0; font-size: 14px; color: #4b5563;"><strong>ℹ️ Nota:</strong> Tu plaza se mantendrá activa hasta final de mes y la baja se hará efectiva antes del día 1 del próximo mes.</p>
+                  </div>
+
+                  <p style="font-size: 14px; color: #374151; line-height: 1.5;">
+                    Si no has realizado esta solicitud o deseas reactivar la plaza, por favor ponte en contacto con la coordinación lo antes posible.
+                  </p>
+                  <p style="margin-top: 25px;">Saludos,<br><strong>Coordinación de Extraescolares CSB</strong></p>
+                  <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;" />
+                  <p style="font-size: 11px; color: #999;">Este es un mensaje automático generado por el sistema de gestión de piscina.</p>
+                </div>
+              `
+            }
+          });
+        } catch (mailError) {
+          console.error("Error al encolar email de solicitud de baja:", mailError);
+        }
+      }
+
+      showToast('✅ Solicitud de baja registrada. Tu plaza se mantendrá activa hasta final de mes.', 'success');
+    }
+  };
+
+  return (
+    <div className="p-4 max-w-4xl mx-auto font-sans bg-gray-50 min-h-screen">
+      <div className="flex flex-col md:flex-row justify-between items-center mb-6 bg-white p-5 rounded-xl shadow-sm border border-gray-100 gap-4">
+        <div className="flex items-center gap-3">
+          <div className="bg-blue-100 p-3 rounded-full text-2xl">👨‍👩‍👧‍👦</div>
+          <div><h1 className="text-2xl font-bold text-gray-800">Panel Familiar</h1><p className="text-sm text-gray-500">{user.email}</p></div>
+        </div>
+        <div className="flex flex-col md:flex-row gap-2 w-full md:w-auto">
+          {/* BOTÓN O FORMULARIO DE CAMBIO DE CONTRASEÑA */}
+          {!isChangingPass ? (
+            <button 
+              onClick={() => setIsChangingPass(true)} 
+              className="text-blue-600 font-medium border border-blue-100 px-5 py-2 rounded-lg hover:bg-blue-50 w-full md:w-auto text-sm"
+            >
+              ⚙️ Cambiar Contraseña
+            </button>
+          ) : (
+            <div className="flex items-center gap-2 bg-blue-50 p-1 rounded-lg border border-blue-100 animate-fade-in">
+              <input 
+                type="password" 
+                placeholder="Nueva clave" 
+                className="text-sm border p-2 rounded w-32 outline-none focus:ring-2 focus:ring-blue-400"
+                value={newPass}
+                onChange={(e) => setNewPass(e.target.value)}
+              />
+              <button 
+                onClick={handleUpdatePassword}
+                className="bg-green-600 text-white text-[10px] px-3 py-2.5 rounded font-bold uppercase hover:bg-green-700"
+              >
+                OK
+              </button>
+              <button 
+                onClick={() => { setIsChangingPass(false); setNewPass(''); }}
+                className="bg-gray-400 text-white text-[10px] px-2 py-2.5 rounded font-bold uppercase"
+              >
+                X
+              </button>
+            </div>
+          )}
+
+          {/* TU BOTÓN ORIGINAL DE CERRAR SESIÓN */}
+          <button 
+            onClick={logout} 
+            className="text-red-500 font-medium border border-red-100 px-5 py-2 rounded-lg hover:bg-red-50 w-full md:w-auto"
+          >
+            Cerrar Sesión
+          </button>
+        </div>
+      </div>
+
+      {avisos.length > 0 && (<div className="mb-6 space-y-2">{avisos.map(aviso => (<div key={aviso.id} className="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded shadow-sm text-yellow-800 font-medium flex items-center gap-3"><span className="text-2xl">📢</span><span>{aviso.texto}</span></div>))}</div>)}
+
+      <div className="grid gap-6 md:grid-cols-2 mb-8">
+      {misHijos.map((hijo) => {
+          // 1. LÓGICA DE ESTADO
+          const esInfantil = (hijo.curso || '').toUpperCase().includes('INFANTIL');
+          
+          // --- 1. LÓGICA DE ADMISIÓN ACTUALIZADA ---
+// ¿Tiene plaza real? (Si el admin validó, si es infantil, O si tú pulsaste el nuevo botón de CONFIRMAR)
+const estaAdmitido = hijo.validadoAdmin === true || esInfantil || hijo.revisadoAdmin === true;
+
+// ¿Está libre para inscribirse?
+const estaLibre = hijo.estado === 'sin_inscripcion' || hijo.estado === 'baja_finalizada';
+          
+          let bordeColor = 'bg-gray-400';
+          let estadoTexto = 'Sin Actividad';
+          
+          // 2. CONFIGURAMOS COLORES (Versión actualizada con Lista de Espera)
+if (hijo.estado === 'inscrito') {
+  if (estaAdmitido) {
+      bordeColor = 'bg-green-500';
+      estadoTexto = '✅ Inscrito';
+  } else {
+      bordeColor = 'bg-yellow-400';
+      estadoTexto = '⏳ Pendiente Validación';
+  }
+} else if (hijo.estado === 'lista_espera') {
+  // 🚩 NUEVO: Color Ámbar para que el padre sepa que está en cola
+  bordeColor = 'bg-amber-500'; 
+  estadoTexto = '⏳ Lista de Espera';
+} else if (hijo.estado === 'prueba_reservada') {
+  bordeColor = 'bg-orange-500';
+  estadoTexto = '⏳ Prueba Pendiente';
+} else if (hijo.estado === 'baja_pendiente') {
+  bordeColor = 'bg-red-500';
+  estadoTexto = '📉 Baja Solicitada';
+} else if (hijo.estado === 'baja_finalizada') {
+  bordeColor = 'bg-gray-600';
+  estadoTexto = '⚫ Baja Finalizada';
+}
+
+          return (
+            <div key={hijo.id} className="bg-white/75 backdrop-blur-md p-6 rounded-3xl shadow-lg border border-white/50 relative overflow-hidden group mb-6 transition-all duration-300 hover:shadow-xl hover:border-blue-200 text-left">
+              <div className={`absolute top-0 left-0 w-1.5 h-full ${bordeColor}`}></div>
+              
+              {/* CABECERA */}
+              <div className="flex justify-between items-start mb-2 pl-3">
+                <div className="flex-1">
+                  <h3 className="font-black text-xl text-slate-800 flex items-center gap-2 tracking-tight">
+                    {hijo.nombre} 
+                    {(!hijo.actividad && hijo.estado === 'sin_inscripcion') && (
+                      <button 
+                        onClick={() => setAlumnoEditar(hijo)} 
+                        className="text-gray-400 hover:text-blue-600 bg-slate-50 border border-slate-100 p-1.5 rounded-full transition-all"
+                        title="Editar datos básicos"
+                      >
+                        ✏️
+                      </button>
+                    )}
+                  </h3>
+                  <p className="text-gray-500 text-xs font-black uppercase tracking-wider mt-0.5">{hijo.curso} • {hijo.letra}</p>
+                </div>
+                <div className="flex flex-col items-end gap-2">
+                  <span className={`px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wider shadow-sm border
+                    ${hijo.estado === 'inscrito' && estaAdmitido ? 'bg-green-50 text-green-700 border-green-200' : ''}
+                    ${hijo.estado === 'inscrito' && !estaAdmitido ? 'bg-yellow-50 text-yellow-700 border-yellow-200' : ''}
+                    ${hijo.estado === 'lista_espera' ? 'bg-amber-50 text-amber-700 border-amber-200' : ''}
+                    ${hijo.estado === 'prueba_reservada' ? 'bg-blue-50 text-blue-700 border-blue-200' : ''}
+                    ${hijo.estado === 'baja_pendiente' ? 'bg-rose-50 text-rose-700 border-rose-200' : ''}
+                    ${hijo.estado === 'baja_finalizada' ? 'bg-slate-100 text-slate-600 border-slate-200' : ''}
+                    ${hijo.estado === 'sin_inscripcion' ? 'bg-slate-50 text-slate-500 border-slate-200' : ''}
+                  `}>
+                    {estadoTexto}
+                  </span>
+                </div>
+              </div>
+
+              {/* 📊 BARRA DE PROGRESO DE INSCRIPCIÓN */}
+              {hijo.estado !== 'sin_inscripcion' && hijo.estado !== 'baja_finalizada' && (
+                <div className="ml-3 mt-4 mb-5 px-2 py-3 bg-slate-50/50 rounded-2xl border border-slate-100 flex justify-between items-center relative gap-2">
+                  {(() => {
+                    const statusSteps = [
+                      { label: 'Solicitud', active: true },
+                      { label: 'Prueba', active: hijo.estado === 'prueba_reservada' || hijo.estado === 'inscrito' },
+                      { label: 'Validación', active: hijo.estado === 'inscrito' || hijo.estado === 'lista_espera' },
+                      { label: 'Confirmada', active: hijo.estado === 'inscrito' && estaAdmitido }
+                    ];
+                    
+                    let activeIndex = 0;
+                    if (hijo.estado === 'prueba_reservada') activeIndex = 1;
+                    if (hijo.estado === 'lista_espera') activeIndex = 2;
+                    if (hijo.estado === 'inscrito') {
+                      activeIndex = estaAdmitido ? 3 : 2;
+                    }
+
+                    return statusSteps.map((step, idx) => {
+                      const isCompleted = idx < activeIndex;
+                      const isCurrent = idx === activeIndex;
+
+                      let dotBg = 'bg-slate-200 border-slate-300';
+                      let labelColor = 'text-slate-400 font-bold';
+                      if (isCompleted) {
+                        dotBg = 'bg-blue-600 border-blue-600 text-white shadow-[0_0_8px_rgba(37,99,235,0.4)]';
+                        labelColor = 'text-blue-800 font-black';
+                      } else if (isCurrent) {
+                        if (estaAdmitido) {
+                          // 🟢 ¡PASO FINAL CONFIRMADO! En verde esmeralda con sombra, sin parpadeo
+                          dotBg = 'bg-green-600 border-green-600 text-white shadow-[0_0_8px_rgba(16,185,129,0.4)]';
+                          labelColor = 'text-green-700 font-black';
+                        } else {
+                          // ⏳ En proceso (amarillo parpadeando)
+                          dotBg = hijo.estado === 'lista_espera'
+                            ? 'bg-amber-500 border-amber-500 text-white shadow-[0_0_8px_rgba(245,158,11,0.4)] animate-pulse'
+                            : 'bg-yellow-500 border-yellow-500 text-white shadow-[0_0_8px_rgba(234,179,8,0.4)] animate-pulse';
+                          labelColor = hijo.estado === 'lista_espera' ? 'text-amber-700 font-black' : 'text-yellow-700 font-black';
+                        }
+                      }
+
+                      return (
+                        <div key={idx} className="flex-1 flex flex-col items-center relative z-10">
+                          {/* Línea conectora */}
+                          {idx > 0 && (
+                            <div className={`absolute right-1/2 top-3 -translate-y-1/2 h-[2px] -z-10
+                              ${idx <= activeIndex ? 'bg-blue-600' : 'bg-slate-200'}
+                            `} style={{ right: '50%', width: '100%' }}></div>
+                          )}
+                          
+                          {/* Círculo indicador */}
+                          <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold border transition-all duration-300 ${dotBg}`}>
+                            {isCompleted || (isCurrent && estaAdmitido) ? '✓' : idx + 1}
+                          </div>
+                          
+                          {/* Etiqueta */}
+                          <span className={`text-[8px] uppercase tracking-wider mt-1.5 leading-none transition-colors duration-300 ${labelColor}`}>
+                            {step.label}
+                          </span>
+                        </div>
+                      );
+                    });
+                  })()}
+                </div>
+              )}
+
+              {/* DATOS DE ACTIVIDAD (Inscrito, Baja Pendiente o LISTA DE ESPERA) */}
+              {(hijo.estado === 'inscrito' || hijo.estado === 'baja_pendiente' || hijo.estado === 'lista_espera') && (
+                <div className={`ml-3 mt-4 p-4 rounded-2xl border text-sm relative
+                    ${hijo.estado === 'baja_pendiente' ? 'bg-red-50/50 border-red-200' : 
+                      hijo.estado === 'lista_espera' ? 'bg-amber-50/50 border-amber-200' :
+                      !estaAdmitido ? 'bg-yellow-50/50 border-yellow-200' : 
+                      'bg-green-50/50 border-green-100'
+                    }`}>
+
+                  {/* CASO NUEVO: LISTA DE ESPERA */}
+                  {hijo.estado === 'lista_espera' ? (
+                      <div className="pr-6">
+                          <p className="font-black text-amber-900 text-base uppercase mb-2 tracking-tight">{hijo.actividad}</p>
+                          <div className="flex flex-wrap gap-2 mb-3">
+                              <span className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full border border-blue-200 text-[10px] font-black uppercase tracking-wide">
+                                📅 {hijo.dias}
+                              </span>
+                              <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-800 px-2 py-0.5 rounded-full border border-amber-200 text-[10px] font-black uppercase tracking-wide">
+                                ⏰ {hijo.horario}
+                              </span>
+                          </div>
+                          <div className="bg-white/70 backdrop-blur-sm rounded-xl p-3 border border-amber-200 shadow-sm">
+                              <p className="font-black text-amber-800 text-[10px] uppercase mb-0.5">⏳ En espera de vacante</p>
+                              <p className="text-[10px] text-amber-700 leading-tight">
+                                No hay plazas disponibles. Te avisaremos por orden de lista en cuanto quede un hueco libre.
+                              </p>
+                          </div>
+                      </div>
+                  ) : 
+                  
+              /* CASO: PENDIENTE DE VALIDAR (AMARILLO) */
+              !estaAdmitido && hijo.estado === 'inscrito' ? (
+                <div className="text-center pr-6">
+                    <p className="font-black text-yellow-900 text-base uppercase mb-2 tracking-tight">{hijo.actividad}</p>
+                    
+                    {/* 🚀 FECHA PREVISTA EN AMARILLO */}
+                    {hijo.inicioDeseado && (
+                      <p className="text-[10px] font-black text-yellow-700 mb-2 uppercase tracking-wide">
+                        🎯 Previsto para: {hijo.inicioDeseado.split('-').reverse().join('/')}
+                      </p>
+                    )}
+
+                    <div className="flex flex-wrap justify-center gap-2 mb-3">
+                        <span className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full border border-blue-200 text-[10px] font-black uppercase tracking-wide">
+                          📅 {hijo.dias}
+                        </span>
+                        <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-800 px-2 py-0.5 rounded-full border border-amber-200 text-[10px] font-black uppercase tracking-wide">
+                          ⏰ {hijo.horario}
+                        </span>
+                    </div>
+                    <div className="bg-white/70 backdrop-blur-sm rounded-xl p-3 border border-yellow-200 shadow-sm">
+                        <p className="font-black text-yellow-800 text-xs">⏳ Solicitud Recibida</p>
+                        <p className="text-[10px] text-yellow-700 mt-0.5">
+                          {(hijo.actividad || '').toUpperCase().includes('ADULTO') || (hijo.actividad || '').toUpperCase().includes('WATERPOLO')
+                            ? "El club está revisando tu inscripción."
+                            : "El coordinador está validando el nivel."
+                          }
+                        </p>
+                    </div>
+                </div>
+              ) : (
+                /* CASO: ADMITIDO O BAJA PENDIENTE */
+                <div className="pr-6">
+                  <p className="font-black text-slate-800 text-base uppercase mb-2 tracking-tight">{hijo.actividad}</p>
+                  
+                  {/* 🚀 FECHA DE INICIO CONFIRMADA EN AZUL */}
+                  {hijo.fechaAlta && (
+                    <div className="mb-2.5">
+                      <span className="bg-blue-600 text-white text-[10px] font-black px-2.5 py-1 rounded-full shadow-sm inline-flex items-center gap-1 uppercase tracking-wide">
+                        🚀 Inicio: {hijo.fechaAlta.split('T')[0].split('-').reverse().join('/')}
+                      </span>
+                    </div>
+                  )}
+
+                  <div className="flex flex-wrap gap-2 mb-2">
+                      <span className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full border border-blue-200 text-[10px] font-black uppercase tracking-wide">
+                        📅 {hijo.dias}
+                      </span>
+                      <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-800 px-2 py-0.5 rounded-full border border-amber-200 text-[10px] font-black uppercase tracking-wide">
+                        ⏰ {hijo.horario}
+                      </span>
+                  </div>
+                  {hijo.estado === 'baja_pendiente' && (
+                    <p className="text-red-600 font-bold text-xs mt-2.5 uppercase tracking-wide flex items-center gap-1"><span>⚠️</span> Baja efectiva a fin de mes</p>
+                  )}
+                  {estaAdmitido && hijo.estado === 'inscrito' && (
+                    <p className="text-green-600 font-bold text-[10px] mt-2.5 uppercase tracking-wider flex items-center gap-1"><span>✅</span> Plaza Confirmada</p>
+                  )}
+                </div>
+              )}
+              </div>
+              )}
+              
+{/* DATOS DE PRUEBA */}
+{hijo.estado === 'prueba_reservada' && (
+  <div className="ml-3 mt-4 bg-orange-50/50 p-4 rounded-2xl border border-orange-200 text-sm">
+    <div className="mb-3 pb-3 border-b border-orange-200/50">
+        <p className="text-[10px] font-black text-orange-800 uppercase tracking-wider mb-1">🎯 Grupo Pre-seleccionado:</p>
+        
+        {/* MODIFICACIÓN: Si ya tiene actividad Y días, mostramos la info. Si no, el botón. */}
+        {hijo.actividad && hijo.dias ? (
+            <div>
+              <p className="text-lg font-black text-orange-950 leading-tight uppercase tracking-tight">{hijo.actividad}</p>
+              <div className="flex flex-wrap gap-2 mt-2">
+                  <span className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full border border-blue-200 text-[10px] font-black uppercase tracking-wide">
+                    📅 {hijo.dias}
+                  </span>
+                  <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-800 px-2 py-0.5 rounded-full border border-amber-200 text-[10px] font-black uppercase tracking-wide">
+                    ⏰ {hijo.horario || 'Horario pendiente'}
+                  </span>
+              </div>
+            </div>
+        ) : (
+            <button 
+              onClick={() => { setAlumnoSeleccionado(hijo); setModoModal('inscripcion'); }} 
+              className="w-full bg-white border border-orange-300 text-orange-700 py-1.5 rounded text-xs font-bold hover:bg-orange-100 transition"
+            >
+                👉 Elegir Grupo y Horario
+            </button>
+        )}
+    </div>
+    
+{/* SECCIÓN DE LA CITA DE NIVEL - VERSIÓN FINAL SEGURA */}
+<div className="flex items-center gap-2">
+  <span className="text-2xl">🗓️</span>
+  <div>
+    <p className="font-bold text-orange-900 text-[10px] uppercase">Cita para Prueba</p>
+    
+    {/* 🚩 LA LLAVE MAESTRA:
+        Si el estado es 'prueba_reservada', el botón rojo DESAPARECE.
+        Mostramos el texto de la cita si existe, y si no, un mensaje de carga. */}
+    {hijo.estado === 'prueba_reservada' || hijo.citaNivel ? (
+      <div className="mt-1 bg-white/80 p-2 rounded-lg border border-green-200 shadow-sm">
+        <p className="text-indigo-950 font-black leading-tight text-xs">
+          {hijo.citaNivel || "Cita confirmada"} 
+        </p>
+        <div className="flex items-center gap-1 mt-1">
+          <span className="text-green-600 text-[10px]">●</span>
+          <span className="text-[9px] text-green-700 font-black uppercase tracking-widest">
+            Cita Confirmada
+          </span>
+        </div>
+      </div>
+    ) : (
+      /* El botón rojo solo sale si el estado NO es reserva Y NO hay citaNivel */
+      <button 
+        type="button"
+        onClick={() => { setAlumnoSeleccionado(hijo); setModoModal('prueba'); }} 
+        className="mt-1 text-red-600 font-black underline animate-pulse text-sm block cursor-pointer"
+      >
+        ⚠️ ¡RESERVAR HORA AHORA!
+      </button>
+    )}
+  </div>
+</div>
+  </div>
+)}
+
+              {/* AVISO BAJA FINALIZADA */}
+              {hijo.estado === 'baja_finalizada' && (
+                 <div className="text-center py-2 text-gray-400 text-xs italic mt-2 border-t border-gray-100 pt-3">
+                     Este alumno ha finalizado su actividad.
+                 </div>
+              )}
+
+              {/* === BOTONES DE ACCIÓN (AQUÍ ESTÁ LA CORRECCIÓN) === */}
+              <div className="mt-6 pt-4 ml-3 border-t border-gray-100 flex gap-2">
+                
+                {/* 1. SOLO SI TIENE PLAZA CONFIRMADA -> TRAMITAR BAJA (Oficial) */}
+                {hijo.estado === 'inscrito' && estaAdmitido && (
+                    <button onClick={() => gestionarBaja(hijo)} className="w-full bg-white text-red-600 px-3 py-2 rounded-lg text-sm font-bold border border-red-200 hover:bg-red-50">
+                        Tramitar Baja
+                    </button>
+                )}
+
+                {/* 2. SI ESTÁ INSCRITO PERO PENDIENTE -> CANCELAR (Borrado simple) */}
+                {hijo.estado === 'inscrito' && !estaAdmitido && (
+                    <button onClick={() => cancelarSolicitud(hijo)} className="w-full bg-white text-red-500 px-3 py-2 rounded-lg text-sm font-bold border border-red-200 hover:bg-red-50">
+                        ✖️ Cancelar Solicitud
+                    </button>
+                )}
+
+                {/* 3. INSCRIBIR (Nuevos o Bajas Finalizadas) */}
+                {estaLibre && (
+                  <div className="flex w-full gap-2">
+                    <button onClick={() => { setAlumnoSeleccionado(hijo); setModoModal('inscripcion'); }} className="flex-1 bg-blue-600 text-white py-2 rounded-lg text-sm font-bold shadow-sm hover:bg-blue-700">
+                        Inscribir
+                    </button>
+                    {hijo.estado === 'sin_inscripcion' && (
+                        <button onClick={() => gestionarBaja(hijo)} className="bg-white text-red-500 px-3 py-2 rounded-lg text-sm font-bold border border-red-200 hover:bg-red-50">🗑️</button>
+                    )}
+                  </div>
+                )}
+
+                {/* 4. CANCELAR PRUEBA */}
+                {hijo.estado === 'prueba_reservada' && (
+                    <button onClick={() => cancelarSolicitud(hijo)} className="w-full bg-white text-red-500 px-3 py-2 rounded-lg text-sm font-bold border border-red-200 hover:bg-red-50">
+                        ✖️ Cancelar Solicitud
+                    </button>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      
+      <button onClick={() => setShowForm(true)} className="w-full py-5 border-2 border-dashed border-blue-200 text-blue-400 rounded-xl font-bold hover:bg-blue-50 transition flex items-center justify-center gap-2 mb-10"><span className="text-2xl">+</span> Añadir Otro Alumno</button>
+      
+{/* MODALES Y FORMULARIOS */}
+{showForm && (<FormularioHijo close={() => setShowForm(false)} user={user} />)}
+      
+      {alumnoEditar && (
+        <FormularioHijo 
+          alumnoAEditar={alumnoEditar} 
+          close={() => setAlumnoEditar(null)} 
+          user={user} 
+        />
+      )}
+
+      {/* 1. Cambiamos alumnoEnVivo por alumnoSeleccionado para que lea la actividad de la memoria */}
+      {modoModal === 'prueba' && alumnoSeleccionado && (
+        <PantallaPruebaNivel 
+          alumno={alumnoSeleccionado} 
+          close={() => setModoModal(null)} 
+          onSuccess={alTerminarPrueba} 
+          user={user} 
+        />
+      )}
+
+      {/* 2. Cambiamos la función anónima por alTerminarPrueba para que reciba los datos del grupo */}
+      {modoModal === 'inscripcion' && alumnoEnVivo && (
+        <PantallaInscripcion 
+          alumno={alumnoEnVivo} 
+          close={() => setModoModal(null)} 
+          onRequirePrueba={alTerminarPrueba} 
+          user={user} 
+        />
+      )}
+    </div>
+  );
+};
+
+// ==========================================
+// ✏️ FORMULARIO EDICIÓN DE DATOS
+// ==========================================
+const FormularioHijo = ({ close, user, alumnoAEditar = null }) => {
+  // Cambiamos el useState para que elija: o datos del alumno o vacío
+  const [data, setData] = useState(alumnoAEditar ? { ...alumnoAEditar } : { 
+    nombre: '', 
+    telefono: '',
+    curso: LISTA_CURSOS[0].val, 
+    letra: 'A', 
+    fechaNacimiento: '', 
+    natacionPasado: 'no', 
+    aceptaNormas: false, 
+    autorizaFotos: false 
+  });
+  
+
+  const validarYGuardarAlumno = async () => {
+    // 🚩 BLOQUEO DE SEGURIDAD: Si ya tiene actividad, no se puede editar
+    if (alumnoAEditar && alumnoAEditar.actividad) {
+      showToast("⛔ Este alumno ya tiene una actividad vinculada. Para cambios, contacta con secretaría.", "error");
+      close();
+      return;
+    }    const telefonoLimpio = data?.telefono ? String(data.telefono).trim() : "";
+    
+    // Validaciones
+    if (!data.nombre || data.nombre.trim() === "") return showToast("⚠️ El nombre es obligatorio.", "warning");
+    if (!data.fechaNacimiento) return showToast("⚠️ La fecha de nacimiento es obligatoria.", "warning");
+    if (!data.aceptaNormas) return showToast("⚠️ Debes aceptar las normas.", "warning");
+
+    try {
+      const esInfantil = (data.curso || '').toUpperCase().includes('INF');
+
+      // PREPARAMOS LOS DATOS COMUNES
+      const datosFinales = {
+        ...data,
+        parentId: user.uid,
+        telefono: telefonoLimpio,
+        natacionPasado: data.natacionPasado, 
+        esAntiguoAlumno: data.natacionPasado === 'si',
+        esInfantil: esInfantil,
+      };
+
+      // ---------------------------------------------------------
+      // 🚀 EL INTERRUPTOR: ¿EDICIÓN O CREACIÓN?
+      // ---------------------------------------------------------
+      if (alumnoAEditar && alumnoAEditar.id) {
+        // MODO EDICIÓN: Actualizamos el que ya existe
+        const alumnoRef = doc(db, 'students', alumnoAEditar.id);
+        await updateDoc(alumnoRef, {
+          ...datosFinales,
+          ultimaEdicion: new Date().toISOString()
+        });
+        showToast("✅ Datos actualizados correctamente", "success");
+      } else {
+        // MODO CREACIÓN: Creamos uno nuevo
+        await addDoc(collection(db, 'students'), {
+          ...datosFinales,
+          estado: 'sin_inscripcion',
+          fechaCreacion: new Date().toISOString()
+        });
+        showToast("✅ Alumno registrado correctamente", "success");
+      }
+      
+      close();
+    } catch (error) {
+      console.error("Error al guardar:", error);
+      showToast("No se pudo guardar en la base de datos.", "error");
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-[1000]">
+      <div className="bg-white p-6 rounded-2xl shadow-xl w-full max-w-md">
+        <h2 className="text-xl font-bold text-blue-900 mb-4">👶 Añadir Estudiante</h2>
+        
+        <div className="space-y-4 text-left">
+          {/* 1. NOMBRE */}
+          <div>
+            <label className="block text-[10px] font-black text-blue-600 uppercase mb-1 ml-1">Nombre y Apellidos *</label>
+            <input 
+              className="w-full border p-3 rounded-lg bg-gray-50 focus:bg-white outline-none" 
+              placeholder="Nombre completo" 
+              value={data.nombre}
+              onChange={e => setData({...data, nombre: e.target.value})} 
+            />
+          </div>
+
+          {/* 2. PREGUNTA DE NATACIÓN */}
+          <div className="bg-blue-50 p-4 rounded-xl border border-blue-100">
+            <p className="text-xs font-bold text-blue-800 mb-2">¿Estuvo en la extraescolar el curso pasado?</p>
+            <div className="flex gap-6">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input 
+                  type="radio" 
+                  name="nat" 
+                  checked={data.natacionPasado === 'si'} 
+                  onChange={() => setData({...data, natacionPasado: 'si'})} 
+                /> 
+                <span className="text-sm font-medium">Sí</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input 
+                  type="radio" 
+                  name="nat" 
+                  checked={data.natacionPasado === 'no'} 
+                  onChange={() => setData({...data, natacionPasado: 'no'})} 
+                /> 
+                <span className="text-sm font-medium">No</span>
+              </label>
+            </div>
+          </div>
+
+          {/* 3. CURSO Y LETRA */}
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block text-[10px] font-black text-blue-600 uppercase mb-1 ml-1">Curso</label>
+              <select className="w-full border p-3 rounded-lg bg-gray-50" value={data.curso} onChange={e => setData({...data, curso: e.target.value})}>
+                {LISTA_CURSOS.map(c => <option key={c.val} value={c.val}>{c.label}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-[10px] font-black text-blue-600 uppercase mb-1 ml-1">Letra</label>
+              <select className="w-full border p-3 rounded-lg bg-gray-50" value={data.letra} onChange={e => setData({...data, letra: e.target.value})}>
+                <option>A</option><option>B</option><option>C</option>
+              </select>
+            </div>
+          </div>
+
+          {/* 4. FECHA DE NACIMIENTO */}
+          <div>
+            <label className="block text-[10px] font-black text-blue-600 uppercase mb-1 ml-1">Fecha de Nacimiento *</label>
+            <input 
+              type="date" 
+              className="w-full border p-3 rounded-lg bg-gray-50" 
+              value={data.fechaNacimiento}
+              onChange={e => setData({...data, fechaNacimiento: e.target.value})} 
+            />
+          </div>
+
+          {/* 5. NORMAS */}
+          <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer">
+            <input type="checkbox" checked={data.aceptaNormas} onChange={e => setData({...data, aceptaNormas: e.target.checked})} />
+            Acepto las normas de funcionamiento *
+          </label>
+
+          {/* 6. BOTONES */}
+          <div className="flex gap-3 mt-4">
+            <button onClick={close} className="flex-1 py-3 text-gray-500 font-bold hover:bg-gray-100 rounded-xl transition">Cancelar</button>
+            <button 
+              onClick={validarYGuardarAlumno} 
+              className="flex-1 bg-blue-600 text-white py-3 rounded-xl font-bold shadow-lg hover:bg-blue-700 active:scale-95 transition-all"
+            >
+              Guardar
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ==========================================
+// 📝 MODAL INSCRIPCIÓN (SOLUCIÓN DEFINITIVA CHECKBOX)
+// ==========================================
+const PantallaInscripcion = ({ alumno, close, onRequirePrueba, user }) => {
+  // 1. ESTADOS
+  const [datosAlumno, setDatosAlumno] = useState({ 
+    nombre: alumno.nombre, 
+    curso: alumno.curso, 
+    fechaNacimiento: alumno.fechaNacimiento || '',
+    // 🚩 AÑADE ESTO AQUÍ: Es el valor por defecto
+    inicioDeseado: 'proximo' 
+  });
+  const [verNormas, setVerNormas] = useState(false);
+  const [autorizaFotos, setAutorizaFotos] = useState(alumno.autorizaFotos === true);
+  
+  // USAREMOS UNA REFERENCIA PARA EVITAR EL BUG DE SINCRONIZACIÓN
+  // Esto guarda el valor "real" sin depender de los renderizados de React
+  const normasRef = useRef(alumno.aceptaNormas === true);
+  
+  // Estado visual para que se pinte verde/gris
+  const [aceptaNormasVisual, setAceptaNormasVisual] = useState(alumno.aceptaNormas === true);
+
+  // Filtramos las actividades (Asegúrate de tener OFERTA_ACTIVIDADES importado o definido)
+  const actividadesDisponibles = OFERTA_ACTIVIDADES.filter((act) => act.cursos.includes(datosAlumno.curso));
+
+  // Función para cambiar el checkbox de forma segura
+  const toggleNormas = () => {
+      const nuevoValor = !normasRef.current; // Invertimos el valor actual
+      normasRef.current = nuevoValor;        // Guardamos en la referencia (Lógica)
+      setAceptaNormasVisual(nuevoValor);     // Guardamos en el estado (Visual)
+  };
+  // 1. Estado para guardar la ocupación global
+  const [todosLosAlumnos, setTodosLosAlumnos] = useState([]);
+
+  // 2. Escuchamos solo a los alumnos activos inscritos para poder contar plazas eficientemente
+  useEffect(() => {
+    const q = query(collection(db, 'students'), where('estado', '==', 'inscrito'));
+    const unsub = onSnapshot(q, (s) => {
+      setTodosLosAlumnos(s.docs.map(doc => ({
+        actividadId: doc.data().actividadId,
+        estado: doc.data().estado,
+        dias: doc.data().dias,
+        curso: doc.data().curso
+      })));
+    }, (error) => {
+      console.error("Error al escuchar ocupación de plazas:", error);
+    });
+    return () => unsub();
+  }, []);
+  // 🚩 LÓGICA DE TEMPORADA (MARZO-SEPTIEMBRE = SOLO OCTUBRE)
+  const infoAlta = (() => {
+    const hoy = new Date();
+    const dia = hoy.getDate();
+    const mesActualNum = hoy.getMonth() + 1; // Marzo es 3
+    
+    // 🎯 REGLA DE ORO: Si el mes es menor a 10 (estamos en Marzo, Mayo, Sept...),
+    // bloqueamos el alta inmediata y solo dejamos "Octubre".
+    const esPeriodoReserva = mesActualNum < 10;
+
+    if (esPeriodoReserva) {
+      return { 
+        diaCortePasado: true, // Esto oculta el botón de "Empezar Hoy"
+        mesActual: hoy.toLocaleString('es-ES', { month: 'long' }),
+        sigMes: "octubre" // Forzamos que el texto del botón sea Octubre
+      };
+    }
+
+    // SI YA ES OCTUBRE, NOVIEMBRE O DICIEMBRE: Lógica normal
+    return { 
+      diaCortePasado: dia > 20, 
+      mesActual: hoy.toLocaleString('es-ES', { month: 'long' }), 
+      sigMes: new Date(hoy.getFullYear(), hoy.getMonth() + 1, 1).toLocaleString('es-ES', { month: 'long' })
+    };
+  })();
+
+
+
+  const obtenerEstadoPlaza = (actividadId, textoDiasSeleccionado, cursoAlumno) => {
+    // 1. Buscamos la actividad en tu catálogo oficial
+    const actividadDoc = OFERTA_ACTIVIDADES.find(a => a.id === actividadId);
+    const max = actividadDoc?.alumnosMax || 10;
+  
+    // 2. Extraemos los días individuales del texto seleccionado
+    // (Transforma "[PACK] Lunes y Miércoles" en ["lunes", "miercoles"])
+    const diasAComprobar = [];
+    const textoLimpiado = textoDiasSeleccionado.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    
+    if (textoLimpiado.includes('lunes')) diasAComprobar.push('lunes');
+    if (textoLimpiado.includes('martes')) diasAComprobar.push('martes');
+    if (textoLimpiado.includes('miercoles')) diasAComprobar.push('miercoles');
+    if (textoLimpiado.includes('jueves')) diasAComprobar.push('jueves');
+    if (textoLimpiado.includes('viernes')) diasAComprobar.push('viernes');
+  
+    // 3. Calculamos la ocupación máxima entre los días elegidos
+    // Si un Pack es Lunes/Miércoles, miramos cuál de los dos días está más lleno
+    let ocupacionMaxEnDias = 0;
+  
+    diasAComprobar.forEach(dia => {
+      const inscritosEseDia = todosLosAlumnos.filter(a => {
+        const coincideAct = a.actividadId === actividadId;
+        const estaInscrito = a.estado === 'inscrito';
+        const diasAlumno = a.dias?.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "") || '';
+        
+        const ocupaEsteDia = diasAlumno.includes(dia);
+  
+        // Filtro especial Primaria 16:15 (Subgrupos por curso)
+        if (actividadId === 'primaria_1615') {
+          const esPeque = ['1PRI', '2PRI', '3PRI'].includes(cursoAlumno);
+          const cursosFiltro = esPeque ? ['1PRI', '2PRI', '3PRI'] : ['4PRI', '5PRI', '6PRI'];
+          return coincideAct && estaInscrito && ocupaEsteDia && cursosFiltro.includes(a.curso);
+        }
+  
+        return coincideAct && estaInscrito && ocupaEsteDia;
+      }).length;
+  
+      if (inscritosEseDia > ocupacionMaxEnDias) {
+        ocupacionMaxEnDias = inscritosEseDia;
+      }
+    });
+  
+    // 4. Resultados finales
+    const plazasLibres = max - ocupacionMaxEnDias;
+  
+    return {
+      lleno: ocupacionMaxEnDias >= max,
+      // 🚩 REGLA DE ORO: Si quedan 3 o menos plazas reales
+      esCritico: max > 0 && plazasLibres <= 3 && plazasLibres > 0,
+      cupoActual: ocupacionMaxEnDias,
+      maximo: max,
+      libres: plazasLibres
+    };
+  };
+  // 2. FUNCIÓN DE INSCRIPCIÓN
+  const inscribir = async (act, op) => {
+    // 1. Verificación de Normas
+    if (normasRef.current !== true) {
+        return showToast("⚠️ Es obligatorio aceptar las normas.", "warning");
+    }
+    
+    // 🔄 LECTURA DE SEGURIDAD
+    const alumnoRef = doc(db, 'students', alumno.id);
+    const snap = await getDoc(alumnoRef);
+    const d = snap.exists() ? snap.data() : alumno;
+
+    // 🕵️‍♂️ DEFINICIÓN DE VARIABLES CRÍTICAS (Aquí estaba el fallo, ahora están todas)
+    const cursoNombre = (d.curso || '').toUpperCase();
+    const esInfantil = cursoNombre.includes('INF');
+    const tienePaseVIP = d.natacionPasado === 'si' || d.esAntiguoAlumno === true || d.antiguo === 'si';
+    const esAdulto = act.id === 'adultos' || cursoNombre.includes('ADULTO');
+
+    // 🚩 CÁLCULO DE FECHA BLINDADO POR TEMPORADA (REVISADO)
+    const hoyParaCalculo = new Date();
+    const diaActual = hoyParaCalculo.getDate();
+    const mesActualNum = hoyParaCalculo.getMonth() + 1; 
+    const inicioDeseado = datosAlumno.inicioDeseado || 'proximo';
+
+    let fechaFinalISO;
+
+    // REGLA: De Junio a Septiembre siempre es 1 de Octubre del próximo curso
+    if (mesActualNum >= 6 && mesActualNum <= 9) {
+        const academicInfo = getDynamicAcademicYear();
+        fechaFinalISO = new Date(`${academicInfo.isoStartDate}T12:00:00.000Z`).toISOString();
+    } else {
+        // Temporada activa (Octubre-Mayo)
+        if (inicioDeseado === 'inmediato' && diaActual <= 20) {
+            fechaFinalISO = hoyParaCalculo.toISOString();
+        } else {
+            const proximoMes = new Date(hoyParaCalculo.getFullYear(), hoyParaCalculo.getMonth() + 1, 1, 12, 0, 0);
+            fechaFinalISO = proximoMes.toISOString();
+        }
+    }
+
+    const datosComunes = {
+      nombre: d.nombre, 
+      curso: d.curso, 
+      actividad: act.nombre,
+      actividadId: act.id, 
+      dias: op.dias,
+      horario: op.horario,
+      precio: op.precio,
+      fechaAlta: fechaFinalISO, 
+      revisadoAdmin: false,
+      inicioDeseado: inicioDeseado, 
+      autorizaFotos: autorizaFotos,
+      aceptaNormas: normasRef.current
+    };
+
+    // CASO A: REQUIERE PRUEBA DE NIVEL (REVISADO)
+    // No piden prueba: Infantiles, VIPs, Adultos o si ya tienen cita/reserva activa
+    const tieneCitaValida = d.citaNivel && d.estado !== 'sin_inscripcion' && d.estado !== 'baja_finalizada';
+
+    if (act.requierePrueba && !esInfantil && !tienePaseVIP && !tieneCitaValida && d.estado !== 'prueba_reservada' && !esAdulto) {
+      if(!confirm(`⚠️ Esta actividad requiere PRUEBA DE NIVEL.\n\n¿Continuar para elegir hora?`)) return;
+      
+      close(); 
+      setTimeout(() => { 
+        onRequirePrueba({
+          ...datosComunes,
+          inicioDeseado: inicioDeseado
+        }); 
+      }, 400); 
+      return; 
+    }
+
+    // CASO B: INSCRIPCIÓN DIRECTA O LISTA DE ESPERA
+    const infoPlaza = obtenerEstadoPlaza(act.id, op.dias, d.curso);
+    
+    let estadoFinalReal;
+    if (tienePaseVIP || esInfantil || esAdulto) {
+        estadoFinalReal = 'inscrito';
+    } else if (act.requierePrueba) {
+        estadoFinalReal = 'prueba_reservada'; 
+    } else {
+        estadoFinalReal = 'inscrito';
+    }
+
+    let mensajeConfirmacion = `¿Confirmar inscripción en ${act.nombre}?`;
+    if (infoPlaza.lleno) {
+        mensajeConfirmacion = `⚠️ Este grupo está completo actualmente.\n\n¿Quieres apuntarte a la LISTA DE ESPERA para ${op.dias}?`;
+        estadoFinalReal = 'lista_espera';
+    }
+
+    if (!confirm(mensajeConfirmacion)) return;
+    
+    const grupoFormateado = `${op.dias} ${op.horario}`;
+    let idLimpio = act.id;
+    if (act.nombre.toLowerCase().includes('16:15')) idLimpio = 'primaria_1615';
+    
+    try {
+        await updateDoc(alumnoRef, { 
+          ...datosComunes,
+          estado: estadoFinalReal,
+          grupo: grupoFormateado, 
+          revisadoAdmin: (estadoFinalReal === 'inscrito'),
+          validadoAdmin: (estadoFinalReal === 'inscrito'),
+          fechaInscripcion: new Date().toISOString(),
+          // Limpieza de citas anteriores si se inscribe directamente
+          citaNivel: null,
+          citaFecha: null,
+          citaHora: null,
+          citaId: null
+        });
+
+        // Envío de Email
+        if (user && user.email) {
+            let detalleParaEmail = estadoFinalReal === 'lista_espera' 
+                ? `LISTA DE ESPERA para ${act.nombre} (${op.dias})` 
+                : `${act.nombre} — ${op.dias} a las ${op.horario}`; 
+            await enviarEmailConfirmacion(user.email, d.nombre, detalleParaEmail, 'alta');
+        }
+
+        close();
+        showToast("✅ Proceso completado correctamente.", "success");
+
+    } catch (error) {
+        console.error("Error final:", error);
+        showToast("Hubo un error al guardar los datos.", "error");
+    }
+};
+
+return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl flex flex-col max-h-[90vh]">
+        
+        {/* CABECERA */}
+        <div className="bg-blue-600 p-4 flex justify-between items-center shrink-0 rounded-t-xl">
+            <h3 className="text-white font-bold text-lg">Inscribir a {alumno.nombre}</h3>
+            <button onClick={close} className="text-white/80 hover:text-white hover:bg-blue-700 p-2 rounded-full transition">✕</button>
+        </div>
+
+        {/* CUERPO CON SCROLL */}
+<div className="p-6 overflow-y-auto flex-1">
+  
+
+{/* 🚩 BLOQUE DE FECHA OBLIGATORIO (PASO 1) */}
+<div className="mb-8 p-5 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl border-2 border-blue-200 shadow-sm">
+    <div className="flex items-center justify-center gap-2 mb-4">
+        <span className="bg-blue-600 text-white text-[10px] font-black px-2 py-0.5 rounded-full">PASO 1</span>
+        <p className="text-[11px] font-black text-blue-900 uppercase tracking-widest">
+            ¿Cuándo quieres comenzar?
+        </p>
+    </div>
+    
+    <div className="grid grid-cols-2 gap-4">
+        {/* Opción Mes Siguiente */}
+        <button 
+            type="button"
+            onClick={() => setDatosAlumno({ ...datosAlumno, inicioDeseado: 'proximo' })}
+            className={`group relative p-4 rounded-xl border-2 transition-all flex flex-col items-center justify-center text-center ${
+                datosAlumno.inicioDeseado === 'proximo' 
+                ? 'border-blue-600 bg-white shadow-lg ring-4 ring-blue-100' 
+                : 'border-gray-200 bg-gray-50/50 grayscale hover:grayscale-0'
+            }`}
+        >
+            <span className={`text-[10px] font-bold mb-1 ${datosAlumno.inicioDeseado === 'proximo' ? 'text-blue-600' : 'text-gray-400'}`}>OPCIÓN RECOMENDADA</span>
+            <span className="text-sm font-black text-gray-800 uppercase">1 de {infoAlta.sigMes}</span>
+            {datosAlumno.inicioDeseado === 'proximo' && <span className="absolute -top-2 -right-2 bg-blue-600 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs shadow-md">✓</span>}
+        </button>
+
+        {/* Opción Mes Actual (Día 20) */}
+{!infoAlta.diaCortePasado && (
+    <button 
+        type="button"
+        onClick={() => setDatosAlumno({ ...datosAlumno, inicioDeseado: 'inmediato' })}
+        className={`group relative p-4 rounded-xl border-2 transition-all flex flex-col items-center justify-center text-center ${
+            datosAlumno.inicioDeseado === 'inmediato' 
+            ? 'border-orange-500 bg-orange-50 shadow-lg ring-4 ring-orange-200 scale-105' 
+            : 'border-gray-200 bg-gray-50/50 opacity-70'
+        }`}
+    >
+        <span className={`text-[10px] font-black mb-1 px-2 py-0.5 rounded-full ${datosAlumno.inicioDeseado === 'inmediato' ? 'bg-orange-600 text-white' : 'bg-gray-200 text-gray-500'}`}>
+            EMPEZAR HOY
+        </span>
+        
+        <span className="text-sm font-black text-gray-900 uppercase">
+            Mes de {infoAlta.mesActual}
+        </span>
+        
+        {/* RECUADRO DE ADVERTENCIA ECONÓMICA MUY CLARO */}
+        <div className={`mt-2 p-2 rounded-lg border-2 flex flex-col items-center gap-1 ${datosAlumno.inicioDeseado === 'inmediato' ? 'bg-white border-red-200' : 'bg-transparent border-gray-200'}`}>
+            <span className="text-lg">⚠️</span>
+            <p className="text-[10px] font-black text-red-600 leading-tight uppercase">
+                ¡ATENCIÓN!<br/>
+                SE COBRARÁ EL MES DE<br/>
+                <span className="text-xs font-extrabold">{infoAlta.mesActual.toUpperCase()} COMPLETO</span>
+            </p>
+        </div>
+
+        {datosAlumno.inicioDeseado === 'inmediato' && (
+            <span className="absolute -top-2 -right-2 bg-orange-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs shadow-md font-bold">✓</span>
+        )}
+    </button>
+)}
+    </div>
+
+    {infoAlta.diaCortePasado && (
+        <p className="text-[10px] text-gray-500 text-center mt-3 italic">
+            * Las inscripciones para {infoAlta.mesActual} están cerradas por fecha de corte.
+        </p>
+    )}
+</div>
+
+{/* DATOS BÁSICOS (Lo que ya tenías) */}
+<div className="grid grid-cols-2 gap-4 mb-6 bg-gray-50 p-4 rounded-lg border border-gray-100">
+    {/* ... nombre y curso ... */}
+</div>
+
+           {/* SECCIÓN DE NORMATIVA DESPLEGABLE */}
+<div className="mb-4">
+    <div 
+        onClick={() => setVerNormas(!verNormas)} 
+        className="flex justify-between items-center p-3 bg-gray-100 rounded-t-lg border border-gray-200 cursor-pointer hover:bg-gray-200 transition-colors"
+    >
+        <span className="text-[10px] font-extrabold text-gray-700 uppercase tracking-widest">
+            📄 Ver Normativa y Condiciones
+        </span>
+        <span className="text-gray-400 text-xs">{verNormas ? '▲ Ocultar' : '▼ Mostrar'}</span>
+    </div>
+
+    {verNormas && (
+        <div className="w-full h-40 overflow-y-auto p-4 bg-white border-x border-gray-200 text-[11px] text-gray-600 leading-relaxed shadow-inner">
+            <h4 className="font-bold text-gray-800 mb-1">1. CONDICIONES GENERALES</h4>
+            <p className="mb-3">El club se reserva el derecho de organizar los grupos por niveles...</p>
+            <h4 className="font-bold text-red-800 mb-1 italic underline">2. POLÍTICA DE BAJAS</h4>
+            <p className="mb-3 font-medium">Las bajas deben tramitarse antes del día 25 del mes anterior. No se realizarán devoluciones una vez pasado dicho día.</p>
+        </div>
+    )}
+
+    <div 
+        onClick={toggleNormas}
+        className={`p-4 rounded-b-lg border transition-all cursor-pointer flex items-center gap-3 
+        ${aceptaNormasVisual ? 'bg-green-50 border-green-200' : 'bg-yellow-50 border-yellow-200'}`}
+    >
+        <div className={`w-6 h-6 rounded border flex items-center justify-center ${aceptaNormasVisual ? 'bg-green-600 border-green-600' : 'bg-white border-gray-400'}`}>
+            {aceptaNormasVisual && <span className="text-white font-bold text-sm">✓</span>}
+        </div>
+        <span className={`text-sm font-bold ${aceptaNormasVisual ? 'text-green-800' : 'text-yellow-900'}`}>
+            He leído y acepto la normativa (Obligatorio)
+        </span>
+    </div>
+</div>
+{/* SECCIÓN DE FOTOS (OPCIONAL) */}
+<div 
+    onClick={() => setAutorizaFotos(!autorizaFotos)}
+    className={`mb-6 p-4 rounded-lg border transition-all cursor-pointer flex items-start gap-3 
+    ${autorizaFotos ? 'bg-blue-50 border-blue-200' : 'bg-gray-50 border-gray-200 opacity-70'}`}
+>
+    <div className={`mt-1 w-6 h-6 rounded border flex items-center justify-center transition-colors ${autorizaFotos ? 'bg-blue-600 border-blue-600' : 'bg-white border-gray-400'}`}>
+        {autorizaFotos && <span className="text-white font-bold text-sm">✓</span>}
+    </div>
+    <div className="text-xs">
+        <p className={`font-bold mb-1 ${autorizaFotos ? 'text-blue-900' : 'text-gray-700'}`}>
+            📸 Autorización de imagen (Opcional)
+        </p>
+        <p className={autorizaFotos ? 'text-blue-800' : 'text-gray-500'}>
+            Autorizo el uso de fotos/vídeos del alumno para fines informativos y redes sociales.
+        </p>
+    </div>
+</div>
+
+            <h4 className="font-bold text-gray-800 text-lg mb-4 border-b pb-2">Elige Actividad y Horario:</h4>
+
+            {actividadesDisponibles.length === 0 ? (
+                <div className="text-center py-10 text-gray-500 bg-gray-100 rounded-xl border border-dashed border-gray-300">
+                    <p>No hay actividades disponibles para <strong>{datosAlumno.curso}</strong>.</p>
+                </div>
+            ) : (
+                <div className="space-y-4">
+{actividadesDisponibles.map(act => (
+    <div key={act.id} className="border rounded-xl overflow-hidden shadow-sm hover:shadow-md transition bg-white group">
+        
+        {/* Header de la actividad */}
+        <div className="bg-gray-50 p-3 border-b flex justify-between items-center group-hover:bg-blue-50 transition">
+            <h5 className="font-bold text-blue-900 text-lg">{act.nombre}</h5>
+            {act.requierePrueba && (
+                <span className="bg-orange-100 text-orange-800 text-[10px] font-bold px-2 py-1 rounded border border-orange-200 uppercase tracking-wide">
+                    Requiere Prueba
+                </span>
+            )}
+        </div>
+
+        {/* Lista de horarios */}
+        <div className="p-3 grid gap-2">
+            {act.opciones.map((op, idx) => {
+                // 🔍 CALCULAMOS EL ESTADO PARA ESTA OPCIÓN
+                const info = obtenerEstadoPlaza(act.id, op.dias, alumno.curso);
+                const plazasLibres = info.maximo - info.cupoActual;
+
+                return (
+                    <div key={idx} className="space-y-1">
+                        <button 
+                            type="button"
+                            onClick={() => inscribir(act, op)} 
+                            className={`flex justify-between items-center w-full p-3 rounded-lg border transition-all text-left relative ${
+                                info.lleno 
+                                ? 'bg-amber-50 border-amber-200 shadow-sm' 
+                                : 'bg-white border-gray-200 hover:border-blue-500 hover:bg-blue-50 shadow-sm'
+                            }`}
+                        >
+                            <div>
+                                <span className={`block font-bold ${info.lleno ? 'text-amber-800' : 'text-gray-800'}`}>
+                                    {op.dias}
+                                </span>
+                                <span className="text-xs text-gray-500 font-mono bg-white px-1 rounded border mt-1 inline-block">
+                                    ⏰ {op.horario}
+                                </span>
+                            </div>
+                            
+                            <div className="flex flex-col items-end gap-1">
+                                <span className={`font-bold px-3 py-1 rounded-full text-sm block ${
+                                    info.lleno ? 'bg-amber-200 text-amber-700' : 'bg-blue-100 text-blue-600'
+                                }`}>
+                                    {op.precio}
+                                </span>
+
+                                {/* 🚦 ETIQUETAS DINÁMICAS */}
+                                {info.lleno ? (
+                                    <span className="text-[9px] bg-amber-500 text-white px-2 py-0.5 rounded-full font-black uppercase">
+                                        ⏳ Lista Espera
+                                    </span>
+                                ) : info.esCritico ? (
+                                    <span className="text-[9px] bg-orange-100 text-orange-600 px-2 py-0.5 rounded-full font-black uppercase animate-pulse">
+                                        ⚠️ Quedan {plazasLibres} plazas
+                                    </span>
+                                ) : (
+                                    <span className="text-[9px] bg-emerald-100 text-emerald-600 px-2 py-0.5 rounded-full font-black uppercase">
+                                        ✅ Disponible
+                                    </span>
+                                )}
+                            </div>
+                        </button>
+
+                        {/* PEQUEÑA NOTA ACLARATORIA SI ESTÁ LLENO */}
+                        {info.lleno && (
+                            <p className="text-[9px] text-amber-600 font-bold px-2 italic">
+                                * Se inscribirá automáticamente en lista de espera
+                            </p>
+                        )}
+                    </div>
+                );
+            })}
+        </div>
+    </div>
+))}
+                </div>
+            )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ==========================================
+// 📅 PANTALLA PRUEBA DE NIVEL (VERSIÓN FINAL BLINDADA)
+// ==========================================
+const PantallaPruebaNivel = ({ alumno, close, onSuccess, user }) => {
+  const [fecha, setFecha] = useState('');
+  const [hora, setHora] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [ocupacion, setOcupacion] = useState({});
+  const [mesVisual, setMesVisual] = useState(new Date());
+
+  // 1. FUNCIONES DE APOYO
+  const seleccionarDiaPrueba = (fechaISO) => {
+    setFecha(fechaISO);
+    setHora(null); 
+  };
+
+  const moverMes = (delta) => {
+    const nuevoMes = new Date(mesVisual.getFullYear(), mesVisual.getMonth() + delta, 1);
+    setMesVisual(nuevoMes);
+  };
+
+  // 2. GENERAR TURNOS DE 5 MINUTOS (JUNIO DE 17 A 18 Y SEPTIEMBRE DE 15 A 17)
+  const franjas = [];
+  if (fecha) {
+    const d = new Date(fecha);
+    const mesActual = d.getUTCMonth() + 1;
+    
+    let horaInicio = 16;
+    let horaFin = 18;
+    if (mesActual === 6) {
+      horaInicio = 17;
+      horaFin = 18;
+    } else if (mesActual === 9) {
+      horaInicio = 15;
+      horaFin = 17;
+    }
+
+    for (let h = horaInicio; h < horaFin; h++) {
+      for (let m = 0; m < 60; m += 5) {
+        franjas.push(`${h}:${m.toString().padStart(2, '0')}`);
+      }
+    }
+  }
+
+  // 3. CONSULTAR AFORO
+  useEffect(() => {
+    if (!fecha) return;
+    const consultarAforo = async () => {
+      try {
+        const q = query(collection(db, 'students'), 
+          where('estado', '==', 'prueba_reservada'),
+          where('citaFecha', '==', fecha)
+        );
+        const snap = await getDocs(q);
+        const counts = {};
+        snap.forEach(d => {
+          const h = d.data().citaHora;
+          if (h) counts[h] = (counts[h] || 0) + 1;
+        });
+        setOcupacion(counts);
+      } catch (e) { console.error("Error:", e); }
+    };
+    consultarAforo();
+  }, [fecha]);
+
+// 4. FUNCIÓN GUARDAR RESERVA (BLINDAJE TOTAL OCTUBRE)
+const confirmarReserva = async () => {
+  if (!fecha || !hora) return showToast("⚠️ Selecciona un lunes y una hora.", "warning");
+  
+  const citaTexto = `${fecha.split('-').reverse().join('/')} a las ${hora}`;
+  if (citaTexto.includes('undefined') || !citaTexto) return showToast("⚠️ Error al generar la cita.", "error");
+
+  setLoading(true);
+  try {
+    const alumnoRef = doc(db, 'students', alumno.id);
+    
+    // 🎯 LA FECHA DE ORO: 1 de Octubre (Formato ISO puro sin horas de hoy)
+    const academicInfo = getDynamicAcademicYear();
+    const fechaFijaOctubre = `${academicInfo.isoStartDate}T08:00:00.000Z`;
+    const soloFechaOctubre = academicInfo.isoStartDate;
+
+    await updateDoc(alumnoRef, {
+      estado: 'prueba_reservada',
+      citaNivel: citaTexto, 
+      citaFecha: fecha,
+      citaHora: hora,
+
+      // 🚩 LIMPIEZA DE SEGURIDAD:
+      // Borramos estos campos para que el Panel Familiar NO muestre "Inscrito" todavía.
+      fechaAlta: null,
+      fechaSolicitud: null,
+      fecha_alta: null,
+      
+      actividad: alumno.actividad || '', 
+      actividadId: alumno.actividadId || '',
+      dias: alumno.dias || '',
+      horario: alumno.horario || '',
+      
+      // 🎯 Solo dejamos anotada la preferencia para cuando el Admin acepte
+      inicioDeseado: academicInfo.isoStartDate, 
+      mesInicio: 'octubre',
+      
+      grupo: (alumno.dias && alumno.horario) ? `${alumno.dias} ${alumno.horario}` : ''
+    });
+
+    if (user?.email) {
+      enviarEmailConfirmacion(user.email, alumno.nombre, citaTexto, 'cita')
+        .catch(e => console.error(e));
+    }
+
+    close(); 
+
+    // ... justo después del close() ...
+
+    setTimeout(() => {
+      // 🚩 CAMBIAMOS EL MENSAJE PARA NO DAR FALSAS ESPERANZAS
+      showToast(`✅ ¡CITA RESERVADA! Prueba de nivel: ${citaTexto}`, "success");
+    }, 300);
+
+  } catch (e) {
+    console.error("Error crítico en reserva:", e);
+    showToast("❌ Hubo un error al guardar.", "error");
+  } finally {
+    setLoading(false);
+  }
+};
+
+  // 5. BLOQUEOS PARA ANTIGUOS ALUMNOS
+  if (!alumno) return null;
+
+  if (alumno.natacionPasado === 'si' || alumno.esAntiguoAlumno === true) {
+    return (
+      <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-[999] backdrop-blur-sm">
+        <div className="bg-white rounded-3xl shadow-2xl w-full max-md p-8 text-center animate-in zoom-in">
+          <div className="w-20 h-20 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-4 text-4xl">✅</div>
+          <h3 className="text-2xl font-black text-blue-900 mb-2">¡Pase Directo!</h3>
+          <p className="text-gray-600 mb-6 font-medium">Como <strong>{alumno.nombre}</strong> ya estuvo el curso pasado, puede elegir grupo directamente.</p>
+          <button 
+            onClick={async () => {
+              try {
+                const alumnoRef = doc(db, 'students', alumno.id);
+                await updateDoc(alumnoRef, {
+                  estado: 'inscrito',
+                  revisadoAdmin: true,
+                  validadoAdmin: true,
+                  citaNivel: 'EXENTO - ANTIGUO ALUMNO' 
+                });
+                if (onSuccess) onSuccess(); 
+                close();
+              } catch (err) { console.error(err); }
+            }}
+            className="w-full bg-green-600 text-white p-4 rounded-2xl font-black shadow-lg hover:bg-green-700 transition transform active:scale-95"
+          >
+            ELEGIR GRUPO Y HORARIO
+          </button>
+        </div>
+      </div>
     );
   }
-  
-} // 👈 CIERRA LA FUNCIÓN PAGE
 
+  // 6. RENDERIZADO DE LA PANTALLA
+  return (
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-[999] backdrop-blur-sm">
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
+        
+        <div className="bg-blue-600 p-5 text-white flex justify-between items-center shadow-lg shrink-0">
+          <div>
+            <h3 className="font-black text-xl flex items-center gap-2">🏊 Reserva Prueba de Nivel</h3>
+            <p className="text-blue-100 text-xs font-medium uppercase">{alumno.nombre}</p>
+          </div>
+          <button onClick={close} className="text-white/80 hover:text-white transition-colors p-2 text-xl">✕</button>
+        </div>
+        
+        <div className="p-6 overflow-y-auto flex-1 bg-white">
+          <div className="space-y-6">
+            
+            <div className="bg-white border-2 border-blue-50 rounded-3xl overflow-hidden shadow-sm">
+              <div className="bg-slate-800 p-4 text-white flex justify-between items-center px-6">
+                <button type="button" onClick={() => moverMes(-1)} className="bg-white/10 hover:bg-white/20 w-8 h-8 rounded-full flex items-center justify-center transition-all">◀</button>
+                
+                <div className="flex flex-col items-center">
+                  <select 
+                    value={mesVisual.getMonth()} 
+                    onChange={(e) => setMesVisual(new Date(mesVisual.getFullYear(), parseInt(e.target.value), 1))}
+                    className="bg-slate-700 text-white text-xs font-black uppercase tracking-widest p-2 rounded-lg border-2 border-slate-600 outline-none cursor-pointer"
+                  >
+                    {[0,1,2,3,4,5,6,7,8,9,10,11].map((mIdx) => (
+                      <option key={mIdx} value={mIdx} className="bg-slate-800">
+                        {new Date(mesVisual.getFullYear(), mIdx).toLocaleString('es-ES', { month: 'long' }).toUpperCase()}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="text-[8px] font-bold text-slate-400 mt-1 uppercase tracking-[0.2em]">{mesVisual.getFullYear()}</span>
+                </div>
 
-const estiloInput = {
-  padding: '12px',
-  borderRadius: '10px',
-  border: '1px solid #e2e8f0',
-  fontSize: '1rem',
-  width: '100%',
-  boxSizing: 'border-box',
+                <button type="button" onClick={() => moverMes(1)} className="bg-white/10 hover:bg-white/20 w-8 h-8 rounded-full flex items-center justify-center transition-all">▶</button>
+              </div>
+              
+              <div className="p-4">
+                <div className="grid grid-cols-7 gap-1 mb-2">
+                  {['Lu', 'Ma', 'Mi', 'Ju', 'Vi', 'Sá', 'Do'].map(d => (
+                    <div key={d} className="text-center text-[9px] font-black text-slate-400 uppercase">{d}</div>
+                  ))}
+                </div>
+
+                <div className="grid grid-cols-7 gap-1">
+                  {(() => {
+                    const celdas = [];
+                    const año = mesVisual.getFullYear();
+                    const mesIdx = mesVisual.getMonth();
+                    const primerDia = new Date(año, mesIdx, 1);
+                    const offset = (primerDia.getDay() === 0 ? 7 : primerDia.getDay()) - 1;
+                    const diasEnMes = new Date(año, mesIdx + 1, 0).getDate();
+
+                    for (let i = 0; i < offset; i++) celdas.push(<div key={`v-${i}`} className="h-10"></div>);
+
+                    for (let d = 1; d <= diasEnMes; d++) {
+                      const fActual = new Date(año, mesIdx, d);
+                      const iso = `${año}-${String(mesIdx + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+                      const sem = fActual.getDay();
+                      const esPasado = fActual < new Date().setHours(0,0,0,0);
+                      
+                      let permitido = false;
+                      const mNum = mesIdx + 1;
+
+                      if (!esPasado) {
+                        if (mNum === 6 || mNum === 9) {
+                          if (mNum === 9 && d < 14) permitido = false;
+                          else if (sem === 1 || sem === 3) permitido = true;
+                        } else if (mNum === 7 || mNum === 8) {
+                          permitido = false;
+                        } else {
+                          if (sem === 1) permitido = true;
+                        }
+                      }
+
+                      celdas.push(
+                        <button
+                          key={iso}
+                          type="button"
+                          disabled={!permitido}
+                          onClick={() => seleccionarDiaPrueba(iso)}
+                          className={`h-11 rounded-xl text-xs font-bold transition-all flex flex-col items-center justify-center
+                            ${!permitido ? 'text-slate-200 cursor-not-allowed opacity-30' : 
+                              fecha === iso ? 'bg-blue-600 text-white shadow-lg scale-105 z-10' : 'bg-blue-50 text-blue-700 hover:bg-blue-100'}
+                          `}
+                        >
+                          {d}
+                          {permitido && (
+                            <span className={`text-[5px] font-black ${fecha === iso ? 'text-blue-100' : 'text-blue-400'}`}>
+                              {mNum === 6 ? '17:00' : mNum === 9 ? '15:00' : '16:00'}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    }
+                    return celdas;
+                  })()}
+                </div>
+              </div>
+              <div className="bg-slate-50 p-2 text-[8px] text-center text-slate-500 font-bold uppercase border-t border-blue-50 italic">
+                💡 Elige un mes y luego un día azul
+              </div>
+            </div>
+
+            {fecha && (
+              <div className="animate-in fade-in slide-in-from-bottom-4 bg-blue-50/50 p-5 rounded-3xl border-2 border-blue-100">
+                <div className="flex flex-col items-center mb-4 text-center">
+                    <span className="bg-blue-600 text-white text-[9px] font-black px-2 py-0.5 rounded-full mb-1">DÍA ELEGIDO: {fecha.split('-').reverse().join('/')}</span>
+                    <label className="text-[11px] font-black text-blue-900 uppercase tracking-widest">Selecciona tu hora preferida:</label>
+                </div>
+                <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
+                  {franjas.map(f => {
+                    const ocupados = ocupacion[f] || 0;
+                    const estaLleno = ocupados >= 2;
+                    return (
+                      <button
+                        key={f}
+                        type="button"
+                        disabled={estaLleno}
+                        onClick={() => setHora(f)}
+                        className={`p-2 rounded-xl text-xs font-bold border-2 transition-all ${
+                          estaLleno ? 'bg-gray-100 text-gray-300 border-gray-100' : 
+                          hora === f ? 'bg-emerald-500 text-white border-emerald-500 scale-105 shadow-md' : 
+                          'bg-white text-blue-600 border-blue-50 hover:border-blue-500'
+                        }`}
+                      >
+                        {f}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="p-4 bg-gray-50 border-t flex flex-col items-center gap-3 shrink-0">
+          <button 
+            onClick={confirmarReserva}
+            disabled={loading || !hora}
+            className="w-full py-4 bg-blue-600 text-white rounded-2xl font-black shadow-xl disabled:bg-gray-200 disabled:text-gray-400 transition-all transform active:scale-95 flex items-center justify-center gap-2"
+          >
+            {loading ? 'Procesando...' : (hora ? '✅ FINALIZAR RESERVA' : 'ELIGE DÍA Y HORA')}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 };
+
+// ==========================================
+// 🔐 LOGIN Y REGISTRO (CON VALIDACIÓN ESTRICTA Y DOBLE CONTRASEÑA)
+// ==========================================
+const Login = ({ setView }) => {
+  const [isRegister, setIsRegister] = useState(false);
+  const [loginData, setLoginData] = useState({ email: '', password: '' });
+  
+  // Estado para confirmar contraseña
+  const [confirmPassword, setConfirmPassword] = useState('');
+
+  const [regData, setRegData] = useState({ 
+    tipo: 'interno', 
+    
+    // 🚩 AÑADE ESTA LÍNEA AQUÍ
+    personaContacto: '', 
+
+    // 📞 DATOS DE CONTACTO (Ahora para TODOS: Internos y Externos)
+    telefono1: '', 
+    telefono2: '',
+    emailContacto: '',
+
+    // 💳 DATOS PAGADOR (Solo Externos)
+    nombrePagador: '', 
+    dniPagador: '', 
+    direccion: '', 
+    cp: '', 
+    poblacion: '', 
+    iban: '', 
+    emailPagador: '',
+
+    // 🧒 DATOS ALUMNO (Todos)
+    nombreAlumno: '', 
+    curso: 'INF3', 
+    letra: 'A', 
+    fechaNacimiento: '', 
+    esAntiguoAlumno: false,
+    alergias: '', 
+    observaciones: '',
+    
+    // 🔐 PASSWORD
+    password: ''
+  });
+
+  const validateAndRegister = async (e) => {
+    e.preventDefault();
+    
+    // 1. Validaciones de Seguridad
+    if (!regData.password || !confirmPassword) return showToast("⛔ Escribe la contraseña dos veces.", "warning");
+    if (regData.password !== confirmPassword) return showToast("⛔ Las contraseñas NO coinciden.", "warning");
+    if (regData.password.length < 6) return showToast("⚠️ La contraseña debe tener al menos 6 caracteres.", "warning");
+
+    // 2. Determinar Email de Usuario
+    const emailFinal = regData.tipo === 'externo' ? regData.emailPagador : regData.emailContacto;
+    if (!emailFinal) return showToast("⚠️ Falta el email para crear tu cuenta.", "error");
+
+    // 3. Validaciones Específicas
+    if (regData.tipo === 'externo') {
+      if (!regData.nombrePagador) return showToast('⚠️ Falta: Nombre del Pagador', "warning");
+      if (!regData.dniPagador) return showToast('⚠️ Falta: DNI del Pagador', "warning");
+      
+      const ibanLimpio = (regData.iban || '').replace(/\s/g, '');
+      const ibanRegex = /^ES\d{22}$/;
+      if (!ibanRegex.test(ibanLimpio)) return showToast('⚠️ IBAN Inválido: Debe empezar por ES y tener 22 números después.', "error");
+    
+      const tel1 = regData.telefono1 ? String(regData.telefono1).trim() : "";
+      if (tel1.length < 9) return showToast("⛔ El teléfono debe tener 9 cifras", "warning");
+      
+      if (!regData.direccion) return showToast("⚠️ Falta: Dirección", "warning");
+      if (!regData.cp) return showToast("⚠️ Falta: Código Postal", "warning");
+      if (!regData.iban) return showToast("⚠️ Falta: IBAN Bancario", "warning");
+    } else {
+      // VALIDACIÓN REGISTRO INTERNO
+      if (!regData.personaContacto) return showToast("⚠️ Falta: Nombre de la persona de contacto", "warning");
+      
+      const telInterno = regData.telefono1 ? String(regData.telefono1).trim() : ""; 
+      if (telInterno && telInterno.length < 9) {
+          return showToast("⛔ El teléfono debe tener 9 cifras", "warning");
+      }
+    }
+
+    try {
+      const emailFinal = regData.tipo === 'externo' ? regData.emailPagador : regData.emailContacto;
+
+      // A. Crear en Firebase Auth
+      const cred = await createUserWithEmailAndPassword(auth, emailFinal, regData.password);
+      
+      // B. Guardar Usuario (Padre/Pagador)
+      await setDoc(doc(db, 'users', cred.user.uid), { 
+        email: emailFinal, 
+        role: 'user', 
+        tipo: regData.tipo,
+        telefono1: regData.telefono1 || '', 
+        telefono2: regData.telefono2 || '',
+        
+        // 🚩 ESTO ES LO QUE ARREGLA EL NOMBRE EN LA FICHA:
+        nombre: regData.tipo === 'externo' ? regData.nombrePagador : regData.personaContacto,
+        personaContacto: regData.personaContacto || '',
+        
+        ...(regData.tipo === 'externo' ? {
+            nombrePagador: regData.nombrePagador, 
+            dniPagador: regData.dniPagador, 
+            dni: regData.dniPagador, // 👈 También guardamos el DNI aquí
+            direccion: regData.direccion, 
+            cp: regData.cp, 
+            poblacion: regData.poblacion,
+            iban: regData.iban
+        } : {
+            emailContacto: regData.emailContacto 
+        })
+      });
+
+      // ✅ MENSAJE Y CIERRE DE FUNCIÓN (Sin errores de paréntesis)
+      showToast("✅ ¡Cuenta creada con éxito! Ya puedes entrar.", "success");
+      setIsRegister(false); 
+
+    } catch (e) { 
+        if (e.code === 'auth/email-already-in-use') showToast("⛔ Ese correo ya está registrado.", "error");
+        else showToast("Error: " + e.message, "error"); 
+    }
+  };
+
+  const handleAuth = async (e) => {
+    e.preventDefault();
+    const email = loginData.email?.toLowerCase().trim();
+    const pass = loginData.password;
+
+    if (!email || !pass) return showToast("⚠️ Escribe tu email y contraseña", "warning");
+
+    try {
+      await signInWithEmailAndPassword(auth, email, pass);
+    } catch (error) {
+      if (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential') {
+        
+        // 1. REGLA PARA TUS MONITORES (SIGUE FUNCIONANDO IGUAL)
+        let miembro = equipo.find(m => m.email === email && m.password === pass);
+
+        if (miembro) {
+          try {
+            await createUserWithEmailAndPassword(auth, email, pass);
+            return;
+          } catch (regError) {
+            showToast("Error al activar acceso: " + regError.message, "error");
+          }
+        } else {
+          showToast("⚠️ Email o contraseña incorrectos.", "error");
+        }
+      } else {
+        showToast("⚠️ Error: " + error.message, "error");
+      }
+    }
+};
+
+  if (isRegister) return (
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4 relative">
+      <button onClick={() => setView('landing')} className="absolute top-4 left-4 font-bold text-gray-500 hover:text-black flex items-center gap-2">⬅ Volver al Inicio</button>
+      <div className="bg-white p-8 rounded-xl shadow-xl w-full max-w-3xl mt-10 animate-fade-in-up">
+        <h2 className="text-2xl font-black text-blue-900 text-center mb-2 uppercase tracking-tighter">Registro de Familia</h2>
+        <p className="text-center text-gray-500 text-sm mb-6 font-medium">Crea tu cuenta para gestionar las inscripciones</p>
+        
+        <form onSubmit={validateAndRegister} className="space-y-6">
+          
+          {/* 1. TIPO DE ALUMNO */}
+          <div className="flex gap-4 p-1 bg-gray-100 rounded-xl">
+            <button type="button" onClick={() => setRegData({ ...regData, tipo: 'interno' })} className={`flex-1 py-3 rounded-lg font-bold text-sm transition-all ${regData.tipo === 'interno' ? 'bg-white shadow-md text-blue-900 scale-[1.02]' : 'text-gray-500 hover:text-gray-700'}`}>🎓 Alumno del Colegio</button>
+            <button type="button" onClick={() => setRegData({ ...regData, tipo: 'externo' })} className={`flex-1 py-3 rounded-lg font-bold text-sm transition-all ${regData.tipo === 'externo' ? 'bg-white shadow-md text-blue-900 scale-[1.02]' : 'text-gray-500 hover:text-gray-700'}`}>🌍 Alumno Externo</button>
+          </div>
+         
+          {/* 2. DATOS CONTACTO / PAGO (SEGÚN TIPO) */}
+          {regData.tipo === 'externo' ? (
+            <div className="bg-orange-50 p-6 rounded-2xl border border-orange-200 animate-fade-in text-left">
+                <h3 className="font-black text-orange-900 mb-4 border-b border-orange-200 pb-2 uppercase text-xs tracking-widest">👤 Datos del Titular del Pago</h3>
+                <div className="grid md:grid-cols-2 gap-4">
+                    <div className="md:col-span-2">
+                        <label className="block text-[10px] font-black text-orange-700 uppercase mb-1 ml-1 tracking-wider">Nombre y apellidos del Titular *</label>
+                        <input className="w-full border-2 border-orange-100 p-2.5 rounded-xl bg-white focus:border-orange-400 outline-none transition-all" placeholder="Ej: Padre/Madre/Tutor" onChange={e => setRegData({ ...regData, nombrePagador: e.target.value })} />
+                    </div>
+                    
+                    <div>
+                        <label className="block text-[10px] font-black text-orange-700 uppercase mb-1 ml-1 tracking-wider">DNI / NIE *</label>
+                        <input className="w-full border-2 border-orange-100 p-2.5 rounded-xl bg-white focus:border-orange-400 outline-none transition-all" placeholder="12345678X" onChange={e => setRegData({ ...regData, dniPagador: e.target.value })} />
+                    </div>
+
+                    <div>
+                        <label className="block text-[10px] font-black text-orange-700 uppercase mb-1 ml-1 tracking-wider">Teléfono Principal *</label>
+                        <input className="w-full border-2 border-orange-100 p-2.5 rounded-xl bg-white font-bold text-blue-600 focus:border-orange-400 outline-none transition-all" placeholder="600000000" onChange={e => setRegData({ ...regData, telefono1: e.target.value })} />
+                    </div>
+
+                    <div className="md:col-span-2">
+                        <label className="block text-[10px] font-black text-orange-700 uppercase mb-1 ml-1 tracking-wider">Dirección Postal Completa *</label>
+                        <input className="w-full border-2 border-orange-100 p-2.5 rounded-xl bg-white focus:border-orange-400 outline-none transition-all" placeholder="Calle, número, piso..." onChange={e => setRegData({ ...regData, direccion: e.target.value })} />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 md:col-span-2">
+                        <div>
+                            <label className="block text-[10px] font-black text-orange-700 uppercase mb-1 ml-1 tracking-wider">Código Postal *</label>
+                            <input className="w-full border-2 border-orange-100 p-2.5 rounded-xl bg-white focus:border-orange-400 outline-none transition-all" placeholder="280XX" onChange={e => setRegData({ ...regData, cp: e.target.value })} />
+                        </div>
+                        <div>
+                            <label className="block text-[10px] font-black text-orange-700 uppercase mb-1 ml-1 tracking-wider">Población *</label>
+                            <input className="w-full border-2 border-orange-100 p-2.5 rounded-xl bg-white focus:border-orange-400 outline-none transition-all" placeholder="Madrid" onChange={e => setRegData({ ...regData, poblacion: e.target.value })} />
+                        </div>
+                    </div>
+                    
+                    <div className="md:col-span-2">
+                        <label className="block text-[10px] font-black text-red-700 uppercase mb-1 ml-1 tracking-wider">IBAN Cuenta Bancaria (Para recibos) *</label>
+                        <input 
+                          className="w-full border-2 border-red-100 p-2.5 rounded-xl bg-white font-mono uppercase focus:border-red-400 outline-none transition-all" 
+                          placeholder="ES00 0000 0000 0000 0000 0000" 
+                          maxLength={24}
+                          value={regData.iban || ''}
+                          onChange={e => {
+                            const valor = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+                            setRegData({ ...regData, iban: valor });
+                          }} 
+                        />
+                    </div>
+                    
+                    <div className="md:col-span-2 mt-2">
+                        <label className="block text-[10px] font-black text-blue-800 uppercase mb-1 ml-1 tracking-wider">Email del Pagador (Será tu Usuario) *</label>
+                        <input type="email" className="w-full border-2 border-blue-200 p-2.5 rounded-xl bg-white font-bold text-blue-900 outline-none" placeholder="ejemplo@correo.com" onChange={e => setRegData({ ...regData, emailPagador: e.target.value })} />
+                    </div>
+                </div>
+            </div>
+          ) : (
+            <div className="bg-blue-50 p-6 rounded-2xl border border-blue-100 animate-fade-in text-left">
+                <h3 className="font-black text-blue-900 mb-4 border-b border-blue-200 pb-2 uppercase text-xs tracking-widest">👤 Datos de Contacto (Interno)</h3>
+                <p className="text-xs text-blue-700 mb-4 font-medium italic">Al ser alumno del centro, usaremos la cuenta bancaria que consta en secretaría.</p>
+                <div className="space-y-4">
+                    <div>
+                        <label className="block text-[10px] font-black text-blue-700 uppercase mb-1 ml-1 tracking-wider">Nombre de la Persona de Contacto *</label>
+                        <input 
+                            type="text" 
+                            className="w-full border-2 border-blue-100 p-2.5 rounded-xl bg-white font-bold text-blue-900 focus:border-blue-400 outline-none transition-all" 
+                            placeholder="Nombre y apellidos del responsable" 
+                            value={regData.personaContacto || ''}
+                            onChange={e => setRegData({ ...regData, personaContacto: e.target.value })} 
+                        />
+                    </div>
+        
+                    <div>
+                        <label className="block text-[10px] font-black text-blue-700 uppercase mb-1 ml-1 tracking-wider">Tu Email de Usuario *</label>
+                        <input type="email" className="w-full border-2 border-blue-100 p-2.5 rounded-xl bg-white font-bold text-blue-900 focus:border-blue-400 outline-none transition-all" placeholder="ejemplo@correo.com" onChange={e => setRegData({ ...regData, emailContacto: e.target.value })} />
+                    </div>
+        
+                    <div>
+                        <label className="block text-[10px] font-black text-blue-700 uppercase mb-1 ml-1 tracking-wider">Teléfono Móvil (9 cifras) *</label>
+                        <input 
+                            type="tel" 
+                            className="w-full border-2 border-blue-100 p-2.5 rounded-xl bg-white font-bold text-blue-600 focus:border-blue-400 outline-none transition-all" 
+                            placeholder="600000000" 
+                            value={regData.telefono1 || ''} 
+                            onChange={e => setRegData(prev => ({ ...prev, telefono1: e.target.value }))} 
+                        />
+                    </div>
+                </div>
+            </div>
+          )}
+
+          {/* 4. CONTRASEÑA */}
+          <div className="border-t border-gray-100 pt-6 text-left">
+            <h3 className="font-black text-gray-700 mb-4 uppercase text-[10px] tracking-[0.2em] ml-1">🔐 Seguridad de acceso</h3>
+            <div className="grid md:grid-cols-2 gap-4">
+                <div>
+                    <label className="block text-[10px] font-black text-gray-500 uppercase mb-1 ml-1 tracking-wider">Crea una Contraseña *</label>
+                    <input className="w-full border-2 border-gray-100 p-3 bg-white rounded-xl focus:border-blue-500 outline-none transition-all" type="password" placeholder="Mínimo 6 caracteres" onChange={e => setRegData({ ...regData, password: e.target.value })} />
+                </div>
+                <div>
+                    <label className="block text-[10px] font-black text-gray-500 uppercase mb-1 ml-1 tracking-wider">Repite la Contraseña *</label>
+                    <input className="w-full border-2 border-gray-100 p-3 bg-white rounded-xl focus:border-blue-500 outline-none transition-all" type="password" placeholder="Confirma tu clave" onChange={e => setConfirmPassword(e.target.value)} />
+                </div>
+            </div>
+            <p className="text-[9px] text-gray-400 font-bold uppercase mt-3 ml-1 tracking-widest">* Por seguridad, usa una clave que no uses en otros sitios.</p>
+          </div>
+
+          <button className="w-full bg-blue-900 text-white p-4 rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-blue-100 hover:bg-blue-800 transition-all transform active:scale-95">Registrar Familia</button>
+        </form>
+        
+        <button onClick={() => setIsRegister(false)} className="w-full mt-6 text-gray-500 hover:text-blue-600 font-bold text-xs uppercase tracking-widest transition-colors">¿Ya tienes cuenta? Inicia Sesión aquí</button>
+      </div>
+    </div>
+  );
+  const handleResetPassword = async () => {
+    if (!loginData?.email) {
+      return showToast("⚠️ Por favor, escribe tu email en el cuadro de arriba.", "warning");
+    }
+    try {
+      await sendPasswordResetEmail(auth, loginData.email);
+      showToast("📧 ¡Enviado! Revisa tu bandeja de entrada o spam.", "success");
+    } catch (error) {
+      showToast("❌ Error: No se pudo enviar el correo de recuperación.", "error");
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4 relative">
+      <button onClick={() => setView('landing')} className="absolute top-4 left-4 font-bold text-gray-500 hover:text-black flex items-center gap-2">⬅ Volver al Inicio</button>
+      <div className="bg-white p-8 rounded-xl shadow-xl w-full max-w-md animate-fade-in">
+      <div className="text-center mb-10">
+  <img 
+    src={IMG_ESCUDO} 
+    className="h-32 md:h-40 mx-auto mb-6 drop-shadow-xl transition-transform hover:scale-105" 
+    alt="Logo San Buenaventura" 
+  />
+  <h2 className="text-3xl font-black mb-2 text-blue-900 tracking-tight">
+    Acceso Familias
+  </h2>
+  <p className="text-gray-500 text-sm font-medium">
+    Gestiona tus inscripciones y pruebas de nivel
+  </p>
+</div>        
+<form onSubmit={handleAuth} className="space-y-4">
+          <input 
+            className="w-full border p-3 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" 
+            type="email" 
+            placeholder="Tu Email" 
+            onChange={e => setLoginData({ ...loginData, email: e.target.value })} 
+          />
+          
+          <div className="w-full">
+            <input 
+              className="w-full border p-3 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" 
+              type="password" 
+              placeholder="Contraseña" 
+              onChange={e => setLoginData({ ...loginData, password: e.target.value })} 
+            />
+            {/* BOTÓN DE RECUPERACIÓN */}
+            <div className="flex justify-end mt-1">
+              <button 
+                type="button" 
+                onClick={handleResetPassword}
+                className="text-[10px] font-black text-blue-600 uppercase pr-1 hover:underline"
+              >
+                ¿Has olvidado tu contraseña?
+              </button>
+            </div>
+          </div>
+
+          <button className="w-full bg-blue-600 text-white p-3 rounded-lg font-bold hover:bg-blue-700 shadow-md transition">
+            Entrar
+          </button>
+        </form>
+        <div className="mt-6 text-center border-t pt-4"><p className="text-gray-500 text-sm mb-2">¿Es tu primera vez?</p><button onClick={() => setIsRegister(true)} className="text-blue-600 font-bold hover:underline">Crear Cuenta Nueva</button></div>
+      </div>
+    </div>
+  );
+};
+
+// ==========================================
+// 🚀 COMPONENTE PRINCIPAL (ROUTER)
+// ==========================================
+function AppContent() {
+  // 🚩 SUSTITUIMOS LOS 3 useState POR ESTO:
+  const { user, setUser, userRole, setUserRole, view, setView } = useAuth();
+  
+  // Este se queda porque es solo para esta pantalla
+  const [misHijos, setMisHijos] = useState([]);
+
+  // Escuchamos en tiempo real la lista de hijos cuando el usuario es del tipo familiar
+  useEffect(() => {
+    if (user && userRole === 'user') {
+      const q = query(collection(db, 'students'), where('parentId', '==', user.uid));
+      const unsubscribe = onSnapshot(q, (snapshot) => {
+        setMisHijos(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+      }, (error) => {
+        console.error("Error al escuchar cambios en alumnos familiares:", error);
+      });
+      return () => unsubscribe();
+    } else {
+      setMisHijos([]);
+    }
+  }, [user, userRole]);
+
+  useEffect(() => {
+    // Escuchamos cambios en la autenticación
+    const unsubscribe = onAuthStateChanged(auth, async (u) => {
+      if (u) {
+        console.log("Usuario detectado:", u.email); // Para depurar
+
+        // 👑 1. BACKDOOR DE JEFES (Super Admin y Coordinador)
+        const emailLimpio = u.email ? u.email.toLowerCase() : "";
+        
+        // Emails que tienen permiso total
+        const emailJefe = 'extraescolares@sanbuenaventura.org';
+        const emailManoDerecha = 'extraescolarespiscina@sanbuenaventura.org';
+
+        if (emailLimpio === emailJefe || emailLimpio === emailManoDerecha) {
+            console.log("🚀 Acceso de Gestión concedido por Email Directo");
+            setUser(u);
+            setUserRole('admin'); // Le damos el carnet de admin
+            setView('admin');      // Lo mandamos a la habitación de los jefes
+            return; // ¡Listo! No seguimos buscando
+        }
+
+        try {
+            // 2. Si no es el jefe supremo, miramos en la base de datos
+            const userDoc = await getDoc(doc(db, 'users', u.uid));
+            let role = 'user';
+            
+            if (userDoc.exists()) {
+                role = userDoc.data().role || 'user';
+            }
+
+            setUser(u);
+            setUserRole(role);
+
+            // 3. Redirección según rol encontrado en BD
+        if (role === 'admin' || role === 'profe' || role === 'monitor') { // 👈 Añadimos 'monitor'
+          setView('admin');
+      } else {
+          setView('dashboard');
+      }
+
+        } catch (error) {
+            console.error("Error al leer perfil:", error);
+            // Si falla la base de datos pero estás logueado, te avisamos
+            showToast("⚠️ Estás logueado, pero hubo un error leyendo tu perfil: " + error.message, "error");
+        }
+
+      } else {
+        // Si no hay usuario (logout)
+        setUser(null);
+        setView('landing');
+      }
+    });
+
+    return () => unsubscribe();
+  }, [setUser, setUserRole, setView]); // 🚩 Añadimos las funciones del Contexto aquí
+
+  return (
+    <div className="min-h-screen bg-gray-50 text-gray-900">
+      {view === 'landing' && <LandingPage setView={setView} />}
+      {view === 'login' && <Login setView={setView} />}
+      {view === 'dashboard' && <Dashboard user={user} misHijos={misHijos} logout={() => signOut(auth)} />}
+      {view === 'admin' && <AdminDashboard userRole={userRole} userEmail={user?.email} logout={() => signOut(auth)} />}
+    </div>
+  );
+}
+// ==========================================
+// 🚀 PUNTO DE ENTRADA ÚNICO
+// ==========================================
+// ==========================================
+// 🚀 PUNTO DE ENTRADA ÚNICO
+// ==========================================
+function ToastContainer({ toasts, removeToast }) {
+  return (
+    <div className="fixed bottom-5 right-5 z-[9999] flex flex-col gap-2 max-w-sm w-full pointer-events-none">
+      {toasts.map((t) => (
+        <div
+          key={t.id}
+          className={`pointer-events-auto flex items-center justify-between p-4 rounded-2xl shadow-2xl border backdrop-blur-md transition-all duration-300 transform translate-y-0 animate-fade-in-up
+            ${t.type === 'success' ? 'bg-emerald-600/95 border-emerald-500/30 text-white shadow-emerald-500/20' : ''}
+            ${t.type === 'warning' ? 'bg-amber-500/95 border-amber-400/30 text-white shadow-amber-500/20' : ''}
+            ${t.type === 'danger' || t.type === 'error' ? 'bg-rose-600/95 border-rose-500/30 text-white shadow-rose-500/20' : ''}
+          `}
+        >
+          <div className="flex items-center gap-3">
+            <span className="text-xl">
+              {t.type === 'success' && '✅'}
+              {t.type === 'warning' && '⚠️'}
+              {(t.type === 'error' || t.type === 'danger') && '❌'}
+            </span>
+            <p className="text-xs font-black uppercase tracking-wide leading-tight">{t.message}</p>
+          </div>
+          <button
+            onClick={() => removeToast(t.id)}
+            className="ml-4 text-white/70 hover:text-white transition-colors"
+          >
+            ✕
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export default function App() {
+  const [toasts, setToasts] = useState([]);
+
+  useEffect(() => {
+    // Vincular la función global al estado local de este Punto de Entrada
+    globalShowToast = (message, type = 'success') => {
+      const id = Math.random().toString(36).substring(2, 9);
+      setToasts((prev) => [...prev, { id, message, type }]);
+      setTimeout(() => {
+        setToasts((prev) => prev.filter((t) => t.id !== id));
+      }, 4000);
+    };
+
+    // Inyectar Tipografía Outfit y Clases de Animación Premium en el DOM
+    const link = document.createElement('link');
+    link.href = 'https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800;900&display=swap';
+    link.rel = 'stylesheet';
+    document.head.appendChild(link);
+
+    const style = document.createElement('style');
+    style.innerHTML = `
+      * {
+        font-family: 'Outfit', sans-serif !important;
+      }
+      .glass-card {
+        background: rgba(255, 255, 255, 0.75) !important;
+        backdrop-filter: blur(16px) !important;
+        -webkit-backdrop-filter: blur(16px) !important;
+        border: 1px solid rgba(255, 255, 255, 0.3) !important;
+      }
+      .glass-card-dark {
+        background: rgba(15, 23, 42, 0.7) !important;
+        backdrop-filter: blur(16px) !important;
+        -webkit-backdrop-filter: blur(16px) !important;
+        border: 1px solid rgba(255, 255, 255, 0.08) !important;
+      }
+      .animate-fade-in-up {
+        animation: fadeInUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+      }
+      @keyframes fadeInUp {
+        from {
+          opacity: 0;
+          transform: translateY(16px) scale(0.95);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0) scale(1);
+        }
+      }
+    `;
+    document.head.appendChild(style);
+  }, []);
+
+  return (
+    <AuthProvider>
+      <AppContent />
+      <ToastContainer toasts={toasts} removeToast={(id) => setToasts((prev) => prev.filter((t) => t.id !== id))} />
+    </AuthProvider>
+  );
+}
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js')
+      .then(reg => console.log('🚀 Service Worker registrado con éxito'))
+      .catch(err => console.error('❌ Error al registrar el Service Worker', err));
+  });
+}
