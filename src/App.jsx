@@ -402,6 +402,40 @@ const enviarEmailConfirmacion = async (email, alumno, detalle, tipo, fechaInicio
 const LandingPage = ({ setView }) => {
   const [tab, setTab] = useState('actividades');
   const [filtroEtapa, setFiltroEtapa] = useState('todos');
+  const [highlightedActId, setHighlightedActId] = useState(null);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const actId = params.get('act');
+    if (actId) {
+      const actExists = OFERTA_ACTIVIDADES.some(a => a.id === actId);
+      if (actExists) {
+        setTab('actividades');
+        setFiltroEtapa('todos');
+        setHighlightedActId(actId);
+        
+        // Esperar a que cambie el tab y se renderice el layout
+        setTimeout(() => {
+          const el = document.getElementById(`card-${actId}`);
+          if (el) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+        }, 500);
+
+        // Limpiar el parámetro de la URL
+        setTimeout(() => {
+          const url = new URL(window.location.href);
+          url.searchParams.delete('act');
+          window.history.replaceState({}, '', url.pathname + url.search);
+        }, 1500);
+
+        // Limpiar el resaltado después de 4 segundos
+        setTimeout(() => {
+          setHighlightedActId(null);
+        }, 4000);
+      }
+    }
+  }, []);
 
   // 🎨 GENERADOR DE TEMAS ESTÉTICOS POR ACTIVIDAD (factor WOW)
   const getThemeByActivity = (act) => {
@@ -604,12 +638,17 @@ const LandingPage = ({ setView }) => {
             /* 🚀 CADA TARJETA AHORA LLEVA AL LOGIN */
             <div 
               key={act.id} 
+              id={`card-${act.id}`}
               onClick={() => setView('login')}
-              className={`bg-white/70 backdrop-blur-md rounded-2xl shadow-lg overflow-hidden border border-white/40 flex flex-col hover:shadow-2xl hover:bg-white/90 transition-all duration-500 group cursor-pointer transform hover:-translate-y-1 w-full max-w-sm md:max-w-none ${theme.shadowGlow}`}
+              className={`bg-white/70 backdrop-blur-md rounded-2xl shadow-lg overflow-hidden border flex flex-col hover:shadow-2xl hover:bg-white/90 transition-all duration-500 group cursor-pointer transform hover:-translate-y-1 w-full max-w-sm md:max-w-none ${
+                highlightedActId === act.id 
+                  ? 'ring-4 ring-blue-500 border-blue-500 scale-105 shadow-2xl z-10' 
+                  : 'border-white/40'
+              } ${theme.shadowGlow}`}
             >
               
               {/* Encabezado con degradado dinámico según actividad */}
-              <div className={`bg-gradient-to-br ${theme.headerGrad} p-4 relative text-left`}>
+              <div className={`bg-gradient-to-br ${theme.headerGrad} p-5 relative text-left`}>
                 <div className="flex justify-between items-start mb-2">
                   <span className="bg-white/20 backdrop-blur-sm text-white text-[9px] px-2.5 py-0.5 rounded-full font-black uppercase tracking-wider border border-white/10">
                     {theme.badgeText}
@@ -618,19 +657,19 @@ const LandingPage = ({ setView }) => {
                 <h3 className="text-white font-black text-lg pr-8 uppercase tracking-tight leading-tight">{act.nombre}</h3>
                 
                 {/* ✨ Aviso que sale al pasar el ratón */}
-                <div className="absolute top-4 right-4 text-white opacity-0 group-hover:opacity-100 transition-opacity">
-                  <span className="text-[10px] font-black bg-blue-900/40 px-2 py-1 rounded-lg">ENTRAR ➔</span>
+                <div className="absolute top-5 right-5 text-white opacity-0 group-hover:opacity-100 transition-opacity">
+                  <span className="text-[10px] font-black bg-blue-900/40 px-2.5 py-1.5 rounded-lg">ENTRAR ➔</span>
                 </div>
 
                 <div className="flex flex-wrap gap-2 mt-3">
-                  <span className="bg-blue-900/30 backdrop-blur-sm text-white text-[10px] px-2 py-1 rounded border border-white/10 font-mono">
+                  <span className="bg-white/20 backdrop-blur-sm text-white text-[10px] px-2.5 py-1 rounded border border-white/10 font-mono font-bold">
                     📅 {act.diasResumen}
                   </span>
-                  <span className="bg-white/20 text-white text-[10px] px-2 py-1 rounded font-bold border border-white/10">
+                  <span className="bg-white/20 backdrop-blur-sm text-white text-[10px] px-2.5 py-1 rounded font-bold border border-white/10">
                     👥 Máx. {act.alumnosMax} Alumnos
                   </span>
                   {act.requierePrueba && (
-                    <span className="bg-red-500 text-white text-[10px] px-2 py-1 rounded font-bold shadow-sm animate-pulse whitespace-nowrap">
+                    <span className="bg-red-500 text-white text-[10px] px-2.5 py-1 rounded font-bold shadow-sm animate-pulse whitespace-nowrap">
                       ❗ Requiere Prueba
                     </span>
                   )}
@@ -643,10 +682,12 @@ const LandingPage = ({ setView }) => {
                 </p>
                 
                 {/* Aviso en cristal amarillo */}
-                <div className="bg-amber-400/10 border border-amber-200/50 p-3 rounded-xl text-xs text-amber-900 mb-4 font-semibold flex gap-2 text-left backdrop-blur-sm">
-                  <span>⚠️</span>
-                  <span>{act.aviso}</span>
-                </div>
+                {act.aviso && (
+                  <div className="bg-amber-400/10 border border-amber-200/50 p-3 rounded-xl text-xs text-amber-900 mb-4 font-semibold flex gap-2 text-left backdrop-blur-sm">
+                    <span>⚠️</span>
+                    <span>{act.aviso}</span>
+                  </div>
+                )}
         
                 {/* Footer con precios destacados */}
                 <div className="border-t border-slate-100 pt-3 mt-auto flex justify-between items-center">
@@ -662,9 +703,44 @@ const LandingPage = ({ setView }) => {
                    </div>
                 </div>
 
-                {/* ✨ Botón visual extra para que quede claro que se pulsa */}
-                <div className={`mt-4 py-2 text-[10px] font-black uppercase tracking-widest rounded-xl text-center transition-all border ${theme.btnBg} ${theme.btnHover}`}>
-                  Inscribirme / Reservar Prueba
+                {/* ✨ Botones de Acción (Inscripción y Compartido) */}
+                <div className="mt-4 flex gap-2 w-full">
+                  <div className={`flex-1 py-2.5 text-[10px] font-black uppercase tracking-widest rounded-xl text-center transition-all border flex items-center justify-center ${theme.btnBg} ${theme.btnHover}`}>
+                    Inscribirme / Reservar Prueba
+                  </div>
+                  <button
+                    type="button"
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      const urlCompartir = `${window.location.origin}${window.location.pathname}?act=${act.id}`;
+                      const textoCompartir = `¡Mira la actividad de natación de "${act.nombre}" del Colegio San Buenaventura! 🏊‍♂️✨`;
+                      
+                      if (navigator.share) {
+                        try {
+                          await navigator.share({
+                            title: act.nombre,
+                            text: textoCompartir,
+                            url: urlCompartir,
+                          });
+                          showToast('¡Compartido con éxito! 🚀', 'success');
+                        } catch (err) {
+                          if (err.name !== 'AbortError') console.error(err);
+                        }
+                      } else {
+                        try {
+                          await navigator.clipboard.writeText(urlCompartir);
+                          showToast('📋 ¡Enlace copiado! Listo para compartir.', 'success');
+                        } catch (err) {
+                          console.error(err);
+                          showToast('❌ No se pudo copiar el enlace', 'error');
+                        }
+                      }
+                    }}
+                    className="px-3.5 py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100 hover:text-slate-800 transition-colors flex items-center justify-center gap-1.5 text-[10px] font-black uppercase tracking-wider"
+                    title="Compartir enlace directo"
+                  >
+                    🔗 Compartir
+                  </button>
                 </div>
               </div>
             </div>
@@ -3471,7 +3547,7 @@ const cambiarFecha = async (campo, e) => {
 // ==========================================
 // 👨‍👩‍👧‍👦 DASHBOARD FAMILIAS (VERSIÓN FINAL ARREGLADA)
 // ==========================================
-const Dashboard = ({ user, misHijos, logout, refresh }) => {
+const Dashboard = ({ user, misHijos, logout }) => {
   const [showForm, setShowForm] = useState(false);
   const [alumnoSeleccionado, setAlumnoSeleccionado] = useState(null);
   const [alumnoEditar, setAlumnoEditar] = useState(null);
@@ -3501,14 +3577,6 @@ const handleUpdatePassword = async () => {
     );
     return () => unsub();
   }, []);
-  // 🚩 PEGA ESTO AQUÍ ABAJO:
-  useEffect(() => {
-    if (modoModal === null && user?.uid && typeof refresh === 'function') {
-      console.log("🔄 Actualizando datos al cerrar modal...");
-      refresh(user.uid);
-    }
-  }, [modoModal, user?.uid]); 
-  // 🚩 FIN DEL BLOQUE NUEVO
 
   // Localiza esto en tu Dashboard y cámbialo:
   const alTerminarPrueba = (datosExtras) => {
@@ -3546,7 +3614,6 @@ const handleUpdatePassword = async () => {
             grupo: null,
             revisadoAdmin: null
         });
-        refresh(user.uid);
         showToast('✅ Solicitud cancelada correctamente.', 'success');
     } catch (e) {
         showToast('Error al cancelar: ' + e.message, 'error');
@@ -3559,7 +3626,6 @@ const handleUpdatePassword = async () => {
     if (hijo.estado === 'sin_inscripcion') {
         if (window.confirm(`🗑️ ¿Eliminar perfil de ${hijo.nombre}?`)) {
             await deleteDoc(doc(db, 'students', hijo.id));
-            refresh(user.uid);
         }
         return;
     }
@@ -3615,7 +3681,6 @@ const handleUpdatePassword = async () => {
         }
       }
 
-      refresh(user.uid);
       showToast('✅ Solicitud de baja registrada. Tu plaza se mantendrá activa hasta final de mes.', 'success');
     }
   };
@@ -4022,14 +4087,13 @@ if (hijo.estado === 'inscrito') {
       <button onClick={() => setShowForm(true)} className="w-full py-5 border-2 border-dashed border-blue-200 text-blue-400 rounded-xl font-bold hover:bg-blue-50 transition flex items-center justify-center gap-2 mb-10"><span className="text-2xl">+</span> Añadir Otro Alumno</button>
       
 {/* MODALES Y FORMULARIOS */}
-{showForm && (<FormularioHijo close={() => setShowForm(false)} user={user} refresh={refresh} />)}
+{showForm && (<FormularioHijo close={() => setShowForm(false)} user={user} />)}
       
       {alumnoEditar && (
         <FormularioHijo 
           alumnoAEditar={alumnoEditar} 
           close={() => setAlumnoEditar(null)} 
           user={user} 
-          refresh={refresh} 
         />
       )}
 
@@ -4040,7 +4104,6 @@ if (hijo.estado === 'inscrito') {
           close={() => setModoModal(null)} 
           onSuccess={alTerminarPrueba} 
           user={user} 
-          refresh={refresh} 
         />
       )}
 
@@ -4051,7 +4114,6 @@ if (hijo.estado === 'inscrito') {
           close={() => setModoModal(null)} 
           onRequirePrueba={alTerminarPrueba} 
           user={user} 
-          refresh={refresh} 
         />
       )}
     </div>
@@ -4061,7 +4123,7 @@ if (hijo.estado === 'inscrito') {
 // ==========================================
 // ✏️ FORMULARIO EDICIÓN DE DATOS
 // ==========================================
-const FormularioHijo = ({ close, user, refresh, alumnoAEditar = null }) => {
+const FormularioHijo = ({ close, user, alumnoAEditar = null }) => {
   // Cambiamos el useState para que elija: o datos del alumno o vacío
   const [data, setData] = useState(alumnoAEditar ? { ...alumnoAEditar } : { 
     nombre: '', 
@@ -4122,7 +4184,6 @@ const FormularioHijo = ({ close, user, refresh, alumnoAEditar = null }) => {
         showToast("✅ Alumno registrado correctamente", "success");
       }
       
-      refresh(user.uid);
       close();
     } catch (error) {
       console.error("Error al guardar:", error);
@@ -4224,7 +4285,7 @@ const FormularioHijo = ({ close, user, refresh, alumnoAEditar = null }) => {
 // ==========================================
 // 📝 MODAL INSCRIPCIÓN (SOLUCIÓN DEFINITIVA CHECKBOX)
 // ==========================================
-const PantallaInscripcion = ({ alumno, close, onRequirePrueba, user, refresh }) => {
+const PantallaInscripcion = ({ alumno, close, onRequirePrueba, user }) => {
   // 1. ESTADOS
   const [datosAlumno, setDatosAlumno] = useState({ 
     nombre: alumno.nombre, 
@@ -4472,7 +4533,6 @@ const PantallaInscripcion = ({ alumno, close, onRequirePrueba, user, refresh }) 
             await enviarEmailConfirmacion(user.email, d.nombre, detalleParaEmail, 'alta');
         }
 
-        await refresh(user.uid); 
         close();
         showToast("✅ Proceso completado correctamente.", "success");
 
@@ -4717,7 +4777,7 @@ return (
 // ==========================================
 // 📅 PANTALLA PRUEBA DE NIVEL (VERSIÓN FINAL BLINDADA)
 // ==========================================
-const PantallaPruebaNivel = ({ alumno, close, onSuccess, user, refresh }) => {
+const PantallaPruebaNivel = ({ alumno, close, onSuccess, user }) => {
   const [fecha, setFecha] = useState('');
   const [hora, setHora] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -4822,10 +4882,6 @@ const confirmarReserva = async () => {
     if (user?.email) {
       enviarEmailConfirmacion(user.email, alumno.nombre, citaTexto, 'cita')
         .catch(e => console.error(e));
-    }
-
-    if (typeof refresh === 'function') {
-      await refresh(user.uid);
     }
 
     close(); 
@@ -5438,7 +5494,6 @@ function AppContent() {
         if (role === 'admin' || role === 'profe' || role === 'monitor') { // 👈 Añadimos 'monitor'
           setView('admin');
       } else {
-          await cargarHijos(u.uid);
           setView('dashboard');
       }
 
@@ -5458,16 +5513,11 @@ function AppContent() {
     return () => unsubscribe();
   }, [setUser, setUserRole, setView]); // 🚩 Añadimos las funciones del Contexto aquí
 
-  const cargarHijos = async (uid) => {
-    // La sincronización de hijos ahora se realiza automáticamente en tiempo real mediante onSnapshot en el useEffect de AppContent.
-    console.log("Real-time onSnapshot sync active for child profiles of parent UID:", uid);
-  };
-
   return (
     <div className="min-h-screen bg-gray-50 text-gray-900">
       {view === 'landing' && <LandingPage setView={setView} />}
       {view === 'login' && <Login setView={setView} />}
-      {view === 'dashboard' && <Dashboard user={user} misHijos={misHijos} logout={() => signOut(auth)} refresh={cargarHijos} />}
+      {view === 'dashboard' && <Dashboard user={user} misHijos={misHijos} logout={() => signOut(auth)} />}
       {view === 'admin' && <AdminDashboard userRole={userRole} userEmail={user?.email} logout={() => signOut(auth)} />}
     </div>
   );
