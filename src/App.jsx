@@ -3673,14 +3673,62 @@ const handleUpdatePassword = async () => {
         return;
     }
 
-    const diaActual = new Date().getDate();
+    const academicInfo = getDynamicAcademicYear();
+    const hoy = new Date();
+    // Límite de baja libre para el curso: 25 de Septiembre del año de inicio
+    const fechaLimiteLibre = new Date(academicInfo.startYear, 8, 25); // 8 = Septiembre
+
+    const esBajaLibre = hoy < fechaLimiteLibre;
+
+    if (esBajaLibre) {
+      // BAJA DIRECTA AUTOMÁTICA (ANTES DEL 25 DE SEPTIEMBRE)
+      if (window.confirm(`⚠️ ¿Deseas cancelar la inscripción de ${hijo.nombre}?\n\nAl no haber comenzado el curso escolar todavía (inicia el ${academicInfo.formattedStartDate}), la inscripción se cancelará inmediatamente y sin ningún coste.`)) {
+        try {
+          await updateDoc(doc(db, 'students', hijo.id), {
+            estado: 'sin_inscripcion',
+            actividad: null, dias: null, horario: null, precio: null,
+            citaId: null, citaNivel: null, citaFecha: null, citaHora: null,
+            fechaInscripcion: null, aceptaNormas: false, autorizaFotos: false,
+            fechaAlta: null, fechaBaja: null, grupo: null, revisadoAdmin: null
+          });
+
+          // Encolar email de confirmación de cancelación directa
+          if (user?.email) {
+            await addDoc(collection(db, 'mail'), {
+              to: [user.email],
+              message: {
+                subject: `❌ Inscripción Cancelada: ${hijo.nombre}`,
+                html: `
+                  <div style="font-family: sans-serif; padding: 20px; color: #333; border: 1px solid #ddd; border-radius: 15px; max-width: 600px;">
+                    <h2 style="color: #dc2626; border-bottom: 2px solid #dc2626; padding-bottom: 10px; margin-top: 0;">
+                       🏊 Inscripción Cancelada (Antes del Curso)
+                    </h2>
+                    <p>Hola familia de <strong>${hijo.nombre}</strong>,</p>
+                    <p>Te confirmamos que se ha cancelado correctamente tu reserva de plaza en la actividad de natación extraescolar antes del inicio del curso.</p>
+                    <p>Al no haber comenzado la actividad escolar (inicio el ${academicInfo.formattedStartDate}), este trámite no conlleva **ningún tipo de coste ni cargo**.</p>
+                    <p>Saludos,<br><strong>Coordinación de Extraescolares CSB</strong></p>
+                  </div>
+                `
+              }
+            });
+          }
+          showToast('✅ Inscripción cancelada y plaza liberada.', 'success');
+        } catch (e) {
+          showToast('Error al cancelar: ' + e.message, 'error');
+        }
+      }
+      return;
+    }
+
+    // SI YA ES 25 DE SEPTIEMBRE O DESPUÉS, ENTRA LA REGLA NORMAL DE CADA MES
+    const diaActual = hoy.getDate();
 
     // Bloqueo después del día 25
     if (diaActual > 25) {
         return showToast('⛔ PLAZO CERRADO. Las bajas para el mes siguiente deben tramitarse antes del día 25.', 'error');
     }
 
-    // Tramitación de Baja
+    // Tramitación de Baja estándar
     if (window.confirm(`⚠️ ¿Solicitar BAJA de ${hijo.nombre}?\n\nℹ️ AVISO: Al ser día ${diaActual}, se cobrará el mes en curso completo. La baja será efectiva el último día de este mes.`)) {
       await updateDoc(doc(db, 'students', hijo.id), {
         estado: 'baja_pendiente',
