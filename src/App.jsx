@@ -1357,6 +1357,8 @@ const LandingPage = ({ setView }) => {
 // 🛡️ ADMIN DASHBOARD (PANEL DE GESTIÓN)
 // ==========================================
 const AdminDashboard = ({ userRole, logout, userEmail }) => {
+  const emailNormalizado = (userEmail || '').toLowerCase().trim();
+
   // --- 1. ESTADOS ---
   const [alumnos, setAlumnos] = useState([]);
   const [padres, setPadres] = useState({});
@@ -1380,15 +1382,15 @@ const AdminDashboard = ({ userRole, logout, userEmail }) => {
 const emailJefe = 'extraescolares@sanbuenaventura.org';
 const emailCoordinador = 'extraescolarespiscina@sanbuenaventura.org'; 
 
-const soySuperAdmin = userEmail === emailJefe;
-const soyCoordinador = userEmail === emailCoordinador;
+const soySuperAdmin = emailNormalizado === emailJefe;
+const soyCoordinador = emailNormalizado === emailCoordinador;
 
 // Ambos pueden crear monitores y ver datos sensibles
 const puedeGestionarTodo = soySuperAdmin || soyCoordinador;
 
 // --- 🏊‍♂️ IDENTIFICACIÓN DEL MONITOR ---
 // Buscamos si el que ha entrado está en la lista de equipo como monitor
-const datosMonitor = equipo.find(m => m.email === userEmail);
+const datosMonitor = equipo.find(m => m.email === emailNormalizado);
 const soyMonitor = datosMonitor?.rol === 'monitor';
   // --- 🔔 SISTEMA DE NOTIFICACIONES PUSH (CEREBRO) ---
   const solicitarPermisoNotificaciones = async () => {
@@ -1553,7 +1555,7 @@ const confirmarInscripcion = async (alumnoId) => {
         alumnoNombre: alumno.nombre,
         accion: "ACEPTAR_PRUEBA",
         detalles: `Alta confirmada para: ${fechaParaDB}`,
-        adminEmail: userEmail || 'admin' 
+        adminEmail: emailNormalizado || 'admin' 
       });
 
       showToast(`¡Perfecto! La ficha de ${alumno.nombre} se ha activado para el: ${fechaParaDB.split('-').reverse().join('/')}`, "success");
@@ -1856,7 +1858,7 @@ const validarPlaza = async (alumno) => {
         alumnoNombre: alumno.nombre,
         accion: "VALIDACIÓN_ADMIN",
         detalles: `Alta confirmada para ${fechaParaDB}`,
-        adminEmail: userEmail || 'admin'
+        adminEmail: emailNormalizado || 'admin'
       });
 
       showToast(`GUARDADO CON ÉXITO. Fecha Alta: ${fechaParaDB}`, "success");
@@ -1996,7 +1998,7 @@ const archivarBaja = async (alumno) => {
     } 
 };
   const borrarMiembroEquipo = async (miembro) => {
-    if (miembro.email === userEmail) return showToast("No puedes borrarte a ti mismo", "warning");
+    if (miembro.email === emailNormalizado) return showToast("No puedes borrarte a ti mismo", "warning");
     if (confirm(`¿Borrar a ${miembro.nombre || miembro.email} del equipo?`)) {
       try {
         await deleteDoc(doc(db, 'equipo', miembro.id));
@@ -3102,7 +3104,7 @@ const listadoBajas = alumnos.filter(a => a.estado === 'baja_pendiente' || a.esta
         rol: 'monitor',
         gruposAsignados: [],
         fechaAlta: new Date().toISOString(),
-        creadoPor: userEmail
+        creadoPor: emailNormalizado
       });
       showToast(`✅ ¡Monitor creado! Email: ${email}`, "success");
       e.target.reset();
@@ -5571,7 +5573,7 @@ function AppContent() {
       {view === 'landing' && <LandingPage setView={setView} />}
       {view === 'login' && <Login setView={setView} />}
       {view === 'dashboard' && <Dashboard user={user} misHijos={misHijos} logout={() => signOut(auth)} />}
-      {view === 'admin' && <AdminDashboard userRole={userRole} userEmail={user?.email} logout={() => signOut(auth)} />}
+      {view === 'admin' && <AdminDashboard userRole={userRole} userEmail={user?.email?.toLowerCase()} logout={() => signOut(auth)} />}
     </div>
   );
 }
