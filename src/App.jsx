@@ -5226,6 +5226,7 @@ const Login = ({ setView }) => {
     if (!regData.password || !confirmPassword) return showToast("⛔ Escribe la contraseña dos veces.", "warning");
     if (regData.password !== confirmPassword) return showToast("⛔ Las contraseñas NO coinciden.", "warning");
     if (regData.password.length < 6) return showToast("⚠️ La contraseña debe tener al menos 6 caracteres.", "warning");
+    if (!regData.aceptaPrivacidad) return showToast("⛔ Debes leer y aceptar la política de protección de datos y privacidad.", "warning");
 
     // 2. Determinar Email de Usuario
     const emailFinal = regData.tipo === 'externo' ? regData.emailPagador : regData.emailContacto;
@@ -5269,6 +5270,8 @@ const Login = ({ setView }) => {
         tipo: regData.tipo,
         telefono1: regData.telefono1 || '', 
         telefono2: regData.telefono2 || '',
+        aceptaPrivacidad: true,
+        fechaAceptacionPrivacidad: new Date().toISOString(),
         
         // 🚩 ESTO ES LO QUE ARREGLA EL NOMBRE EN LA FICHA:
         nombre: regData.tipo === 'externo' ? regData.nombrePagador : regData.personaContacto,
@@ -5460,6 +5463,21 @@ const Login = ({ setView }) => {
                 </div>
             </div>
             <p className="text-[9px] text-gray-400 font-bold uppercase mt-3 ml-1 tracking-widest">* Por seguridad, usa una clave que no uses en otros sitios.</p>
+          </div>
+
+          {/* 5. ACEPTACIÓN DE PRIVACIDAD */}
+          <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 text-left">
+            <label className="flex items-start gap-3 cursor-pointer">
+              <input 
+                type="checkbox" 
+                checked={regData.aceptaPrivacidad || false}
+                onChange={e => setRegData({ ...regData, aceptaPrivacidad: e.target.checked })}
+                className="mt-1 w-4 h-4 rounded border-gray-300 text-blue-900 focus:ring-blue-500" 
+              />
+              <span className="text-xs text-gray-600 leading-tight">
+                He leído y acepto la <a href="https://drive.google.com/file/d/1LARo4uZu19J6sDcrCofKq_fjkdmz6FHd/view" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline font-bold">Información Detallada sobre Protección de Datos y Privacidad</a> del Colegio San Buenaventura.
+              </span>
+            </label>
           </div>
 
           <button className="w-full bg-blue-900 text-white p-4 rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-blue-100 hover:bg-blue-800 transition-all transform active:scale-95">Registrar Familia</button>
