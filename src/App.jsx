@@ -1426,9 +1426,12 @@ const confirmarInscripcion = async (alumnoId) => {
   // --- 2. CARGA DE DATOS (EFECTOS) ---
   useEffect(() => {
     // 1. Radar de Alumnos (Intacto)
-    const unsubStudents = onSnapshot(query(collection(db, 'students')), (s) => 
-      setAlumnos(s.docs.map(d => ({ id: d.id, ...d.data() })))
-    );
+    const unsubStudents = onSnapshot(query(collection(db, 'students')), (s) => {
+      setAlumnos(s.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, (error) => {
+      console.error("Error en alumnos:", error);
+      showToast("Error al cargar alumnos: " + error.message, "error");
+    });
     
     // 2. Radar de Padres (Solo si tiene permisos de gestión)
     let unsubUsers = () => {};
@@ -1437,6 +1440,9 @@ const confirmarInscripcion = async (alumnoId) => {
           const p = {};
           s.forEach(d => { p[d.id] = d.data(); });
           setPadres(p); 
+      }, (error) => {
+          console.error("Error en padres:", error);
+          showToast("Error al cargar tutores: " + error.message, "error");
       });
     }
 
@@ -1446,13 +1452,18 @@ const confirmarInscripcion = async (alumnoId) => {
     if (puedeGestionarTodo) {
       unsubEquipo = onSnapshot(query(collection(db, 'equipo'), orderBy('nombre', 'asc')), (s) => {
         setEquipo(s.docs.map(d => ({ id: d.id, ...d.data() })));
+      }, (error) => {
+        console.error("Error en equipo:", error);
+        showToast("Error al cargar equipo: " + error.message, "error");
       });
     }
 
     // 4. Radar de Avisos (Intacto)
-    const unsubAvisos = onSnapshot(query(collection(db, 'avisos'), orderBy('fecha', 'desc')), (s) => 
-      setAvisos(s.docs.map(d => ({ id: d.id, ...d.data() })))
-    );
+    const unsubAvisos = onSnapshot(query(collection(db, 'avisos'), orderBy('fecha', 'desc')), (s) => {
+      setAvisos(s.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, (error) => {
+      console.error("Error en avisos:", error);
+    });
 
     // 🧹 Limpieza al salir
     return () => { 
