@@ -1981,7 +1981,24 @@ const archivarBaja = async (alumno) => {
         setLoadingStaff(false); 
     } 
 };
-  const borrarMiembroEquipo = async (miembro) => { if (miembro.email === userEmail) return showToast("No puedes borrarte a ti mismo", "warning"); if (confirm("¿Borrar usuario?")) await deleteDoc(doc(db, 'users', miembro.id)); };
+  const borrarMiembroEquipo = async (miembro) => {
+    if (miembro.email === userEmail) return showToast("No puedes borrarte a ti mismo", "warning");
+    if (confirm(`¿Borrar a ${miembro.nombre || miembro.email} del equipo?`)) {
+      try {
+        await deleteDoc(doc(db, 'equipo', miembro.id));
+        
+        const q = query(collection(db, 'users'), where('email', '==', miembro.email));
+        const querySnapshot = await getDocs(q);
+        if (!querySnapshot.empty) {
+          await deleteDoc(doc(db, 'users', querySnapshot.docs[0].id));
+        }
+        
+        showToast("✅ Miembro eliminado del equipo con éxito.", "success");
+      } catch (err) {
+        showToast("❌ Error al eliminar: " + err.message, "error");
+      }
+    }
+  };
   
   const descargarExcel = () => {
     // 1. Cabeceras
@@ -5228,19 +5245,31 @@ const Login = ({ setView }) => {
     } catch (error) {
       if (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential') {
         
-        // 1. REGLA PARA TUS MONITORES (SIGUE FUNCIONANDO IGUAL)
-        let miembro = equipo.find(m => m.email === email && m.password === pass);
-
-        if (miembro) {
-          try {
-            await createUserWithEmailAndPassword(auth, email, pass);
-            return;
-          } catch (regError) {
-            showToast("Error al activar acceso: " + regError.message, "error");
+        // 1. REGLA PARA TUS MONITORES (CORREGIDA PARA EVITAR CRASH)
+        try {
+          const q = query(collection(db, 'equipo'), where('email', '==', email));
+          const querySnapshot = await getDocs(q);
+          
+          if (!querySnapshot.empty) {
+            const miembroDoc = querySnapshot.docs[0];
+            const miembroData = miembroDoc.data();
+            
+            if (miembroData.password === pass) {
+              const cred = await createUserWithEmailAndPassword(auth, email, pass);
+              // Asignar rol de monitor en la colección users al crearse la cuenta
+              await setDoc(doc(db, 'users', cred.user.uid), {
+                email: email,
+                role: 'monitor',
+                createdAt: new Date().toISOString()
+              });
+              return;
+            }
           }
-        } else {
-          showToast("⚠️ Email o contraseña incorrectos.", "error");
+        } catch (dbErr) {
+          console.error("Error al verificar credenciales de equipo:", dbErr);
         }
+
+        showToast("⚠️ Email o contraseña incorrectos.", "error");
       } else {
         showToast("⚠️ Error: " + error.message, "error");
       }
