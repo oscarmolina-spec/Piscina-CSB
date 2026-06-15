@@ -1430,12 +1430,15 @@ const confirmarInscripcion = async (alumnoId) => {
       setAlumnos(s.docs.map(d => ({ id: d.id, ...d.data() })))
     );
     
-    // 2. Radar de Padres (Ahora solo para familias)
-    const unsubUsers = onSnapshot(query(collection(db, 'users')), (s) => {
-        const p = {};
-        s.forEach(d => { p[d.id] = d.data(); });
-        setPadres(p); 
-    });
+    // 2. Radar de Padres (Solo si tiene permisos de gestión)
+    let unsubUsers = () => {};
+    if (puedeGestionarTodo) {
+      unsubUsers = onSnapshot(query(collection(db, 'users')), (s) => {
+          const p = {};
+          s.forEach(d => { p[d.id] = d.data(); });
+          setPadres(p); 
+      });
+    }
 
     // 3. 🚀 NUEVO: Radar de Equipo (Monitores y Coordinadores)
     // Solo se activa si el usuario tiene permisos de gestión
@@ -1526,7 +1529,7 @@ const confirmarInscripcion = async (alumnoId) => {
 
       // 📧 ENVÍO DE EMAIL
       const padreId = alumno.parentId || alumno.user;
-      const emailPadre = padres[padreId]?.email || alumno.email;
+      const emailPadre = padres[padreId]?.email || padres[padreId]?.emailContacto || padres[padreId]?.emailPagador || alumno.emailContacto || alumno.emailPagador || alumno.email || null;
       if (emailPadre) {
         const detalleGrupoCompleto = `${alumno.actividad} — ${alumno.dias} a las ${alumno.horario}`;
         await enviarEmailConfirmacion(emailPadre, alumno.nombre, detalleGrupoCompleto, 'alta', fechaParaDB);
@@ -1809,7 +1812,7 @@ const validarPlaza = async (alumno) => {
       if (!idCorrecto || idCorrecto === "undefined") throw new Error("ID no localizado.");
 
       const padreId = alumno.parentId || alumno.user;
-      const emailPadre = padres[padreId]?.email;
+      const emailPadre = padres[padreId]?.email || padres[padreId]?.emailContacto || padres[padreId]?.emailPagador || alumno.emailContacto || alumno.emailPagador || alumno.email || null;
       
       // 🎯 GUARDADO ÚNICO
       await setDoc(doc(db, 'students', idCorrecto), { 
