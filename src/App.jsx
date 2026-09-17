@@ -228,14 +228,19 @@ const OFERTA_ACTIVIDADES = [
     nombre: '💧 Aquagym "+16 años" (17:30-18:15)', 
     cursos: ['ADULTO', '1BACH', '2BACH'], 
     requierePrueba: false, 
-    diasResumen: 'M y J', 
-    precioResumen: '50€', 
+    diasResumen: 'L-J', 
+    precioResumen: '37€ / 50€', 
     alumnosMax: 12, // Configurado según me has pedido
     minAlumnos: 5,  // El mínimo que tenías en el aviso
-    descripcion: 'Actividad de bajo impacto ideal para mantenerse en forma sin sobrecargar articulaciones. Mejora la movilidad y el tono muscular.\n\n⬇️ HORARIOS ⬇️\n• PACK 2 DÍAS (50€): Martes y Jueves (17:30-18:15).', 
+    descripcion: 'Actividad de bajo impacto ideal para mantenerse en forma sin sobrecargar articulaciones. Mejora la movilidad y el tono muscular.\n\n⬇️ ELIGE TU OPCIÓN ⬇️\n⭐ PACK 2 DÍAS (50€): L/X o M/J.\n⭐ DÍA SUELTO (37€): Lunes, Martes, Miércoles o Jueves.', 
     aviso: 'Actividad recomendada para todos los niveles físicos.',
     opciones: [
-        { dias: '[PACK] Martes y Jueves', horario: '17:30-18:15', precio: '50€' }
+        { dias: '[PACK 2 DÍAS] Lunes y Miércoles', horario: '17:30-18:15', precio: '50€' },
+        { dias: '[PACK 2 DÍAS] Martes y Jueves', horario: '17:30-18:15', precio: '50€' },
+        { dias: '[1 DÍA] Lunes', horario: '17:30-18:15', precio: '37€' },
+        { dias: '[1 DÍA] Martes', horario: '17:30-18:15', precio: '37€' },
+        { dias: '[1 DÍA] Miércoles', horario: '17:30-18:15', precio: '37€' },
+        { dias: '[1 DÍA] Jueves', horario: '17:30-18:15', precio: '37€' }
     ]
   },
   {
