@@ -127,10 +127,12 @@ const OFERTA_ACTIVIDADES = [
     requierePrueba: false, 
     diasResumen: 'L-V', 
     precioResumen: '45€', 
-    alumnosMax: 16, // <--- Añadido
-    minAlumnos: 5, // <--- Añadido para que sea dinámico
+    alumnosMax: 16,
+    minAlumnos: 5,
+    requiereMonitor: true,
+    callesNecesarias: 1,
     descripcion: 'Iniciación y familiarización con el medio acuático. El monitor está dentro del agua para mayor seguridad y confianza.\n\n⬇️ HORARIOS ⬇️\n• 1 día/sem (45€): Lunes a Viernes (16:00-17:00).', 
-    aviso: 'Plazas limitadas por estricto orden de inscripción.', // He cambiado el aviso porque el "mínimo" ya saldrá abajo
+    aviso: 'Plazas limitadas por estricto orden de inscripción.',
     opciones: [
         { dias: 'Lunes', horario: '16:00-17:00', precio: '45€' },
         { dias: 'Martes', horario: '16:00-17:00', precio: '45€' },
@@ -146,8 +148,30 @@ const OFERTA_ACTIVIDADES = [
     requierePrueba: true, 
     diasResumen: 'L-V', 
     precioResumen: '45€ / 65€', 
-    alumnosMax: 12, // El máximo que me has indicado
-    minAlumnos: 6,  // El mínimo que tenías en el aviso
+    alumnosMax: 12,
+    minAlumnos: 6,
+    requiereMonitor: true,
+    callesNecesarias: 1,
+    segmentosFisicos: [
+      {
+        id: 'primaria_1615_1a3',
+        nombre: 'Primaria 16:15 — 1.º a 3.º',
+        cursos: ['1PRI', '2PRI', '3PRI'],
+        minAlumnos: 6,
+        alumnosMax: 12,
+        callesNecesarias: 1,
+        requiereMonitor: true
+      },
+      {
+        id: 'primaria_1615_4a6',
+        nombre: 'Primaria 16:15 — 4.º a 6.º',
+        cursos: ['4PRI', '5PRI', '6PRI'],
+        minAlumnos: 6,
+        alumnosMax: 12,
+        callesNecesarias: 1,
+        requiereMonitor: true
+      }
+    ],
     descripcion: 'Desarrollo de estilos y técnica. Se divide en subgrupos por nivel. Ideal para perfeccionar la natación.\n\n⬇️ ELIGE TU OPCIÓN ⬇️\n⭐ PACK 2 DÍAS (65€): L/X o M/J.\n⭐ DÍA SUELTO (45€): L, M, X, J o V.', 
     aviso: 'Plazas limitadas por nivel y estricto orden de inscripción.', 
     opciones: [
@@ -167,8 +191,10 @@ const OFERTA_ACTIVIDADES = [
       requierePrueba: true, 
       diasResumen: 'L-V', 
       precioResumen: '37€ / 50€', 
-      alumnosMax: 8, // Configurado según me has pedido
-      minAlumnos: 4, // El mínimo que tenías en el aviso
+      alumnosMax: 8,
+      minAlumnos: 4,
+      requiereMonitor: true,
+      callesNecesarias: 1,
       descripcion: 'Sesiones breves, dinámicas y muy seguras para avanzar en autonomía acuática. Grupos reducidos.\n\n⬇️ ELIGE TU OPCIÓN ⬇️\n⭐ PACK 2 DÍAS (50€): L/X o M/J.\n⭐ DÍA SUELTO (37€): Cualquier día.', 
       aviso: 'Plazas limitadas por nivel y estricto orden de inscripción.', 
     opciones: [
@@ -188,8 +214,10 @@ const OFERTA_ACTIVIDADES = [
     requierePrueba: true, 
     diasResumen: 'L-V', 
     precioResumen: '37€ / 50€', 
-    alumnosMax: 8, // Configurado según me has pedido
-    minAlumnos: 4, // El mínimo que tenías en el aviso
+    alumnosMax: 8,
+    minAlumnos: 4,
+    requiereMonitor: true,
+    callesNecesarias: 1,
     descripcion: 'Para quienes quieren seguir mejorando técnica y condición física. Ideal como complemento a otras actividades deportivas.\n\n⬇️ ELIGE TU OPCIÓN ⬇️\n⭐ PACK 2 DÍAS (50€).\n⭐ DÍA SUELTO (37€).', 
     aviso: 'Plazas limitadas por nivel y estricto orden de inscripción.',
     opciones: [
@@ -209,8 +237,10 @@ const OFERTA_ACTIVIDADES = [
     requierePrueba: false, 
     diasResumen: 'L-V', 
     precioResumen: '45€ / 60€', 
-    alumnosMax: 12, // Configurado según me has pedido
-    minAlumnos: 7,  // El mínimo que tenías en el aviso
+    alumnosMax: 12,
+    minAlumnos: 7,
+    requiereMonitor: true,
+    callesNecesarias: 1,
     descripcion: 'Iniciación al waterpolo. Deporte de equipo, balón y natación. Fomenta el compañerismo.\n\n⬇️ ELIGE TU OPCIÓN ⬇️\n⭐ PACK 2 DÍAS (60€): L/X o M/J.\n⭐ DÍA SUELTO (45€): L, M, X, J o V.', 
     aviso: 'Deporte de equipo con plazas limitadas por grupo.',
     opciones: [
@@ -230,8 +260,10 @@ const OFERTA_ACTIVIDADES = [
     requierePrueba: false, 
     diasResumen: 'L-J', 
     precioResumen: '37€ / 50€', 
-    alumnosMax: 12, // Configurado según me has pedido
-    minAlumnos: 5,  // El mínimo que tenías en el aviso
+    alumnosMax: 12,
+    minAlumnos: 5,
+    requiereMonitor: true,
+    callesNecesarias: 1,
     descripcion: 'Actividad de bajo impacto ideal para mantenerse en forma sin sobrecargar articulaciones. Mejora la movilidad y el tono muscular.\n\n⬇️ ELIGE TU OPCIÓN ⬇️\n⭐ PACK 2 DÍAS (50€): L/X o M/J.\n⭐ DÍA SUELTO (37€): Lunes, Martes, Miércoles o Jueves.', 
     aviso: 'Actividad recomendada para todos los niveles físicos.',
     opciones: [
@@ -250,8 +282,10 @@ const OFERTA_ACTIVIDADES = [
     requierePrueba: false, 
     diasResumen: 'L-V', 
     precioResumen: '37€ / 50€', 
-    alumnosMax: 10, // Configurado según me has pedido
-    minAlumnos: 4,  // El mínimo que tenías en el aviso
+    alumnosMax: 10,
+    minAlumnos: 4,
+    requiereMonitor: true,
+    callesNecesarias: 1,
     descripcion: 'Clases para adultos que quieran mantenerse activos o mejorar su estilo.\n\n⬇️ ELIGE TU OPCIÓN ⬇️\n⭐ PACK 2 DÍAS (50€): L/X o M/J.\n⭐ DÍA SUELTO (37€): Cualquier día.\n(Horarios variables según el día).', 
     aviso: 'Plazas asignadas por estricto orden de inscripción.',
     opciones: [
@@ -271,8 +305,10 @@ const OFERTA_ACTIVIDADES = [
     requierePrueba: true, 
     diasResumen: 'L/X o V', 
     precioResumen: '37€ / 50€', 
-    alumnosMax: 10, // Configurado según me has pedido
-    minAlumnos: 4,  // El mínimo que tenías en el aviso
+    alumnosMax: 10,
+    minAlumnos: 4,
+    requiereMonitor: true,
+    callesNecesarias: 1,
     descripcion: 'Sesiones específicas para adolescentes, con técnica, mantenimiento o preparación física.\n\n⬇️ ELIGE TU OPCIÓN ⬇️\n⭐ PACK 2 DÍAS (50€): Tardes.\n⭐ DÍA SUELTO (37€): Tarde o Mediodía.', 
     aviso: 'Plazas limitadas por nivel y estricto orden de inscripción.',
     opciones: [
@@ -289,8 +325,10 @@ const OFERTA_ACTIVIDADES = [
     requierePrueba: false, 
     diasResumen: 'L-V', 
     precioResumen: '25€ / 35€', 
-    alumnosMax: 10, // Configurado según me has pedido
-    minAlumnos: 2,  // El mínimo que tenías en el aviso
+    alumnosMax: 10,
+    minAlumnos: 2,
+    requiereMonitor: false,
+    callesNecesarias: 1,
     descripcion: 'Uso de calle para entrenamiento personal sin monitor. Ideal para quienes buscan nadar a su propio ritmo.\n\n⬇️ ELIGE TU OPCIÓN ⬇️\n⭐ PACK 2 DÍAS (35€): L/X o M/J.\n⭐ DÍA SUELTO (25€): Cualquier día de la semana.', 
     aviso: 'Uso exclusivo de calle para nado continuo sin monitor.',
     opciones: [
@@ -1359,6 +1397,879 @@ const LandingPage = ({ setView }) => {
 }
 
 // ==========================================
+// 💰 MÓDULO DE CÁLCULO DE RENTABILIDAD Y ANÁLISIS OPERATIVO (MILICÉNTIMOS REFINADO)
+// Funciones puras para cálculo financiero, calendarios y aforos de piscina
+// ==========================================
+
+/**
+ * Convierte un texto o número de precio a milicéntimos enteros.
+ * 1 Euro = 100.000 milicéntimos
+ * 1 Céntimo = 1.000 milicéntimos
+ * Formatos admitidos: "37€", "50 €", "65,00€", "37", 37, 14.5.
+ */
+function parsePrecioAMilicentimos(str) {
+  if (str === null || str === undefined || str === '') return 0;
+  if (typeof str === 'number') return Math.round(str * 100000);
+  
+  const limpio = String(str).replace(/[^\d.,]/g, '').trim().replace(',', '.');
+  if (!limpio) return 0;
+  const num = parseFloat(limpio);
+  if (isNaN(num)) return 0;
+  return Math.round(num * 100000);
+}
+
+/**
+ * Convierte un precio a céntimos enteros (compatible con interfaces existentes).
+ */
+function parsePrecioACentimos(str) {
+  return Math.round(parsePrecioAMilicentimos(str) / 1000);
+}
+
+/**
+ * Normaliza fechas de Firestore (ISO String, Timestamp o Date) a Date.
+ */
+function normalizarFechaFirestore(val) {
+  if (!val) return null;
+  if (val instanceof Date && !isNaN(val.getTime())) return val;
+  if (typeof val === 'object' && typeof val.toDate === 'function') return val.toDate();
+  if (typeof val === 'object' && typeof val.seconds === 'number') return new Date(val.seconds * 1000);
+  if (typeof val === 'string') {
+    const d = new Date(val);
+    if (!isNaN(d.getTime())) return d;
+  }
+  return null;
+}
+
+/**
+ * Extrae y normaliza los días de la semana de un texto comercial.
+ * Devuelve valores unívocos: ['lunes', 'martes', 'miercoles', 'jueves', 'viernes']
+ */
+function extraerDiasSemana(textoDias) {
+  if (!textoDias || typeof textoDias !== 'string') return [];
+  const t = textoDias.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
+  const dias = [];
+
+  if (t.includes('l-v') || t.includes('lunes a viernes')) {
+    return ['lunes', 'martes', 'miercoles', 'jueves', 'viernes'];
+  }
+  if (t.includes('l-j') || t.includes('lunes a jueves')) {
+    return ['lunes', 'martes', 'miercoles', 'jueves'];
+  }
+
+  if (t.includes('lunes')) dias.push('lunes');
+  if (t.includes('martes')) dias.push('martes');
+  if (t.includes('miercoles')) dias.push('miercoles');
+  if (t.includes('jueves')) dias.push('jueves');
+  if (t.includes('viernes')) dias.push('viernes');
+
+  return Array.from(new Set(dias));
+}
+
+/**
+ * Calcula la duración en minutos a partir del string de horario "HH:MM-HH:MM"
+ */
+function calcularDuracionMinutos(horarioStr) {
+  if (!horarioStr || typeof horarioStr !== 'string') return 45;
+  const partes = horarioStr.split('-');
+  if (partes.length !== 2) return 45;
+
+  const [h1, m1] = partes[0].split(':').map(Number);
+  const [h2, m2] = partes[1].split(':').map(Number);
+
+  if (isNaN(h1) || isNaN(h2)) return 45;
+
+  const inicioMin = h1 * 60 + (m1 || 0);
+  const finMin = h2 * 60 + (m2 || 0);
+
+  const dur = finMin - inicioMin;
+  return dur > 0 ? dur : 45;
+}
+
+/**
+ * Determina el segmento físico al que pertenece un alumno según el catálogo y curso
+ */
+function obtenerSegmentoFisico(actividadId, curso, catalog = []) {
+  if (catalog && catalog.length > 0) {
+    const actDoc = catalog.find(a => a.id === actividadId);
+    if (actDoc && actDoc.segmentosFisicos && actDoc.segmentosFisicos.length > 0) {
+      const segMatch = actDoc.segmentosFisicos.find(s => s.cursos && s.cursos.includes(curso));
+      if (segMatch) return segMatch.id;
+      return actDoc.segmentosFisicos[0].id;
+    }
+  }
+
+  // Fallback por defecto si no hay catálogo completo
+  if (actividadId === 'primaria_1615') {
+    if (['1PRI', '2PRI', '3PRI'].includes(curso)) return 'primaria_1615_1a3';
+    if (['4PRI', '5PRI', '6PRI'].includes(curso)) return 'primaria_1615_4a6';
+    return 'primaria_1615_1a3';
+  }
+  return actividadId;
+}
+
+/**
+ * Cuenta los días operativos reales del mes y las apariciones de cada día de la semana
+ */
+function contarDiasOperativos(mesIndex, anio, festivosArray = []) {
+  const month0 = (mesIndex >= 0 && mesIndex <= 11) ? mesIndex : (mesIndex - 1);
+  const totalDiasMes = new Date(anio, month0 + 1, 0).getDate();
+
+  const conteoPorDia = { lunes: 0, martes: 0, miercoles: 0, jueves: 0, viernes: 0 };
+  let totalDiasOperativos = 0;
+  const fechasOperativas = [];
+
+  const festivosSet = new Set((festivosArray || []).map(f => String(f).trim()));
+
+  for (let d = 1; d <= totalDiasMes; d++) {
+    const fecha = new Date(anio, month0, d);
+    const dayOfWeek = fecha.getDay(); // 0: Sun, 1: Mon, ... 5: Fri, 6: Sat
+    
+    const isoDate = `${anio}-${String(month0 + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+
+    if (dayOfWeek >= 1 && dayOfWeek <= 5 && !festivosSet.has(isoDate)) {
+      totalDiasOperativos++;
+      fechasOperativas.push({ fechaDate: fecha, isoDate, dayOfWeek });
+
+      if (dayOfWeek === 1) conteoPorDia.lunes++;
+      if (dayOfWeek === 2) conteoPorDia.martes++;
+      if (dayOfWeek === 3) conteoPorDia.miercoles++;
+      if (dayOfWeek === 4) conteoPorDia.jueves++;
+      if (dayOfWeek === 5) conteoPorDia.viernes++;
+    }
+  }
+
+  return { totalDiasOperativos, conteoPorDia, fechasOperativas };
+}
+
+/**
+ * Cobertura real en horas del socorrista y su coste total en milicéntimos
+ */
+function calcularCoberturaSocorrista(conteoPorDia, tarifaSocorristaConIvaMc) {
+  const horasLJ = (conteoPorDia.lunes + conteoPorDia.martes + conteoPorDia.miercoles + conteoPorDia.jueves) * 3;
+  const horasViernes = conteoPorDia.viernes * 3.75;
+  const totalHorasSocorrista = horasLJ + horasViernes;
+  const costeTotalSocorristaMc = Math.round(totalHorasSocorrista * tarifaSocorristaConIvaMc);
+
+  return { totalHorasSocorrista, costeTotalSocorristaMc };
+}
+
+/**
+ * Cobertura del coordinador: 1 hora por día operativo
+ */
+function calcularCoberturaCoordinador(totalDiasOperativos, tarifaCoordinadorConIvaMc) {
+  const totalHorasCoordinador = totalDiasOperativos * 1;
+  const costeTotalCoordinadorMc = Math.round(totalHorasCoordinador * tarifaCoordinadorConIvaMc);
+  return { totalHorasCoordinador, costeTotalCoordinadorMc };
+}
+
+/**
+ * Construye todas las sesiones físicas unívocas a partir del catálogo oficial de actividades
+ */
+function construirSesionesFisicas(catalog) {
+  const sesiones = [];
+
+  (catalog || []).forEach(act => {
+    const requiereMonitorDefault = act.requiereMonitor !== false && act.id !== 'nado_libre';
+    const callesNecesariasDefault = act.callesNecesarias || 1;
+
+    const segmentos = (act.segmentosFisicos && act.segmentosFisicos.length > 0)
+      ? act.segmentosFisicos
+      : [{
+          id: act.id,
+          nombre: act.nombre,
+          minAlumnos: act.minAlumnos || 4,
+          alumnosMax: act.alumnosMax || 12,
+          callesNecesarias: callesNecesariasDefault,
+          requiereMonitor: requiereMonitorDefault
+        }];
+
+    segmentos.forEach(seg => {
+      const segRequiereMonitor = seg.requiereMonitor !== undefined ? seg.requiereMonitor : requiereMonitorDefault;
+      const segCallesNecesarias = seg.callesNecesarias !== undefined ? seg.callesNecesarias : callesNecesariasDefault;
+      const segMin = seg.minAlumnos !== undefined ? seg.minAlumnos : (act.minAlumnos || 4);
+      const segMax = seg.alumnosMax !== undefined ? seg.alumnosMax : (act.alumnosMax || 12);
+
+      (act.opciones || []).forEach(op => {
+        const diasArray = extraerDiasSemana(op.dias);
+        const duracionMin = calcularDuracionMinutos(op.horario);
+
+        diasArray.forEach(dia => {
+          const key = `${act.id}_${seg.id}_${dia}_${op.horario}`;
+          let existente = sesiones.find(s => s.key === key);
+          if (!existente) {
+            existente = {
+              key,
+              actividadId: act.id,
+              segmentoId: seg.id,
+              nombreActividad: act.nombre,
+              nombreSegmento: seg.nombre || act.nombre,
+              dia,
+              horario: op.horario,
+              duracionMinutos: duracionMin,
+              requiereMonitor: segRequiereMonitor,
+              callesNecesarias: segCallesNecesarias,
+              alumnosMin: segMin,
+              alumnosMax: segMax,
+              modalidadesAsociadas: []
+            };
+            sesiones.push(existente);
+          }
+          if (!existente.modalidadesAsociadas.includes(op.dias)) {
+            existente.modalidadesAsociadas.push(op.dias);
+          }
+        });
+      });
+    });
+  });
+
+  return sesiones;
+}
+
+/**
+ * Clasifica a un alumno de Firestore según su validez y estado para el mes seleccionado
+ */
+function clasificarAlumnoParaMes(alumno, mesIndex, anio, catalog = []) {
+  if (!alumno) return { categoria: 'descartado', motivo: 'Registro nulo' };
+
+  // Estados no confirmados de origen
+  if (alumno.estado === 'lista_espera') return { categoria: 'lista_espera', motivo: 'Lista de espera' };
+  if (alumno.estado === 'prueba_reservada') return { categoria: 'prueba_reservada', motivo: 'Prueba reservada' };
+  if (alumno.estado === 'sin_inscripcion') return { categoria: 'sin_inscripcion', motivo: 'Sin inscripción' };
+  if (alumno.estado === 'baja_finalizada') {
+    const fBaja = normalizarFechaFirestore(alumno.fechaBaja);
+    const fInicioMes = new Date(anio, mesIndex, 1);
+    const fFinMes = new Date(anio, mesIndex + 1, 0, 23, 59, 59);
+    if (!fBaja || fBaja < fInicioMes || fBaja > fFinMes) {
+      return { categoria: 'descartado', motivo: 'Baja finalizada fuera del mes' };
+    }
+  }
+
+  // Detección de actividad y modalidad
+  const actividadId = alumno.actividadId || (catalog.find(a => a.nombre === alumno.actividad)?.id);
+  const textoDias = alumno.opcionDias || alumno.dias;
+  const horario = alumno.horario;
+
+  // Comprobar campos indispensables
+  if (!actividadId || !textoDias) {
+    return { categoria: 'pendiente_revisar', motivo: 'Faltan datos de actividad o días' };
+  }
+
+  const actDoc = catalog.length > 0 ? catalog.find(a => a.id === actividadId) : null;
+  
+  // Determinar precio en milicéntimos
+  let precioMc = parsePrecioAMilicentimos(alumno.precio);
+  if (precioMc === 0 && actDoc) {
+    // Buscar en catálogo
+    const diasNorm = extraerDiasSemana(textoDias);
+    const opDoc = (actDoc.opciones || []).find(o => {
+      const oDias = extraerDiasSemana(o.dias);
+      const coincideDias = oDias.length === diasNorm.length && oDias.every(d => diasNorm.includes(d));
+      const coincideHorario = !horario || o.horario === horario;
+      return coincideDias && coincideHorario;
+    });
+    if (opDoc) {
+      precioMc = parsePrecioAMilicentimos(opDoc.precio);
+    }
+  }
+
+  if (precioMc === 0) {
+    return { categoria: 'pendiente_revisar', motivo: 'Sin tarifa identificada' };
+  }
+
+  const precioCentimos = Math.round(precioMc / 1000);
+
+  // Comprobar fechas de alta y baja para el mes
+  const fechaInicioMes = new Date(anio, mesIndex, 1);
+  const fechaFinMes = new Date(anio, mesIndex + 1, 0, 23, 59, 59);
+
+  const fechaAlta = normalizarFechaFirestore(alumno.fechaAlta || alumno.createdAt || alumno.fechaInscripcion);
+  if (!fechaAlta) {
+    return { categoria: 'pendiente_revisar', motivo: 'Sin fecha de alta válida' };
+  }
+
+  // Alta en mes futuro -> Ingreso potencial
+  if (fechaAlta > fechaFinMes) {
+    return { categoria: 'ingreso_potencial', motivo: 'Alta en mes posterior', precioMc, precioCentimos, actividadId, textoDias, horario };
+  }
+
+  const fechaBaja = normalizarFechaFirestore(alumno.fechaBaja);
+  if (fechaBaja && fechaBaja < fechaInicioMes) {
+    return { categoria: 'descartado', motivo: 'Baja finalizada antes del inicio del mes' };
+  }
+
+  // Validación por administrador
+  const estaValidado = alumno.validadoAdmin === true || alumno.revisadoAdmin === true;
+
+  if (!estaValidado) {
+    return { categoria: 'ingreso_potencial', motivo: 'Pendiente de validación por admin', precioMc, precioCentimos, actividadId, textoDias, horario };
+  }
+
+  if (alumno.estado === 'inscrito' || (alumno.estado === 'baja_pendiente' && (!fechaBaja || fechaBaja >= fechaInicioMes)) || (alumno.estado === 'baja_finalizada' && fechaBaja >= fechaInicioMes && fechaBaja <= fechaFinMes)) {
+    return { categoria: 'ingreso_confirmado', precioMc, precioCentimos, actividadId, textoDias, horario };
+  }
+
+  return { categoria: 'pendiente_revisar', motivo: 'Estado no identificado' };
+}
+
+/**
+ * Detecta solapamiento de calles por minuto y comprueba si se superan las calles permitidas
+ */
+function detectarConflictosCalles(sesionesFisicasViables, conteoPorDia, totalCallesPermitidas = 4) {
+  const conflictos = [];
+  const diasNombres = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes'];
+
+  diasNombres.forEach(diaNombre => {
+    if ((conteoPorDia[diaNombre] || 0) === 0) return;
+
+    const sesionesDelDia = sesionesFisicasViables.filter(s => s.dia === diaNombre);
+    if (sesionesDelDia.length === 0) return;
+
+    // Crear mapa de minutos de 14:00 (840) a 19:00 (1140)
+    for (let min = 840; min <= 1140; min++) {
+      let callesEnUso = 0;
+      const sesionesInvolucradas = [];
+
+      sesionesDelDia.forEach(s => {
+        if (!s.horario) return;
+        const partes = s.horario.split('-');
+        if (partes.length !== 2) return;
+        const [h1, m1] = partes[0].split(':').map(Number);
+        const [h2, m2] = partes[1].split(':').map(Number);
+        const startMin = h1 * 60 + (m1 || 0);
+        const endMin = h2 * 60 + (m2 || 0);
+
+        if (min >= startMin && min < endMin) {
+          callesEnUso += (s.callesNecesarias || 1);
+          sesionesInvolucradas.push(s);
+        }
+      });
+
+      if (callesEnUso > totalCallesPermitidas) {
+        // Encontrar intervalo del conflicto
+        const hInicioStr = `${Math.floor(min / 60)}:${String(min % 60).padStart(2, '0')}`;
+        const conflictoExistente = conflictos.find(c => c.dia === diaNombre && c.intervaloEndMin === min);
+
+        if (conflictoExistente) {
+          conflictoExistente.intervaloEndMin = min + 1;
+          conflictoExistente.intervalo = `${conflictoExistente.hInicioStr}-${Math.floor((min + 1) / 60)}:${String((min + 1) % 60).padStart(2, '0')}`;
+        } else {
+          conflictos.push({
+            dia: diaNombre,
+            hInicioStr,
+            intervaloStartMin: min,
+            intervaloEndMin: min + 1,
+            intervalo: `${hInicioStr}-${Math.floor((min + 1) / 60)}:${String((min + 1) % 60).padStart(2, '0')}`,
+            callesNecesarias: callesEnUso,
+            exceso: callesEnUso - totalCallesPermitidas,
+            actividades: Array.from(new Set(sesionesInvolucradas.map(s => s.nombreSegmento || s.nombreActividad)))
+          });
+        }
+      }
+    }
+  });
+
+  return conflictos;
+}
+
+/**
+ * MOTOR DE SIMULACIÓN VIRTUAL BIDIRECCIONAL (+1 / -1)
+ * Permite añadir y retirar virtualmente alumnos reales sin tocar Firestore
+ */
+function simularCambioAlumnos(alumnosReales = [], simulacionAjustes = {}, catalog = [], mesIndex = 0, anio = 2024) {
+  let alumnosProcesados = [...alumnosReales];
+
+  Object.keys(simulacionAjustes).forEach(simKey => {
+    const delta = simulacionAjustes[simKey] || 0;
+    if (delta === 0) return;
+
+    // simKey formato: "actId___segmentoId___opcionDias" o "actId___opcionDias"
+    const partes = simKey.split('___');
+    let actId = partes[0];
+    let segmentoId = null;
+    let opcionDias = null;
+
+    if (partes.length >= 3) {
+      segmentoId = partes[1];
+      opcionDias = partes.slice(2).join('___');
+    } else {
+      opcionDias = partes.slice(1).join('___');
+    }
+
+    const actDoc = catalog.find(a => a.id === actId);
+    const opDoc = (actDoc?.opciones || []).find(o => o.dias === opcionDias);
+
+    if (delta < 0) {
+      // Retirar virtualmente alumnos reales confirmados que coincidan
+      const aRetirarCount = Math.abs(delta);
+      let retirados = 0;
+
+      alumnosProcesados = alumnosProcesados.filter(al => {
+        if (retirados >= aRetirarCount) return true;
+        
+        const alAct = al.actividadId || (catalog.find(a => a.nombre === al.actividad)?.id);
+        const alDias = al.opcionDias || al.dias;
+        const alSeg = obtenerSegmentoFisico(alAct, al.curso, catalog);
+
+        const coincideAct = alAct === actId;
+        const coincideDias = alDias === opcionDias;
+        const coincideSeg = !segmentoId || alSeg === segmentoId;
+
+        const clasificacion = clasificarAlumnoParaMes(
+          al,
+          mesIndex,
+          anio,
+          catalog
+        );
+        const esConfirmado = clasificacion.categoria === 'ingreso_confirmado';
+
+        if (coincideAct && coincideDias && coincideSeg && esConfirmado) {
+          retirados++;
+          return false; // se retira virtualmente
+        }
+        return true;
+      });
+
+    } else if (delta > 0) {
+      // Añadir virtualmente alumnos confirmados válidos
+      const cursoRepresentativo = (segmentoId === 'primaria_1615_4a6') ? '4PRI' : (actDoc?.cursos?.[0] || '1PRI');
+      const mesStr = String(mesIndex + 1).padStart(2, '0');
+
+      for (let i = 0; i < delta; i++) {
+        alumnosProcesados.push({
+          id: `sim_virtual_${simKey}_${i}_${Date.now()}`,
+          nombre: `Alumno Simulado ${i + 1}`,
+          actividadId: actId,
+          actividad: actDoc?.nombre,
+          opcionDias: opcionDias,
+          dias: opcionDias,
+          horario: opDoc?.horario,
+          precio: opDoc?.precio || '45€',
+          curso: cursoRepresentativo,
+          estado: 'inscrito',
+          validadoAdmin: true,
+          revisadoAdmin: true,
+          fechaAlta: `${anio}-${mesStr}-01`
+        });
+      }
+    }
+  });
+
+  return alumnosProcesados;
+}
+
+/**
+ * ORQUESTADOR PRINCIPAL: Realiza todo el cálculo de rentabilidad en MILICÉNTIMOS ENTEROS
+ */
+function calcularRentabilidadMensual({
+  alumnos = [],
+  mesIndex = 9, // 0-11
+  anio = 2024,
+  festivos = [],
+  tarifaMonitorBase = 10,
+  tarifaSocorristaBase = 10,
+  tarifaCoordinadorBase = 14.5,
+  ivaPersonal = 21,
+  totalCallesPermitidas = 4,
+  catalog = []
+}) {
+  // 1. Tarifas con IVA en milicéntimos sin redondeo intermedio
+  // 1 Euro = 100.000 milicéntimos. Coordinador 14.5 * 1.21 * 100000 = 1.754.500 mc exactos.
+  const factorIva = 1 + (ivaPersonal / 100);
+  const tarifaMonitorConIvaMc = Math.round(tarifaMonitorBase * factorIva * 100000);
+  const tarifaSocorristaConIvaMc = Math.round(tarifaSocorristaBase * factorIva * 100000);
+  const tarifaCoordinadorConIvaMc = Math.round(tarifaCoordinadorBase * factorIva * 100000);
+
+  // 2. Días operativos del mes
+  const { totalDiasOperativos, conteoPorDia } = contarDiasOperativos(mesIndex, anio, festivos);
+
+  // 3. Coberturas fijas (Socorrista y Coordinador)
+  const { totalHorasSocorrista } = calcularCoberturaSocorrista(conteoPorDia, tarifaSocorristaConIvaMc);
+  const { totalHorasCoordinador } = calcularCoberturaCoordinador(totalDiasOperativos, tarifaCoordinadorConIvaMc);
+
+  // 4. Construir catálogo de sesiones físicas
+  const sesionesFisicas = construirSesionesFisicas(catalog);
+
+  // 5. Clasificar alumnos
+  const alumnosConfirmadosUnicos = new Set();
+  const alumnosPotenciales = [];
+  const alumnosListaEspera = [];
+  const pendientesDeRevisar = [];
+
+  let ingresoConfirmadoTotalMc = 0;
+  let ingresoPotencialTotalMc = 0;
+
+  const inscripcionesPorSesion = {};
+  sesionesFisicas.forEach(s => {
+    inscripcionesPorSesion[s.key] = { confirmados: [], potenciales: [] };
+  });
+
+  (alumnos || []).forEach(alumno => {
+    const resClass = clasificarAlumnoParaMes(alumno, mesIndex, anio, catalog);
+
+    if (resClass.categoria === 'ingreso_confirmado') {
+      alumnosConfirmadosUnicos.add(alumno.id || `${alumno.nombre}_${alumno.curso}`);
+      ingresoConfirmadoTotalMc += resClass.precioMc;
+
+      const diasAlumno = extraerDiasSemana(resClass.textoDias);
+      const segmentoId = obtenerSegmentoFisico(resClass.actividadId, alumno.curso, catalog);
+
+      const sesionesDelAlumno = sesionesFisicas.filter(s => 
+        s.actividadId === resClass.actividadId &&
+        s.segmentoId === segmentoId &&
+        diasAlumno.includes(s.dia) &&
+        (!resClass.horario || s.horario === resClass.horario)
+      );
+
+      let totalPonderacion = 0;
+      sesionesDelAlumno.forEach(s => {
+        const apariciones = conteoPorDia[s.dia] || 0;
+        totalPonderacion += (s.duracionMinutos * apariciones);
+      });
+
+      let acumCuotaMc = 0;
+      sesionesDelAlumno.forEach((s, idx) => {
+        const esUltima = (idx === sesionesDelAlumno.length - 1);
+        const apariciones = conteoPorDia[s.dia] || 0;
+        const ponderacion = (s.duracionMinutos * apariciones);
+
+        let fraccionCuotaMc = 0;
+        if (esUltima) {
+          fraccionCuotaMc = resClass.precioMc - acumCuotaMc;
+        } else {
+          fraccionCuotaMc = totalPonderacion > 0 ? Math.round((resClass.precioMc * ponderacion) / totalPonderacion) : 0;
+          acumCuotaMc += fraccionCuotaMc;
+        }
+
+        inscripcionesPorSesion[s.key].confirmados.push({
+          alumnoId: alumno.id,
+          cuotaTotalMc: resClass.precioMc,
+          fraccionAtribuidaMc: fraccionCuotaMc
+        });
+      });
+
+    } else if (resClass.categoria === 'ingreso_potencial') {
+      alumnosPotenciales.push(alumno);
+      ingresoPotencialTotalMc += (resClass.precioMc || 0);
+
+      const diasAlumno = extraerDiasSemana(resClass.textoDias);
+      const segmentoId = obtenerSegmentoFisico(resClass.actividadId, alumno.curso, catalog);
+
+      const sesionesDelAlumno = sesionesFisicas.filter(s => 
+        s.actividadId === resClass.actividadId &&
+        s.segmentoId === segmentoId &&
+        diasAlumno.includes(s.dia) &&
+        (!resClass.horario || s.horario === resClass.horario)
+      );
+
+      sesionesDelAlumno.forEach(s => {
+        inscripcionesPorSesion[s.key].potenciales.push(alumno);
+      });
+
+    } else if (resClass.categoria === 'lista_espera') {
+      alumnosListaEspera.push(alumno);
+    } else if (resClass.categoria === 'pendiente_revisar') {
+      pendientesDeRevisar.push({ alumno, motivo: resClass.motivo });
+    }
+  });
+
+function calcularMonitoresNecesarios(sesion, numConfirmados) {
+  if (!sesion.esViable || !sesion.requiereMonitor) return 0;
+
+  if (sesion.actividadId === 'chapoteo') {
+    return numConfirmados >= 10 ? 2 : 1;
+  }
+
+  return sesion.monitoresNecesarios || 1;
+}
+
+function parseHorarioMinutos(horarioStr) {
+  if (!horarioStr || typeof horarioStr !== 'string') return { startMin: 0, endMin: 0 };
+  const partes = horarioStr.split('-');
+  if (partes.length !== 2) return { startMin: 0, endMin: 0 };
+  const [h1, m1] = partes[0].split(':').map(Number);
+  const [h2, m2] = partes[1].split(':').map(Number);
+  const startMin = (isNaN(h1) ? 0 : h1) * 60 + (isNaN(m1) ? 0 : m1);
+  const endMin = (isNaN(h2) ? 0 : h2) * 60 + (isNaN(m2) ? 0 : m2);
+  return { startMin, endMin };
+}
+
+function minToHHMM(min) {
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
+
+function calcularFranjasMonitores(resultadoSesiones = [], conteoPorDia = {}) {
+  const diasNombres = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes'];
+  const franjas = [];
+  let maximoMonitoresSimultaneos = 0;
+
+  diasNombres.forEach(diaNombre => {
+    if ((conteoPorDia[diaNombre] || 0) === 0) return;
+
+    const viablesDia = resultadoSesiones.filter(s => s.dia === diaNombre && s.esViable);
+    if (viablesDia.length === 0) return;
+
+    const sesionesConT = viablesDia.map(s => {
+      const { startMin, endMin } = parseHorarioMinutos(s.horario);
+      return { ...s, startMin, endMin };
+    });
+
+    const puntosSet = new Set();
+    sesionesConT.forEach(s => {
+      if (s.endMin > s.startMin) {
+        puntosSet.add(s.startMin);
+        puntosSet.add(s.endMin);
+      }
+    });
+
+    const puntos = Array.from(puntosSet).sort((a, b) => a - b);
+
+    for (let i = 0; i < puntos.length - 1; i++) {
+      const t1 = puntos[i];
+      const t2 = puntos[i + 1];
+
+      const sesionesActivas = sesionesConT.filter(s => s.startMin <= t1 && s.endMin >= t2);
+
+      if (sesionesActivas.length > 0) {
+        const callesOcupadas = sesionesActivas.reduce((acc, s) => acc + (s.callesNecesarias || 1), 0);
+        const monitoresNecesarios = sesionesActivas.reduce((acc, s) => acc + (s.monitoresNecesarios || 0), 0);
+        const nombresGrupos = Array.from(new Set(sesionesActivas.map(s => s.nombreSegmento || s.nombreActividad)));
+
+        if (monitoresNecesarios > maximoMonitoresSimultaneos) {
+          maximoMonitoresSimultaneos = monitoresNecesarios;
+        }
+
+        franjas.push({
+          dia: diaNombre,
+          franja: `${minToHHMM(t1)}-${minToHHMM(t2)}`,
+          t1,
+          t2,
+          sesionesActivas,
+          callesOcupadas,
+          monitoresNecesarios,
+          nombresGrupos
+        });
+      }
+    }
+  });
+
+  return { franjasMonitores: franjas, maximoMonitoresSimultaneos };
+}
+
+  // 6. Evaluar viabilidad de sesiones físicas y calcular costes de monitores
+  let costeMonitoresTotalMc = 0;
+  let sesionesViablesCount = 0;
+  let sesionesEnFormacionCount = 0;
+  let sesionesNoSalenCount = 0;
+
+  const resultadoSesiones = sesionesFisicas.map(s => {
+    const confirmados = inscripcionesPorSesion[s.key].confirmados;
+    const potenciales = inscripcionesPorSesion[s.key].potenciales;
+
+    const numConfirmados = confirmados.length;
+    const aparicionesMes = conteoPorDia[s.dia] || 0;
+    const faltanParaMinimo = Math.max(0, s.alumnosMin - numConfirmados);
+
+    let estado = 'Sin alumnado';
+    if (numConfirmados > s.alumnosMax) {
+      estado = 'Exceso de aforo';
+    } else if (numConfirmados === s.alumnosMax) {
+      estado = 'Completo';
+    } else if (numConfirmados >= s.alumnosMin) {
+      estado = 'Viable';
+    } else if (faltanParaMinimo === 1) {
+      estado = 'En formación';
+    } else if (numConfirmados > 0) {
+      estado = 'No sale';
+    }
+
+    const esViable = (estado === 'Viable' || estado === 'Completo' || estado === 'Exceso de aforo');
+
+    if (esViable) sesionesViablesCount++;
+    if (estado === 'En formación') sesionesEnFormacionCount++;
+    if (estado === 'No sale') sesionesNoSalenCount++;
+
+    const ingresoAtribuidoMc = confirmados.reduce((acc, c) => acc + c.fraccionAtribuidaMc, 0);
+    const ingresoOperativoMc = esViable ? ingresoAtribuidoMc : 0;
+    const ingresoPendienteAperturaMc = esViable ? 0 : ingresoAtribuidoMc;
+
+    const monitoresNecesarios = calcularMonitoresNecesarios({ ...s, esViable }, numConfirmados);
+
+    let costeMonitorMc = 0;
+    if (esViable && s.requiereMonitor) {
+      const horasMes = (s.duracionMinutos / 60) * aparicionesMes * monitoresNecesarios;
+      costeMonitorMc = Math.round(horasMes * tarifaMonitorConIvaMc);
+      costeMonitoresTotalMc += costeMonitorMc;
+    }
+
+    return {
+      ...s,
+      numConfirmados,
+      numPotenciales: potenciales.length,
+      aparicionesMes,
+      faltanParaMinimo,
+      estado,
+      esViable,
+      monitoresNecesarios,
+      ingresoAtribuidoMc,
+      ingresoOperativoMc,
+      ingresoPendienteAperturaMc,
+      costeMonitorMc,
+      costeSocorristaMc: 0,
+      costeCoordinadorMc: 0,
+      costeTotalMc: 0,
+      resultadoOperativoMc: 0
+    };
+  });
+
+  // 7. Reparto de costes compartidos (Socorrista y Coordinador) por día operativo según minutosCalle viables
+  let costeFijoSinActividadMc = 0;
+  let costeTotalSocorristaMc = 0;
+  let costeTotalCoordinadorMc = 0;
+
+  const diasNombres = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes'];
+
+  diasNombres.forEach(diaNombre => {
+    const numDias = conteoPorDia[diaNombre] || 0;
+    if (numDias === 0) return;
+
+    const horasSocorristaPorDia = diaNombre === 'viernes' ? 3.75 : 3.0;
+    const costeSocorristaDiaTotalMc = Math.round(numDias * horasSocorristaPorDia * tarifaSocorristaConIvaMc);
+    const costeCoordinadorDiaTotalMc = Math.round(numDias * 1 * tarifaCoordinadorConIvaMc);
+
+    costeTotalSocorristaMc += costeSocorristaDiaTotalMc;
+    costeTotalCoordinadorMc += costeCoordinadorDiaTotalMc;
+
+    const viablesDelDia = resultadoSesiones.filter(s => s.dia === diaNombre && s.esViable);
+
+    let totalMinutosCalleDia = 0;
+    viablesDelDia.forEach(s => {
+      totalMinutosCalleDia += (s.duracionMinutos * s.callesNecesarias * s.aparicionesMes);
+    });
+
+    if (totalMinutosCalleDia > 0) {
+      let socorristaAsignadoAcum = 0;
+      let coordinadorAsignadoAcum = 0;
+
+      viablesDelDia.forEach((s, idx) => {
+        const esUltima = (idx === viablesDelDia.length - 1);
+        const minutosCalleSesion = (s.duracionMinutos * s.callesNecesarias * s.aparicionesMes);
+
+        let fraccionSocorrista = 0;
+        let fraccionCoordinador = 0;
+
+        if (esUltima) {
+          fraccionSocorrista = costeSocorristaDiaTotalMc - socorristaAsignadoAcum;
+          fraccionCoordinador = costeCoordinadorDiaTotalMc - coordinadorAsignadoAcum;
+        } else {
+          fraccionSocorrista = Math.round((costeSocorristaDiaTotalMc * minutosCalleSesion) / totalMinutosCalleDia);
+          fraccionCoordinador = Math.round((costeCoordinadorDiaTotalMc * minutosCalleSesion) / totalMinutosCalleDia);
+
+          socorristaAsignadoAcum += fraccionSocorrista;
+          coordinadorAsignadoAcum += fraccionCoordinador;
+        }
+
+        s.costeSocorristaMc += fraccionSocorrista;
+        s.costeCoordinadorMc += fraccionCoordinador;
+      });
+    } else {
+      costeFijoSinActividadMc += (costeSocorristaDiaTotalMc + costeCoordinadorDiaTotalMc);
+    }
+  });
+
+  // Convertir milicéntimos a céntimos enteros para resultados visibles
+  resultadoSesiones.forEach(s => {
+    s.costeTotalMc = s.costeMonitorMc + s.costeSocorristaMc + s.costeCoordinadorMc;
+    s.resultadoOperativoMc = s.ingresoOperativoMc - s.costeTotalMc;
+    s.margenPorcentaje = s.ingresoOperativoMc > 0 ? Math.round((s.resultadoOperativoMc / s.ingresoOperativoMc) * 100) : 0;
+
+    // Campos en céntimos para UI
+    s.ingresoAtribuidoCentimos = Math.round(s.ingresoAtribuidoMc / 1000);
+    s.ingresoOperativoCentimos = Math.round(s.ingresoOperativoMc / 1000);
+    s.ingresoPendienteAperturaCentimos = Math.round(s.ingresoPendienteAperturaMc / 1000);
+    s.costeMonitorCentimos = Math.round(s.costeMonitorMc / 1000);
+    s.costeSocorristaCentimos = Math.round(s.costeSocorristaMc / 1000);
+    s.costeCoordinadorCentimos = Math.round(s.costeCoordinadorMc / 1000);
+    s.costeTotalCentimos = Math.round(s.costeTotalMc / 1000);
+    s.resultadoOperativoCentimos = Math.round(s.resultadoOperativoMc / 1000);
+  });
+
+  const ingresoOperativoTotalMc = resultadoSesiones.reduce((acc, s) => acc + s.ingresoOperativoMc, 0);
+  const ingresoPendienteAperturaTotalMc = resultadoSesiones.reduce((acc, s) => acc + s.ingresoPendienteAperturaMc, 0);
+
+  const costeTotalPersonalMc = costeMonitoresTotalMc + costeTotalSocorristaMc + costeTotalCoordinadorMc;
+  const resultadoOperativoConfirmadoMc = ingresoOperativoTotalMc - costeTotalPersonalMc;
+  const resultadoOperativoPotencialMc = (ingresoOperativoTotalMc + ingresoPotencialTotalMc) - costeTotalPersonalMc;
+  const margenConfirmadoPorcentaje = ingresoOperativoTotalMc > 0 ? Math.round((resultadoOperativoConfirmadoMc / ingresoOperativoTotalMc) * 100) : 0;
+
+  const sesionesViables = resultadoSesiones.filter(s => s.esViable);
+  const conflictosCalles = detectarConflictosCalles(sesionesViables, conteoPorDia, totalCallesPermitidas);
+  const { franjasMonitores, maximoMonitoresSimultaneos } = calcularFranjasMonitores(resultadoSesiones, conteoPorDia);
+
+  return {
+    mesIndex,
+    anio,
+    totalDiasOperativos,
+    conteoPorDia,
+
+    // Tarifas con IVA en mc y céntimos
+    tarifaMonitorConIvaMc,
+    tarifaSocorristaConIvaMc,
+    tarifaCoordinadorConIvaMc,
+    tarifaMonitorConIvaCentimos: Math.round(tarifaMonitorConIvaMc / 1000),
+    tarifaSocorristaConIvaCentimos: Math.round(tarifaSocorristaConIvaMc / 1000),
+    tarifaCoordinadorConIvaCentimos: Math.round(tarifaCoordinadorConIvaMc / 1000),
+
+    // Conteos
+    alumnosConfirmadosCount: alumnosConfirmadosUnicos.size,
+    alumnosPotencialesCount: alumnosPotenciales.length,
+    alumnosListaEsperaCount: alumnosListaEspera.length,
+    pendientesDeRevisarCount: pendientesDeRevisar.length,
+    pendientesDeRevisar,
+
+    // Ingresos en milicéntimos y céntimos
+    ingresoConfirmadoTotalMc,
+    ingresoOperativoTotalMc,
+    ingresoPendienteAperturaTotalMc,
+    ingresoPotencialTotalMc,
+    ingresoConfirmadoTotalCentimos: Math.round(ingresoConfirmadoTotalMc / 1000),
+    ingresoOperativoTotalCentimos: Math.round(ingresoOperativoTotalMc / 1000),
+    ingresoPendienteAperturaTotalCentimos: Math.round(ingresoPendienteAperturaTotalMc / 1000),
+    ingresoPotencialTotalCentimos: Math.round(ingresoPotencialTotalMc / 1000),
+
+    // Costes en milicéntimos y céntimos
+    costeMonitoresTotalMc,
+    costeTotalSocorristaMc,
+    costeTotalCoordinadorMc,
+    costeFijoSinActividadMc,
+    costeTotalPersonalMc,
+    costeMonitoresTotalCentimos: Math.round(costeMonitoresTotalMc / 1000),
+    costeTotalSocorristaCentimos: Math.round(costeTotalSocorristaMc / 1000),
+    costeTotalCoordinadorCentimos: Math.round(costeTotalCoordinadorMc / 1000),
+    costeFijoSinActividadCentimos: Math.round(costeFijoSinActividadMc / 1000),
+    costeTotalPersonalCentimos: Math.round(costeTotalPersonalMc / 1000),
+
+    // Resultados
+    resultadoOperativoConfirmadoMc,
+    resultadoOperativoPotencialMc,
+    resultadoOperativoConfirmadoCentimos: Math.round(resultadoOperativoConfirmadoMc / 1000),
+    resultadoOperativoPotencialCentimos: Math.round(resultadoOperativoPotencialMc / 1000),
+    margenConfirmadoPorcentaje,
+
+    // Sesiones, Franjas y Conflictos
+    sesionesViablesCount,
+    sesionesEnFormacionCount,
+    sesionesNoSalenCount,
+    resultadoSesiones,
+    conflictosCalles,
+    franjasMonitores,
+    maximoMonitoresSimultaneos
+  };
+}
+
+// ==========================================
 // 🛡️ ADMIN DASHBOARD (PANEL DE GESTIÓN)
 // ==========================================
 const AdminDashboard = ({ userRole, logout, userEmail }) => {
@@ -1378,6 +2289,22 @@ const AdminDashboard = ({ userRole, logout, userEmail }) => {
   
   const [newStaff, setNewStaff] = useState({ email: '', password: '', role: 'profe' });
   const [loadingStaff, setLoadingStaff] = useState(false);
+
+  // --- 💰 ESTADOS MÓDULO DE RENTABILIDAD Y ANÁLISIS OPERATIVO ---
+  const hoyRentabilidad = new Date();
+  const [mesRentabilidad, setMesRentabilidad] = useState(hoyRentabilidad.getMonth());
+  const [anioRentabilidad, setAnioRentabilidad] = useState(hoyRentabilidad.getFullYear());
+  const [festivosRentabilidad, setFestivosRentabilidad] = useState([]);
+  const [nuevoFestivoInput, setNuevoFestivoInput] = useState('');
+  const [tarifaMonitorBase, setTarifaMonitorBase] = useState(10);
+  const [tarifaSocorristaBase, setTarifaSocorristaBase] = useState(10);
+  const [tarifaCoordinadorBase, setTarifaCoordinadorBase] = useState(14.5);
+  const [ivaPersonal, setIvaPersonal] = useState(21);
+  const [totalCallesPermitidas, setTotalCallesPermitidas] = useState(4);
+  const [simulacionAjustes, setSimulacionAjustes] = useState({});
+  const [simActividadSel, setSimActividadSel] = useState('');
+  const [simSegmentoSel, setSimSegmentoSel] = useState('');
+  const [simOpcionSel, setSimOpcionSel] = useState('');
 
   // ESTADO PARA LA FICHA (ALUMNO SELECCIONADO)
   const [alumnoSeleccionado, setAlumnoSeleccionado] = useState(null);
@@ -2294,8 +3221,8 @@ const listadoBajas = alumnos.filter(a => a.estado === 'baja_pendiente' || a.esta
 
 {/* PESTAÑAS AJUSTADAS ESTILO CHIPS FLOTANTES GLASSMORPHIC */}
 <div className="flex gap-2 p-1.5 mb-8 overflow-x-auto scrollbar-hide bg-white/80 backdrop-blur-md border border-gray-100 rounded-2xl sticky top-2 z-40 shadow-sm">
-  {['global', 'ocupacion', 'pruebas', 'espera', 'prevision', 'bajas', 'equipo', 'avisos'].map(t => {
-     if ((t === 'equipo' || t === 'bajas' || t === 'prevision') && userRole !== 'admin') return null;
+  {['global', 'ocupacion', 'pruebas', 'espera', 'prevision', 'bajas', 'rentabilidad', 'equipo', 'avisos'].map(t => {
+     if ((t === 'equipo' || t === 'bajas' || t === 'prevision' || t === 'rentabilidad') && userRole !== 'admin') return null;
      
      let count = 0; 
      if (t === 'pruebas') count = listadoPruebas.length; 
@@ -2313,6 +3240,7 @@ const listadoBajas = alumnos.filter(a => a.estado === 'baja_pendiente' || a.esta
             ${tab === t 
               ? (t === 'espera' ? 'bg-amber-500 text-white shadow-lg shadow-amber-500/25 border border-amber-500 font-extrabold' : 
                  t === 'prevision' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/25 border border-indigo-600 font-extrabold' :
+                 t === 'rentabilidad' ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/25 border border-emerald-600 font-extrabold' :
                  'bg-blue-600 text-white shadow-lg shadow-blue-600/25 border border-blue-600 font-extrabold')
               : 'text-slate-500 hover:text-slate-800 hover:bg-slate-100/70 border border-transparent'
             }
@@ -2325,16 +3253,18 @@ const listadoBajas = alumnos.filter(a => a.estado === 'baja_pendiente' || a.esta
   {t === 'espera' && '⏳'}
   {t === 'prevision' && '📈'} 
   {t === 'bajas' && '📉'}
+  {t === 'rentabilidad' && '💰'}
   {t === 'equipo' && '🛡️'}
   {t === 'avisos' && '📢'}
-  {t === 'mis_clases' && '🏊‍♂️'} {/* 👈 AÑADE ESTA LÍNEA */}
+  {t === 'mis_clases' && '🏊‍♂️'}
 </span>
             
 <span>
   {t === 'ocupacion' ? 'PLAZAS' : 
    t === 'espera' ? 'ESPERA' : 
    t === 'prevision' ? 'PREVISIÓN' : 
-   t === 'mis_clases' ? 'MIS CLASES' : // 👈 Esta es la "traducción"
+   t === 'rentabilidad' ? 'RENTABILIDAD' :
+   t === 'mis_clases' ? 'MIS CLASES' :
    t.toUpperCase()}
 </span>
 
@@ -3080,6 +4010,931 @@ const listadoBajas = alumnos.filter(a => a.estado === 'baja_pendiente' || a.esta
         </table>
     </div>
 )}
+
+{/* 💰 TAB: RENTABILIDAD INTEGRAL Y ANÁLISIS OPERATIVO REAL */}
+{tab === 'rentabilidad' && userRole === 'admin' && (() => {
+
+  const alumnosProcesados = simularCambioAlumnos(
+    alumnos || [],
+    simulacionAjustes,
+    OFERTA_ACTIVIDADES,
+    mesRentabilidad,
+    anioRentabilidad
+  );
+
+  const simulacionAplicadaCount = Object.values(simulacionAjustes).reduce((acc, v) => acc + Math.abs(v), 0);
+
+  const rentabilidad = calcularRentabilidadMensual({
+    alumnos: alumnosProcesados,
+    mesIndex: mesRentabilidad,
+    anio: anioRentabilidad,
+    festivos: festivosRentabilidad,
+    tarifaMonitorBase,
+    tarifaSocorristaBase,
+    tarifaCoordinadorBase,
+    ivaPersonal,
+    totalCallesPermitidas,
+    catalog: OFERTA_ACTIVIDADES
+  });
+
+  const factorIva = 1 + (ivaPersonal / 100);
+  const monitorConIvaEur = (tarifaMonitorBase * factorIva).toFixed(2);
+  const socorristaConIvaEur = (tarifaSocorristaBase * factorIva).toFixed(2);
+  const coordinadorConIvaEur = (tarifaCoordinadorBase * factorIva).toFixed(3);
+
+  const opcionesSimulador = [];
+  OFERTA_ACTIVIDADES.forEach(act => {
+    if (act.segmentosFisicos && act.segmentosFisicos.length > 0) {
+      act.segmentosFisicos.forEach(seg => {
+        (act.opciones || []).forEach(op => {
+          opcionesSimulador.push({
+            key: `${act.id}___${seg.id}___${op.dias}`,
+            actividadId: act.id,
+            segmentoId: seg.id,
+            nombreActividad: `${act.nombre} (${seg.nombre})`,
+            nombreSegmento: seg.nombre,
+            dias: op.dias,
+            horario: op.horario,
+            precio: op.precio
+          });
+        });
+      });
+    } else {
+      (act.opciones || []).forEach(op => {
+        opcionesSimulador.push({
+          key: `${act.id}___${op.dias}`,
+          actividadId: act.id,
+          segmentoId: act.id,
+          nombreActividad: act.nombre,
+          nombreSegmento: act.nombre,
+          dias: op.dias,
+          horario: op.horario,
+          precio: op.precio
+        });
+      });
+    }
+  });
+
+  const mesesNombres = [
+    "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+    "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
+  ];
+
+  const aoActual = new Date().getFullYear();
+  const anosDisponibles = Array.from(
+    new Set([aoActual - 1, aoActual, aoActual + 1, aoActual + 2, aoActual + 3, anioRentabilidad])
+  ).sort((a, b) => a - b);
+
+  const mesISOStr = `${anioRentabilidad}-${String(mesRentabilidad + 1).padStart(2, '0')}`;
+  const festivosDelMes = festivosRentabilidad.filter(f => f.startsWith(mesISOStr));
+
+  const agregarFestivo = () => {
+    if (!nuevoFestivoInput) return;
+    const parts = nuevoFestivoInput.split('-');
+    if (parts.length !== 3) return;
+    const fAnio = parseInt(parts[0], 10);
+    const fMes = parseInt(parts[1], 10) - 1;
+    const fDia = parseInt(parts[2], 10);
+    const dateObj = new Date(fAnio, fMes, fDia);
+
+    if (isNaN(dateObj.getTime()) || dateObj.getDate() !== fDia || dateObj.getMonth() !== fMes || dateObj.getFullYear() !== fAnio) {
+      alert("Introduce una fecha válida");
+      return;
+    }
+    if (fAnio !== anioRentabilidad || fMes !== mesRentabilidad) {
+      alert("El festivo debe pertenecer al mes y año seleccionados");
+      return;
+    }
+    const dayOfWeek = dateObj.getDay();
+    if (dayOfWeek === 0 || dayOfWeek === 6) {
+      alert("Solo se pueden añadir festivos entre Lunes y Viernes");
+      return;
+    }
+    if (festivosRentabilidad.includes(nuevoFestivoInput)) {
+      alert("El festivo ya está registrado");
+      return;
+    }
+    setFestivosRentabilidad([...festivosRentabilidad, nuevoFestivoInput]);
+    setNuevoFestivoInput('');
+  };
+
+  return (
+    <div className="space-y-6 animate-fade-in text-left pb-20">
+
+      {/* 1. CABECERA Y NOTA EXCLUSIVA DE RESPONSABILIDAD (SECCIÓN 13) */}
+      <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-indigo-950 p-6 md:p-8 rounded-3xl text-white shadow-xl relative overflow-hidden">
+        <div className="relative z-10 max-w-3xl">
+          <div className="inline-flex items-center gap-2 px-3 py-1 bg-emerald-500/20 border border-emerald-400/30 rounded-full text-emerald-300 text-xs font-bold uppercase tracking-wider mb-3">
+            <span>💎 Audit Financiero y Operativo Pro</span>
+          </div>
+          <h2 className="text-2xl md:text-3xl font-black uppercase tracking-tight italic">
+            Calculadora de Rentabilidad Operativa
+          </h2>
+          <p className="text-slate-300 text-xs md:text-sm font-medium mt-2 leading-relaxed">
+            Modelo de auditoría exacta: días de calendario real, 1 socorrista compartido, 1h/día de coordinador, monitores por sesión viable e IVA del 21%.
+          </p>
+        </div>
+        <div className="absolute right-4 bottom-[-10px] text-9xl opacity-10 pointer-events-none">📊</div>
+      </div>
+
+      {/* AVISO LEGAL DE ALCANCE FINANCIERO */}
+      <div className="bg-amber-50 border-l-4 border-amber-500 p-4 rounded-xl shadow-sm flex items-start gap-3">
+        <span className="text-xl">⚠️</span>
+        <div className="text-xs text-amber-900 font-medium">
+          <strong className="font-bold block uppercase text-[11px] text-amber-950">Aviso de alcance de resultados:</strong>
+          Los importes calculados representan exclusivamente el <strong>Resultado operativo después de costes de personal</strong>. No incluye alquiler, suministros, seguros, material, comisiones bancarias, impuestos ni otros gastos generales.
+        </div>
+      </div>
+
+      {/* 2. ALERTAS DE EXCESO DE CALLES (> 4 CALLES) (SECCIÓN 12 & REQ 6) */}
+      {rentabilidad.conflictosCalles.length > 0 && (
+        <div className="bg-rose-600 text-white p-6 rounded-3xl shadow-xl space-y-3 animate-pulse">
+          <div className="flex items-center gap-2">
+            <span className="text-2xl">🚨</span>
+            <h3 className="text-base font-black uppercase tracking-wider">
+              ¡Alerta de Exceso de Aforo de Calles Detectado! ({rentabilidad.conflictosCalles.length} Conflicto(s))
+            </h3>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {rentabilidad.conflictosCalles.map((conf, cIdx) => (
+              <div key={cIdx} className="bg-rose-950/60 border border-rose-400/30 p-3 rounded-2xl text-xs">
+                <p className="font-bold uppercase text-amber-300">
+                  📅 {conf.dia.toUpperCase()} • Intervalo: {conf.intervalo}
+                </p>
+                <p className="mt-1">
+                  Calles requeridas: <strong className="font-mono text-white font-bold">{conf.callesNecesarias}</strong> / Permitidas: <span className="font-mono font-bold">{totalCallesPermitidas}</span> (Exceso: <strong className="text-rose-200">+{conf.exceso} calle(s)</strong>)
+                </p>
+                <p className="text-[10px] text-rose-200 mt-1 italic">
+                  Actividades involucradas: {conf.actividades.join(', ')}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* 3. PANEL DE CONFIGURACIÓN ECONÓMICA Y CALENDARIO REAL (SECCIÓN 1 & 2 & REQ 7 & REQ 8) */}
+      <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200 space-y-6">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-4">
+          <div>
+            <h3 className="text-base font-black text-slate-900 uppercase tracking-tight flex items-center gap-2">
+              <span>⚙️</span> Configuración Económica y Calendario Operativo
+            </h3>
+            <p className="text-xs text-slate-500 font-medium mt-0.5">
+              Conserva precisión de céntimos sin redondeo prematuro intermedio.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2 bg-slate-100 p-1.5 rounded-2xl border border-slate-200">
+            <select
+              value={mesRentabilidad}
+              onChange={e => {
+                setMesRentabilidad(Number(e.target.value));
+                setSimulacionAjustes({});
+                setSimActividadSel('');
+                setSimSegmentoSel('');
+                setSimOpcionSel('');
+              }}
+              className="bg-white border border-slate-300 rounded-xl px-3 py-1.5 text-xs font-black text-slate-800 focus:outline-none"
+            >
+              {mesesNombres.map((m, idx) => (
+                <option key={idx} value={idx}>{m}</option>
+              ))}
+            </select>
+
+            <select
+              value={anioRentabilidad}
+              onChange={e => {
+                setAnioRentabilidad(Number(e.target.value));
+                setSimulacionAjustes({});
+                setSimActividadSel('');
+                setSimSegmentoSel('');
+                setSimOpcionSel('');
+              }}
+              className="bg-white border border-slate-300 rounded-xl px-3 py-1.5 text-xs font-black text-slate-800 focus:outline-none"
+            >
+              {anosDisponibles.map(a => (
+                <option key={a} value={a}>{a}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+          <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200">
+            <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1">
+              Importe antes de IVA (Monitor)
+            </label>
+            <div className="flex items-center gap-1">
+              <input
+                type="number"
+                step="0.5"
+                value={tarifaMonitorBase}
+                onChange={e => setTarifaMonitorBase(Math.max(0, parseFloat(e.target.value) || 0))}
+                className="w-full bg-white border border-slate-300 rounded-xl p-2 text-sm font-black text-slate-800"
+              />
+              <span className="text-xs font-bold text-slate-600">€/h</span>
+            </div>
+            <p className="text-[10px] font-extrabold text-emerald-700 mt-1">Con IVA: {monitorConIvaEur} €/h</p>
+          </div>
+
+          <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200">
+            <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1">
+              Importe antes de IVA (Socorrista)
+            </label>
+            <div className="flex items-center gap-1">
+              <input
+                type="number"
+                step="0.5"
+                value={tarifaSocorristaBase}
+                onChange={e => setTarifaSocorristaBase(Math.max(0, parseFloat(e.target.value) || 0))}
+                className="w-full bg-white border border-slate-300 rounded-xl p-2 text-sm font-black text-slate-800"
+              />
+              <span className="text-xs font-bold text-slate-600">€/h</span>
+            </div>
+            <p className="text-[10px] font-extrabold text-emerald-700 mt-1">Con IVA: {socorristaConIvaEur} €/h</p>
+          </div>
+
+          <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200">
+            <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1">
+              Importe antes de IVA (Coordinador)
+            </label>
+            <div className="flex items-center gap-1">
+              <input
+                type="number"
+                step="0.5"
+                value={tarifaCoordinadorBase}
+                onChange={e => setTarifaCoordinadorBase(Math.max(0, parseFloat(e.target.value) || 0))}
+                className="w-full bg-white border border-slate-300 rounded-xl p-2 text-sm font-black text-slate-800"
+              />
+              <span className="text-xs font-bold text-slate-600">€/h</span>
+            </div>
+            <p className="text-[10px] font-extrabold text-emerald-700 mt-1">Con IVA: {coordinadorConIvaEur} €/h</p>
+          </div>
+
+          <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200">
+            <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1">
+              IVA Aplicable (%)
+            </label>
+            <div className="flex items-center gap-1">
+              <input
+                type="number"
+                value={ivaPersonal}
+                onChange={e => setIvaPersonal(Math.max(0, parseFloat(e.target.value) || 0))}
+                className="w-full bg-white border border-slate-300 rounded-xl p-2 text-sm font-black text-slate-800"
+              />
+              <span className="text-xs font-bold text-slate-600">%</span>
+            </div>
+            <p className="text-[10px] font-bold text-slate-500 mt-1">Estándar personal: 21%</p>
+          </div>
+
+          <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200">
+            <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1">
+              Límite Calles Piscina
+            </label>
+            <div className="flex items-center gap-1">
+              <input
+                type="number"
+                value={totalCallesPermitidas}
+                onChange={e => setTotalCallesPermitidas(Math.max(1, parseInt(e.target.value) || 1))}
+                className="w-full bg-white border border-slate-300 rounded-xl p-2 text-sm font-black text-slate-800"
+              />
+              <span className="text-xs font-bold text-slate-600">calles</span>
+            </div>
+            <p className="text-[10px] font-bold text-slate-500 mt-1">Configurado: {totalCallesPermitidas}</p>
+          </div>
+        </div>
+
+        <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <span className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1">
+              <span>📅</span> Días Cerrados o Festivos ({mesesNombres[mesRentabilidad]} {anioRentabilidad}):
+            </span>
+
+            <div className="flex items-center gap-2">
+              <input
+                type="date"
+                value={nuevoFestivoInput}
+                onChange={e => setNuevoFestivoInput(e.target.value)}
+                className="bg-white border border-slate-300 rounded-xl px-2.5 py-1 text-xs font-bold"
+              />
+              <button
+                onClick={agregarFestivo}
+                className="bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold px-3 py-1.5 rounded-xl transition-all"
+              >
+                + Añadir Festivo
+              </button>
+            </div>
+          </div>
+
+          {festivosDelMes.length > 0 ? (
+            <div className="flex flex-wrap gap-2 pt-1">
+              {festivosDelMes.map(f => (
+                <span key={f} className="inline-flex items-center gap-1.5 bg-rose-100 text-rose-900 border border-rose-300 px-2.5 py-1 rounded-full text-xs font-bold">
+                  <span>🔴 {f}</span>
+                  <button
+                    onClick={() => setFestivosRentabilidad(festivosRentabilidad.filter(x => x !== f))}
+                    className="text-rose-600 hover:text-rose-900 font-extrabold ml-1"
+                  >
+                    ×
+                  </button>
+                </span>
+              ))}
+            </div>
+          ) : (
+            <p className="text-[11px] text-slate-500 italic">No hay festivos excluidos para {mesesNombres[mesRentabilidad]} {anioRentabilidad}. Todos los días lectivos L-V son operativos.</p>
+          )}
+
+          <div className="pt-2 text-xs font-bold text-slate-700 border-t border-slate-200 flex flex-wrap gap-4">
+            <span>📊 Calendario de {mesesNombres[mesRentabilidad]} {anioRentabilidad}: <span className="text-emerald-700 font-black">{rentabilidad.totalDiasOperativos} Días Operativos</span> ({rentabilidad.conteoPorDia.lunes}L, {rentabilidad.conteoPorDia.martes}M, {rentabilidad.conteoPorDia.miercoles}X, {rentabilidad.conteoPorDia.jueves}J, {rentabilidad.conteoPorDia.viernes}V).</span>
+          </div>
+        </div>
+      </div>
+
+      {/* 4. RESULTADOS SUPERIORES (TARJETAS MÉTRICAS DE CLASIFICACIÓN EXPLICITA) (SECCIÓN 13) */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
+          <span className="text-[10px] font-black text-slate-500 uppercase tracking-wider block">Alumnos Confirmados</span>
+          <span className="text-2xl font-black text-slate-900 font-mono mt-1 block">{rentabilidad.alumnosConfirmadosCount}</span>
+          <span className="text-[10px] text-slate-400 font-medium">Personas únicas</span>
+        </div>
+
+        <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
+          <span className="text-[10px] font-black text-amber-600 uppercase tracking-wider block">Alumnos Potenciales</span>
+          <span className="text-2xl font-black text-amber-700 font-mono mt-1 block">{rentabilidad.alumnosPotencialesCount}</span>
+          <span className="text-[10px] text-slate-400 font-medium">Pend. admin / futuro</span>
+        </div>
+
+        <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
+          <span className="text-[10px] font-black text-emerald-600 uppercase tracking-wider block">Ingreso Operativo Real</span>
+          <span className="text-xl font-black text-emerald-700 font-mono mt-1 block">
+            +{(rentabilidad.ingresoOperativoTotalCentimos / 100).toFixed(2)} €
+          </span>
+          <span className="text-[10px] text-slate-400 font-medium">Grupos operativamente viables</span>
+        </div>
+
+        <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
+          <span className="text-[10px] font-black text-amber-600 uppercase tracking-wider block">Pendiente de Apertura</span>
+          <span className="text-xl font-black text-amber-700 font-mono mt-1 block">
+            +{(rentabilidad.ingresoPendienteAperturaTotalCentimos / 100).toFixed(2)} €
+          </span>
+          <span className="text-[10px] text-slate-400 font-medium">Formación / No salen</span>
+        </div>
+
+        <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
+          <span className="text-[10px] font-black text-indigo-600 uppercase tracking-wider block">Total Cuotas Confirmadas</span>
+          <span className="text-xl font-black text-indigo-700 font-mono mt-1 block">
+            +{(rentabilidad.ingresoConfirmadoTotalCentimos / 100).toFixed(2)} €
+          </span>
+          <span className="text-[10px] text-slate-400 font-medium">Operativo + Pendiente</span>
+        </div>
+
+        <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
+          <span className="text-[10px] font-black text-purple-600 uppercase tracking-wider block">Pico Monitores Simultáneos</span>
+          <span className="text-2xl font-black text-purple-700 font-mono mt-1 block">
+            {rentabilidad.maximoMonitoresSimultaneos}
+          </span>
+          <span className="text-[10px] text-slate-400 font-medium">Máximo simultáneo por franja</span>
+        </div>
+
+        <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
+          <span className="text-[10px] font-black text-rose-600 uppercase tracking-wider block">Coste Monitores</span>
+          <span className="text-xl font-black text-rose-700 font-mono mt-1 block">
+            -{(rentabilidad.costeMonitoresTotalCentimos / 100).toFixed(2)} €
+          </span>
+          <span className="text-[10px] text-slate-400 font-medium">Grupos viables dirigidos</span>
+        </div>
+
+        <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
+          <span className="text-[10px] font-black text-rose-600 uppercase tracking-wider block">Coste Socorrista</span>
+          <span className="text-xl font-black text-rose-700 font-mono mt-1 block">
+            -{(rentabilidad.costeTotalSocorristaCentimos / 100).toFixed(2)} €
+          </span>
+          <span className="text-[10px] text-slate-400 font-medium">Único socorrista fijo</span>
+        </div>
+
+        <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
+          <span className="text-[10px] font-black text-rose-600 uppercase tracking-wider block">Coste Coordinador</span>
+          <span className="text-xl font-black text-rose-700 font-mono mt-1 block">
+            -{(rentabilidad.costeTotalCoordinadorCentimos / 100).toFixed(2)} €
+          </span>
+          <span className="text-[10px] text-slate-400 font-medium">1 hora por día lectivo</span>
+        </div>
+
+        <div className="bg-slate-900 text-white p-4 rounded-2xl shadow-sm border border-slate-800 col-span-2 sm:col-span-3">
+          <span className="text-[10px] font-black text-emerald-400 uppercase tracking-wider block">Resultado Operativo Real (Confirmado)</span>
+          <span className="text-2xl font-black text-emerald-400 font-mono mt-1 block">
+            {(rentabilidad.resultadoOperativoConfirmadoCentimos / 100).toFixed(2)} €
+          </span>
+          <span className="text-[10px] text-slate-300 font-bold">Ingreso operativo real - Coste de personal | Margen: {rentabilidad.margenConfirmadoPorcentaje}%</span>
+        </div>
+      </div>
+
+      {/* 5. SECCIÓN DE DATOS PENDIENTES DE REVISAR (SIN PII COMPLETA) (SECCIÓN 6) */}
+      {rentabilidad.pendientesDeRevisarCount > 0 && (
+        <div className="bg-amber-50 border border-amber-200 p-5 rounded-3xl space-y-3">
+          <div className="flex items-center justify-between">
+            <h4 className="text-xs font-black text-amber-900 uppercase tracking-wider flex items-center gap-2">
+              <span>⚠️</span> Registros Pendientes de Revisar ({rentabilidad.pendientesDeRevisarCount} Alumno(s))
+            </h4>
+            <span className="text-[10px] bg-amber-200 text-amber-900 px-2 py-0.5 rounded-full font-bold">
+              Requieren atención de datos
+            </span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+            {rentabilidad.pendientesDeRevisar.map((item, pIdx) => (
+              <div key={pIdx} className="bg-white p-3 rounded-2xl border border-amber-200 text-xs shadow-xs">
+                <p className="font-bold text-slate-800">
+                  ID: <span className="font-mono text-slate-600">{item.alumno?.id || `Reg-#${pIdx+1}`}</span>
+                </p>
+                <p className="text-[11px] text-amber-800 font-medium mt-0.5">Motivo: {item.motivo}</p>
+                <p className="text-[10px] text-slate-400 italic mt-0.5">
+                  Curso: {item.alumno?.curso || 'N/D'} | Actividad: {item.alumno?.actividad || 'N/D'}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* 6. TABLA 1: DESGLOSE POR SESIÓN FÍSICA REAL (SECCIÓN 14) */}
+      <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden space-y-3 p-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-4">
+          <div>
+            <h3 className="text-base font-black text-slate-900 uppercase tracking-tight flex items-center gap-2">
+              <span>🏊‍♂️</span> Desglose por Sesión Física Real
+            </h3>
+            <p className="text-xs text-slate-500 font-medium mt-0.5">
+              Sesiones agrupadas por actividad, segmento, día y horario. Muestra mínimos, monitores y costes compartidos repartidos por minutos-calle.
+            </p>
+          </div>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-slate-900 text-white text-[10px] font-black uppercase tracking-wider">
+                <th className="p-3">Actividad / Segmento</th>
+                <th className="p-3">Día y Horario</th>
+                <th className="p-3 text-center">Dur. / Apar.</th>
+                <th className="p-3 text-center">Alumnos (Min-Max)</th>
+                <th className="p-3 text-center">Calles / Monitores</th>
+                <th className="p-3 text-center">Estado</th>
+                <th className="p-3 text-right">Ingreso Operativo</th>
+                <th className="p-3 text-right">Coste Monitor</th>
+                <th className="p-3 text-right">Socorrista Atrib.</th>
+                <th className="p-3 text-right">Coordinador Atrib.</th>
+                <th className="p-3 text-right">Coste Total</th>
+                <th className="p-3 text-right">Res. Operativo</th>
+                <th className="p-3 text-center">Margen</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 text-xs font-medium">
+              {rentabilidad.resultadoSesiones.map(s => (
+                <tr key={s.key} className="hover:bg-slate-50 transition-colors">
+                  <td className="p-3">
+                    <span className="font-bold text-slate-900 block">{s.nombreSegmento || s.nombreActividad}</span>
+                    <span className="text-[10px] text-slate-400 font-mono">ID: {s.segmentoId}</span>
+                    {s.actividadId === 'chapoteo' && s.numConfirmados >= 10 && (
+                      <span className="inline-block mt-1 px-2 py-0.5 rounded bg-blue-100 text-blue-900 text-[10px] font-bold border border-blue-200">
+                        Dividido en 2 subgrupos — 2 monitores en 1 calle
+                      </span>
+                    )}
+                  </td>
+                  <td className="p-3">
+                    <span className="font-bold text-indigo-900 uppercase block">{s.dia}</span>
+                    <span className="text-[10px] font-mono text-slate-500">{s.horario}</span>
+                  </td>
+                  <td className="p-3 text-center font-mono text-xs">
+                    {s.duracionMinutos}m / <strong className="text-slate-800">{s.aparicionesMes}d</strong>
+                  </td>
+                  <td className="p-3 text-center font-mono">
+                    <strong className="text-slate-900 text-sm">{s.numConfirmados}</strong>
+                    <span className="text-slate-400 text-[10px] block">({s.alumnosMin}–{s.alumnosMax})</span>
+                  </td>
+                  <td className="p-3 text-center font-mono">
+                    <span className="font-bold text-slate-700 block">{s.callesNecesarias} calle{s.callesNecesarias > 1 ? 's' : ''}</span>
+                    <span className="text-slate-500 text-[10px] block font-medium">
+                      ({s.monitoresNecesarios} monitor{s.monitoresNecesarios !== 1 ? 'es' : ''})
+                    </span>
+                  </td>
+                  <td className="p-3 text-center">
+                    <span className={`inline-block px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                      s.estado === 'Viable' ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' :
+                      s.estado === 'Completo' ? 'bg-indigo-100 text-indigo-800 border border-indigo-300' :
+                      s.estado === 'Exceso de aforo' ? 'bg-rose-100 text-rose-800 border border-rose-300' :
+                      s.estado === 'En formación' ? 'bg-amber-100 text-amber-800 border border-amber-300' :
+                      s.estado === 'No sale' ? 'bg-red-100 text-red-800 border border-red-300' :
+                      'bg-slate-100 text-slate-600'
+                    }`}>
+                      {s.estado}
+                    </span>
+                    {s.estado === 'En formación' && (
+                      <span className="text-[10px] text-amber-700 block font-bold mt-0.5">Falta 1 alumno</span>
+                    )}
+                    {s.estado === 'No sale' && (
+                      <span className="text-[10px] text-red-700 block font-bold mt-0.5">Faltan {s.faltanParaMinimo} alumnos</span>
+                    )}
+                  </td>
+                  <td className="p-3 text-right font-mono font-bold text-emerald-700">
+                    +{(s.ingresoOperativoCentimos / 100).toFixed(2)} €
+                    {s.ingresoPendienteAperturaCentimos > 0 && (
+                      <span className="text-[10px] text-amber-600 block font-normal">
+                        (Pend: +{(s.ingresoPendienteAperturaCentimos / 100).toFixed(2)} €)
+                      </span>
+                    )}
+                  </td>
+                  <td className="p-3 text-right font-mono text-rose-700 font-bold">
+                    {s.costeMonitorCentimos > 0 ? `-${(s.costeMonitorCentimos / 100).toFixed(2)} €` : '0,00 €'}
+                  </td>
+                  <td className="p-3 text-right font-mono text-rose-700">
+                    {s.costeSocorristaCentimos > 0 ? `-${(s.costeSocorristaCentimos / 100).toFixed(2)} €` : '0,00 €'}
+                  </td>
+                  <td className="p-3 text-right font-mono text-rose-700">
+                    {s.costeCoordinadorCentimos > 0 ? `-${(s.costeCoordinadorCentimos / 100).toFixed(2)} €` : '0,00 €'}
+                  </td>
+                  <td className="p-3 text-right font-mono font-black text-rose-800">
+                    -{(s.costeTotalCentimos / 100).toFixed(2)} €
+                  </td>
+                  <td className="p-3 text-right font-mono font-black">
+                    <span className={s.resultadoOperativoCentimos >= 0 ? 'text-emerald-700' : 'text-rose-700'}>
+                      {(s.resultadoOperativoCentimos / 100).toFixed(2)} €
+                    </span>
+                  </td>
+                  <td className="p-3 text-center font-mono font-bold text-slate-700">
+                    {s.margenPorcentaje}%
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* 6B. TABLA DE MONITORES NECESARIOS POR FRANJA (SECCIÓN 3) */}
+      <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden space-y-3 p-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-4">
+          <div>
+            <h3 className="text-base font-black text-slate-900 uppercase tracking-tight flex items-center gap-2">
+              <span>⏱️</span> Monitores Necesarios por Franja Horaria
+            </h3>
+            <p className="text-xs text-slate-500 font-medium mt-0.5">
+              Coordinación de personal simultáneo sin solapamientos. Refleja las calles ocupadas y monitores reales requeridos por cada franja. Pico máximo: <strong className="text-indigo-900 font-black">{rentabilidad.maximoMonitoresSimultaneos} monitores simultáneos</strong>.
+            </p>
+          </div>
+        </div>
+
+        {rentabilidad.franjasMonitores && rentabilidad.franjasMonitores.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-slate-900 text-white text-[10px] font-black uppercase tracking-wider">
+                  <th className="p-3">Día</th>
+                  <th className="p-3">Franja</th>
+                  <th className="p-3">Grupos Activos</th>
+                  <th className="p-3 text-center">Calles Ocupadas</th>
+                  <th className="p-3 text-center">Monitores Necesarios</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 text-xs font-medium">
+                {rentabilidad.franjasMonitores.map((f, idx) => (
+                  <tr key={idx} className="hover:bg-slate-50 transition-colors">
+                    <td className="p-3 font-bold text-indigo-900 uppercase">{f.dia}</td>
+                    <td className="p-3 font-mono font-bold text-slate-900">{f.franja}</td>
+                    <td className="p-3 text-slate-700">
+                      <span className="font-semibold">{f.nombresGrupos.join(', ')}</span>
+                    </td>
+                    <td className="p-3 text-center font-mono font-bold text-slate-700">
+                      {f.callesOcupadas} calle{f.callesOcupadas !== 1 ? 's' : ''}
+                    </td>
+                    <td className="p-3 text-center font-mono">
+                      <span className="inline-block px-3 py-1 rounded-full bg-indigo-100 text-indigo-900 font-black border border-indigo-300">
+                        {f.monitoresNecesarios} monitor{f.monitoresNecesarios !== 1 ? 'es' : ''}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="text-xs text-slate-500 italic">No hay franjas de actividad viable registradas para el mes seleccionado.</p>
+        )}
+      </div>
+
+      {/* 7. TABLA 2: DESGLOSE POR MODALIDAD COMERCIAL (SECCIÓN 14 & REQ 3) */}
+      <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden space-y-3 p-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-4">
+          <div>
+            <h3 className="text-base font-black text-slate-900 uppercase tracking-tight flex items-center gap-2">
+              <span>🏷️</span> Desglose por Modalidad Comercial e Inscripción
+            </h3>
+            <p className="text-xs text-slate-500 font-medium mt-0.5">
+              Muestra inscripciones comerciales, precios por cuota y sesiones físicas compartidas asociadas (totales reales y simulados).
+            </p>
+          </div>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-slate-900 text-white text-[10px] font-black uppercase tracking-wider">
+                <th className="p-3">Actividad</th>
+                <th className="p-3">Modalidad Comercial</th>
+                <th className="p-3 text-center">Alumnos (Real / Sim)</th>
+                <th className="p-3 text-right">Precio Cuota</th>
+                <th className="p-3 text-right">Ingreso Confirmado (Real / Sim)</th>
+                <th className="p-3 text-right">Ingreso Potencial</th>
+                <th className="p-3">Sesiones Físicas Asociadas</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 text-xs font-medium">
+              {opcionesSimulador.map(opItem => {
+                const actDoc = OFERTA_ACTIVIDADES.find(a => a.id === opItem.actividadId);
+                const diasNorm = extraerDiasSemana(opItem.dias);
+
+                const confirmadosRealesMod = (alumnos || []).filter(a => {
+                  const resC = clasificarAlumnoParaMes(a, mesRentabilidad, anioRentabilidad, OFERTA_ACTIVIDADES);
+                  if (resC.categoria !== 'ingreso_confirmado') return false;
+                  if (a.actividadId !== opItem.actividadId && a.actividad !== actDoc?.nombre) return false;
+                  const alSeg = obtenerSegmentoFisico(opItem.actividadId, a.curso, OFERTA_ACTIVIDADES);
+                  if (opItem.segmentoId && alSeg !== opItem.segmentoId) return false;
+                  const dAl = (a.opcionDias || a.dias || '').trim().toLowerCase();
+                  const dOp = opItem.dias.trim().toLowerCase();
+                  return dAl === dOp;
+                });
+
+                const confirmadosSimuladosMod = (alumnosProcesados || []).filter(a => {
+                  const resC = clasificarAlumnoParaMes(a, mesRentabilidad, anioRentabilidad, OFERTA_ACTIVIDADES);
+                  if (resC.categoria !== 'ingreso_confirmado') return false;
+                  if (a.actividadId !== opItem.actividadId && a.actividad !== actDoc?.nombre) return false;
+                  const alSeg = obtenerSegmentoFisico(opItem.actividadId, a.curso, OFERTA_ACTIVIDADES);
+                  if (opItem.segmentoId && alSeg !== opItem.segmentoId) return false;
+                  const dAl = (a.opcionDias || a.dias || '').trim().toLowerCase();
+                  const dOp = opItem.dias.trim().toLowerCase();
+                  return dAl === dOp;
+                });
+
+                const potencialesMod = (alumnosProcesados || []).filter(a => {
+                  const resC = clasificarAlumnoParaMes(a, mesRentabilidad, anioRentabilidad, OFERTA_ACTIVIDADES);
+                  if (resC.categoria !== 'ingreso_potencial') return false;
+                  if (a.actividadId !== opItem.actividadId && a.actividad !== actDoc?.nombre) return false;
+                  const alSeg = obtenerSegmentoFisico(opItem.actividadId, a.curso, OFERTA_ACTIVIDADES);
+                  if (opItem.segmentoId && alSeg !== opItem.segmentoId) return false;
+                  const dAl = (a.opcionDias || a.dias || '').trim().toLowerCase();
+                  const dOp = opItem.dias.trim().toLowerCase();
+                  return dAl === dOp;
+                });
+
+                const precioCentimos = parsePrecioACentimos(opItem.precio);
+                const ingConfRealCentimos = confirmadosRealesMod.length * precioCentimos;
+                const ingConfSimCentimos = confirmadosSimuladosMod.length * precioCentimos;
+                const ingPotCentimos = potencialesMod.length * precioCentimos;
+
+                return (
+                  <tr key={opItem.key} className="hover:bg-slate-50 transition-colors">
+                    <td className="p-3 font-bold text-slate-900">{opItem.nombreActividad}</td>
+                    <td className="p-3 font-medium text-slate-800">
+                      {opItem.dias} <span className="text-[10px] text-slate-500">({opItem.horario})</span>
+                    </td>
+                    <td className="p-3 text-center font-mono">
+                      <span className="text-slate-600 block text-xs">Real: {confirmadosRealesMod.length}</span>
+                      <span className="text-emerald-700 font-bold block text-xs">Sim: {confirmadosSimuladosMod.length}</span>
+                      {potencialesMod.length > 0 && (
+                        <span className="text-amber-700 font-bold block text-[10px]">+{potencialesMod.length} pot.</span>
+                      )}
+                    </td>
+                    <td className="p-3 text-right font-mono font-bold text-slate-800">
+                      {opItem.precio}
+                    </td>
+                    <td className="p-3 text-right font-mono">
+                      <span className="text-slate-500 block text-[10px]">Real: +{(ingConfRealCentimos / 100).toFixed(2)} €</span>
+                      <span className="text-emerald-700 font-bold block">Sim: +{(ingConfSimCentimos / 100).toFixed(2)} €</span>
+                    </td>
+                    <td className="p-3 text-right font-mono font-bold text-amber-700">
+                      +{(ingPotCentimos / 100).toFixed(2)} €
+                    </td>
+                    <td className="p-3 text-[10px] text-slate-600">
+                      {diasNorm.map(d => `${d} ${opItem.horario}`).join(', ')}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* 8. SIMULADOR DE RENTABILIDAD CON DELTAS POSITIVOS Y NEGATIVOS (+1 / -1) (SECCIÓN 15 & REQ 5) */}
+      <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 p-6 md:p-8 rounded-3xl text-white shadow-xl space-y-6">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-indigo-800/40 pb-4">
+          <div>
+            <div className="inline-flex items-center gap-2 px-3 py-1 bg-amber-500/20 border border-amber-400/30 rounded-full text-amber-300 text-xs font-bold uppercase tracking-wider mb-2">
+              <span>🎮 Sandbox de Simulación Bidireccional</span>
+            </div>
+            <h3 className="text-xl md:text-2xl font-black uppercase tracking-tight italic">
+              Simulador de Rentabilidad Operativa (+1 / -1)
+            </h3>
+            <p className="text-amber-200 text-xs font-bold uppercase tracking-widest mt-1">
+              Simulación: no modifica inscripciones reales en Firestore.
+            </p>
+          </div>
+
+          {simulacionAplicadaCount > 0 && (
+            <button
+              onClick={() => setSimulacionAjustes({})}
+              className="bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xs px-4 py-2 rounded-2xl transition-all shadow-lg shadow-amber-500/20"
+            >
+              🔄 Restablecer simulación ({simulacionAplicadaCount} ajuste(s))
+            </button>
+          )}
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 bg-white/5 p-4 rounded-2xl border border-white/10">
+          <div>
+            <label className="block text-[10px] font-black text-slate-300 uppercase tracking-wider mb-1">
+              1. Actividad
+            </label>
+            <select
+              value={simActividadSel}
+              onChange={e => {
+                setSimActividadSel(e.target.value);
+                setSimSegmentoSel('');
+                setSimOpcionSel('');
+              }}
+              className="w-full bg-slate-800 border border-slate-700 text-white text-xs font-bold p-2.5 rounded-xl focus:outline-none"
+            >
+              <option value="">-- Elige Actividad --</option>
+              {OFERTA_ACTIVIDADES.map(a => (
+                <option key={a.id} value={a.id}>{a.nombre}</option>
+              ))}
+            </select>
+          </div>
+
+          {simActividadSel && (() => {
+            const actSel = OFERTA_ACTIVIDADES.find(a => a.id === simActividadSel);
+            if (!actSel || !actSel.segmentosFisicos || actSel.segmentosFisicos.length === 0) return null;
+            return (
+              <div>
+                <label className="block text-[10px] font-black text-slate-300 uppercase tracking-wider mb-1">
+                  1.5. Subgrupo / Segmento
+                </label>
+                <select
+                  value={simSegmentoSel}
+                  onChange={e => setSimSegmentoSel(e.target.value)}
+                  className="w-full bg-slate-800 border border-slate-700 text-white text-xs font-bold p-2.5 rounded-xl focus:outline-none"
+                >
+                  <option value="">-- Elige Subgrupo --</option>
+                  {actSel.segmentosFisicos.map(seg => (
+                    <option key={seg.id} value={seg.id}>{seg.nombre}</option>
+                  ))}
+                </select>
+              </div>
+            );
+          })()}
+
+          <div>
+            <label className="block text-[10px] font-black text-slate-300 uppercase tracking-wider mb-1">
+              2. Modalidad Comercial
+            </label>
+            <select
+              value={simOpcionSel}
+              onChange={e => setSimOpcionSel(e.target.value)}
+              disabled={!simActividadSel}
+              className="w-full bg-slate-800 border border-slate-700 text-white text-xs font-bold p-2.5 rounded-xl focus:outline-none disabled:opacity-50"
+            >
+              <option value="">-- Elige Modalidad --</option>
+              {simActividadSel && (OFERTA_ACTIVIDADES.find(a => a.id === simActividadSel)?.opciones || []).map((o, oIdx) => (
+                <option key={oIdx} value={o.dias}>{o.dias} ({o.horario}) - {o.precio}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex items-end gap-2">
+            {(() => {
+              const actSelDoc = OFERTA_ACTIVIDADES.find(a => a.id === simActividadSel);
+              const tieneSegs = actSelDoc?.segmentosFisicos && actSelDoc.segmentosFisicos.length > 0;
+              const disabledButtons = !simActividadSel || !simOpcionSel || (tieneSegs && !simSegmentoSel);
+
+              const simKey = tieneSegs
+                ? `${simActividadSel}___${simSegmentoSel}___${simOpcionSel}`
+                : `${simActividadSel}___${simOpcionSel}`;
+
+              const deltaActual = simulacionAjustes[simKey] || 0;
+
+              const confirmadosRealesMod = (alumnos || []).filter(al => {
+                const resC = clasificarAlumnoParaMes(al, mesRentabilidad, anioRentabilidad, OFERTA_ACTIVIDADES);
+                if (resC.categoria !== 'ingreso_confirmado') return false;
+                const alAct = al.actividadId || (OFERTA_ACTIVIDADES.find(a => a.nombre === al.actividad)?.id);
+                const alDias = al.opcionDias || al.dias;
+                const alSeg = obtenerSegmentoFisico(alAct, al.curso, OFERTA_ACTIVIDADES);
+                const coincideAct = alAct === simActividadSel;
+                const coincideDias = alDias === simOpcionSel;
+                const coincideSeg = !simSegmentoSel || alSeg === simSegmentoSel;
+                return coincideAct && coincideDias && coincideSeg;
+              }).length;
+
+              const totalSimuladoMod = confirmadosRealesMod + deltaActual;
+              const deshabilitarRestar = disabledButtons || totalSimuladoMod <= 0;
+
+              return (
+                <>
+                  <button
+                    disabled={disabledButtons}
+                    onClick={() => {
+                      setSimulacionAjustes({
+                        ...simulacionAjustes,
+                        [simKey]: deltaActual + 1
+                      });
+                    }}
+                    className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black p-2.5 rounded-xl transition-all disabled:opacity-40"
+                  >
+                    +1 Alumno Virtual
+                  </button>
+
+                  <button
+                    disabled={deshabilitarRestar}
+                    onClick={() => {
+                      if (totalSimuladoMod > 0) {
+                        setSimulacionAjustes({
+                          ...simulacionAjustes,
+                          [simKey]: deltaActual - 1
+                        });
+                      }
+                    }}
+                    className="flex-1 bg-rose-600 hover:bg-rose-500 text-white text-xs font-black p-2.5 rounded-xl transition-all disabled:opacity-40"
+                  >
+                    -1 Alumno Real/Virt
+                  </button>
+                </>
+              );
+            })()}
+          </div>
+        </div>
+
+        {simActividadSel && simOpcionSel && (() => {
+          const actDoc = OFERTA_ACTIVIDADES.find(a => a.id === simActividadSel);
+          const opDoc = (actDoc?.opciones || []).find(o => o.dias === simOpcionSel);
+          const esPack = (simOpcionSel || '').includes('PACK 2 DÍAS');
+          const precioCentimosSim = parsePrecioACentimos(opDoc?.precio || '0€');
+
+          const tieneSegs = actDoc?.segmentosFisicos && actDoc.segmentosFisicos.length > 0;
+          const simKey = tieneSegs
+            ? `${simActividadSel}___${simSegmentoSel}___${simOpcionSel}`
+            : `${simActividadSel}___${simOpcionSel}`;
+
+          const deltaActual = simulacionAjustes[simKey] || 0;
+
+          const confirmadosRealesMod = (alumnos || []).filter(al => {
+            const resC = clasificarAlumnoParaMes(al, mesRentabilidad, anioRentabilidad, OFERTA_ACTIVIDADES);
+            if (resC.categoria !== 'ingreso_confirmado') return false;
+            const alAct = al.actividadId || (OFERTA_ACTIVIDADES.find(a => a.nombre === al.actividad)?.id);
+            const alDias = al.opcionDias || al.dias;
+            const alSeg = obtenerSegmentoFisico(alAct, al.curso, OFERTA_ACTIVIDADES);
+            const coincideAct = alAct === simActividadSel;
+            const coincideDias = alDias === simOpcionSel;
+            const coincideSeg = !simSegmentoSel || alSeg === simSegmentoSel;
+            return coincideAct && coincideDias && coincideSeg;
+          }).length;
+
+          const totalSimuladoMod = confirmadosRealesMod + deltaActual;
+
+          return (
+            <div className="bg-slate-800/80 p-5 rounded-2xl border border-slate-700 space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 text-xs">
+                <div className="bg-slate-900 p-3 rounded-xl border border-slate-700">
+                  <span className="text-[10px] text-slate-400 block uppercase font-bold">Efecto +1 Alumno ({esPack ? 'Pack 2 Días' : '1 Día'})</span>
+                  <span className="text-emerald-400 font-mono font-black text-base mt-1 block">+{(precioCentimosSim / 100).toFixed(2)} €/mes</span>
+                </div>
+
+                <div className="bg-slate-900 p-3 rounded-xl border border-slate-700">
+                  <span className="text-[10px] text-slate-400 block uppercase font-bold">Alumnado Real Confirmado</span>
+                  <span className="text-white font-mono font-black text-base mt-1 block">{confirmadosRealesMod} alumno(s)</span>
+                </div>
+
+                <div className="bg-slate-900 p-3 rounded-xl border border-slate-700">
+                  <span className="text-[10px] text-slate-400 block uppercase font-bold">Ajuste de Simulación</span>
+                  <span className={`font-mono font-black text-base mt-1 block ${deltaActual > 0 ? 'text-emerald-400' : deltaActual < 0 ? 'text-rose-400' : 'text-slate-400'}`}>
+                    {deltaActual > 0 ? `+${deltaActual}` : deltaActual}
+                  </span>
+                </div>
+
+                <div className="bg-slate-900 p-3 rounded-xl border border-slate-700">
+                  <span className="text-[10px] text-slate-400 block uppercase font-bold">Resultado Operativo Simulado</span>
+                  <span className="text-emerald-400 font-mono font-black text-base mt-1 block">
+                    {(rentabilidad.resultadoOperativoConfirmadoCentimos / 100).toFixed(2)} €
+                  </span>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
+      </div>
+
+    </div>
+  );
+})()}
 
       {/* TABS EXTRA */}
       {/* 👥 PESTAÑA DE EQUIPO Y MONITORES (VERSIÓN PRO) */}
@@ -5731,7 +7586,7 @@ function VoiceAssistant() {
         return "👨‍👩‍👧 **Adultos**:\nLunes, Miércoles y Viernes a las 18:00 o Martes y Jueves a las 18:30.";
       }
       if (q.includes('nado libre') || q.includes('libre')) {
-        return "⏱️ **Nado Libre Independiente**:\nDe Lunes a Viernes de 18:30 a 19:00. 50€/mes pack 2 días o 37€/mes 1 día suelto.";
+        return "⏱️ **Nado Libre Independiente**:\nDe Lunes a Viernes de 18:30 a 19:00. 35€/mes pack 2 días o 25€/mes 1 día suelto.";
       }
       return "📅 **Resumen de Horarios principales**:\n• Chapoteo: 16:00h\n• Primaria: 16:15h y 17:30h\n• Waterpolo: 17:30h\n• Aquagym: 17:30h (L/X y M/J)\n• Adultos: 18:00h y 18:30h\n• ESO/Bach: 18:30h (Viernes 14:15h)\n¿De qué actividad deseas saber más?";
     }
