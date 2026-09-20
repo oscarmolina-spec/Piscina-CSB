@@ -1892,6 +1892,7 @@ function calcularRentabilidadMensual({
 
   // 5. Clasificar alumnos
   const alumnosConfirmadosUnicos = new Set();
+  const ingresosContabilizados = new Set();
   const alumnosPotenciales = [];
   const alumnosListaEspera = [];
   const pendientesDeRevisar = [];
@@ -1906,10 +1907,16 @@ function calcularRentabilidadMensual({
 
   (alumnos || []).forEach(alumno => {
     const resClass = clasificarAlumnoParaMes(alumno, mesIndex, anio, catalog);
+    const docId = alumno.id || `${alumno.nombre || 'alumno'}_${alumno.curso || 'curso'}`;
 
     if (resClass.categoria === 'ingreso_confirmado') {
-      alumnosConfirmadosUnicos.add(alumno.id || `${alumno.nombre}_${alumno.curso}`);
-      ingresoConfirmadoTotalMc += resClass.precioMc;
+      if (ingresosContabilizados.has(docId)) {
+        pendientesDeRevisar.push({
+          alumno: { id: docId, curso: alumno.curso, actividad: alumno.actividad },
+          motivo: "Inscripción duplicada en el cálculo"
+        });
+        return;
+      }
 
       const diasAlumno = extraerDiasSemana(resClass.textoDias);
       const segmentoId = obtenerSegmentoFisico(resClass.actividadId, alumno.curso, catalog);
@@ -1920,6 +1927,18 @@ function calcularRentabilidadMensual({
         diasAlumno.includes(s.dia) &&
         (!resClass.horario || s.horario === resClass.horario)
       );
+
+      if (sesionesDelAlumno.length === 0) {
+        pendientesDeRevisar.push({
+          alumno: { id: docId, curso: alumno.curso, actividad: alumno.actividad },
+          motivo: "La inscripción no coincide con ninguna sesión física del catálogo"
+        });
+        return;
+      }
+
+      ingresosContabilizados.add(docId);
+      alumnosConfirmadosUnicos.add(docId);
+      ingresoConfirmadoTotalMc += resClass.precioMc;
 
       let totalPonderacion = 0;
       sesionesDelAlumno.forEach(s => {
@@ -1942,7 +1961,7 @@ function calcularRentabilidadMensual({
         }
 
         inscripcionesPorSesion[s.key].confirmados.push({
-          alumnoId: alumno.id,
+          alumnoId: docId,
           cuotaTotalMc: resClass.precioMc,
           fraccionAtribuidaMc: fraccionCuotaMc
         });
@@ -2196,8 +2215,13 @@ function calcularFranjasMonitores(resultadoSesiones = [], conteoPorDia = {}) {
     s.resultadoOperativoCentimos = Math.round(s.resultadoOperativoMc / 1000);
   });
 
+  const ingresoAtribuidoTotalMc = resultadoSesiones.reduce((acc, s) => acc + s.ingresoAtribuidoMc, 0);
   const ingresoOperativoTotalMc = resultadoSesiones.reduce((acc, s) => acc + s.ingresoOperativoMc, 0);
   const ingresoPendienteAperturaTotalMc = resultadoSesiones.reduce((acc, s) => acc + s.ingresoPendienteAperturaMc, 0);
+
+  const diferenciaConciliacionIngresosMc = ingresoConfirmadoTotalMc - ingresoAtribuidoTotalMc;
+  const conciliacionIngresosCorrecta = (diferenciaConciliacionIngresosMc === 0) &&
+    (ingresoOperativoTotalMc + ingresoPendienteAperturaTotalMc === ingresoAtribuidoTotalMc);
 
   const costeTotalPersonalMc = costeMonitoresTotalMc + costeTotalSocorristaMc + costeTotalCoordinadorMc;
   const resultadoOperativoConfirmadoMc = ingresoOperativoTotalMc - costeTotalPersonalMc;
@@ -2231,13 +2255,17 @@ function calcularFranjasMonitores(resultadoSesiones = [], conteoPorDia = {}) {
 
     // Ingresos en milicéntimos y céntimos
     ingresoConfirmadoTotalMc,
+    ingresoAtribuidoTotalMc,
     ingresoOperativoTotalMc,
     ingresoPendienteAperturaTotalMc,
     ingresoPotencialTotalMc,
     ingresoConfirmadoTotalCentimos: Math.round(ingresoConfirmadoTotalMc / 1000),
+    ingresoAtribuidoTotalCentimos: Math.round(ingresoAtribuidoTotalMc / 1000),
     ingresoOperativoTotalCentimos: Math.round(ingresoOperativoTotalMc / 1000),
     ingresoPendienteAperturaTotalCentimos: Math.round(ingresoPendienteAperturaTotalMc / 1000),
     ingresoPotencialTotalCentimos: Math.round(ingresoPotencialTotalMc / 1000),
+    diferenciaConciliacionIngresosMc,
+    conciliacionIngresosCorrecta,
 
     // Costes en milicéntimos y céntimos
     costeMonitoresTotalMc,
@@ -4351,6 +4379,14 @@ const listadoBajas = alumnos.filter(a => a.estado === 'baja_pendiente' || a.esta
         </div>
       </div>
 
+      {/* ALERTA DE CONCILIACIÓN DE INGRESOS */}
+      {!rentabilidad.conciliacionIngresosCorrecta && (
+        <div className="bg-rose-100 border-2 border-rose-400 text-rose-900 p-4 rounded-2xl font-bold text-xs flex items-center gap-3 shadow-sm">
+          <span className="text-xl">⚠️</span>
+          <span>Revisar ingresos: las cuotas confirmadas no coinciden con el reparto por sesiones.</span>
+        </div>
+      )}
+
       {/* 4. RESULTADOS SUPERIORES (TARJETAS MÉTRICAS DE CLASIFICACIÓN EXPLICITA) (SECCIÓN 13) */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
@@ -4686,10 +4722,24 @@ const listadoBajas = alumnos.filter(a => a.estado === 'baja_pendiente' || a.esta
                   return dAl === dOp;
                 });
 
-                const precioCentimos = parsePrecioACentimos(opItem.precio);
-                const ingConfRealCentimos = confirmadosRealesMod.length * precioCentimos;
-                const ingConfSimCentimos = confirmadosSimuladosMod.length * precioCentimos;
-                const ingPotCentimos = potencialesMod.length * precioCentimos;
+                const ingConfRealMc = confirmadosRealesMod.reduce((acc, a) => {
+                  const resC = clasificarAlumnoParaMes(a, mesRentabilidad, anioRentabilidad, OFERTA_ACTIVIDADES);
+                  return acc + (resC.precioMc || 0);
+                }, 0);
+
+                const ingConfSimMc = confirmadosSimuladosMod.reduce((acc, a) => {
+                  const resC = clasificarAlumnoParaMes(a, mesRentabilidad, anioRentabilidad, OFERTA_ACTIVIDADES);
+                  return acc + (resC.precioMc || 0);
+                }, 0);
+
+                const ingPotMc = potencialesMod.reduce((acc, a) => {
+                  const resC = clasificarAlumnoParaMes(a, mesRentabilidad, anioRentabilidad, OFERTA_ACTIVIDADES);
+                  return acc + (resC.precioMc || 0);
+                }, 0);
+
+                const ingConfRealCentimos = Math.round(ingConfRealMc / 1000);
+                const ingConfSimCentimos = Math.round(ingConfSimMc / 1000);
+                const ingPotCentimos = Math.round(ingPotMc / 1000);
 
                 return (
                   <tr key={opItem.key} className="hover:bg-slate-50 transition-colors">
