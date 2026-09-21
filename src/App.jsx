@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';import { db, auth } from './firebase.js'; 
+import React, { useState, useEffect, useRef } from 'react';import { db, auth, secondaryAuth } from './firebase.js';
 import {
   collection,
   addDoc,
@@ -12,6 +12,8 @@ import {
   deleteDoc,
   onSnapshot,
   orderBy,
+  runTransaction,
+  serverTimestamp,
   enableIndexedDbPersistence
 } from 'firebase/firestore';
 
@@ -363,6 +365,275 @@ const getDynamicAcademicYear = () => {
   };
 };
 
+// ==========================================
+// 🔒 CONTROL ATÓMICO DE AFORO Y LISTA DE ESPERA
+// ==========================================
+// Los documentos de `aforos` solo contienen cifras agregadas. De este modo las
+// familias pueden consultar plazas sin poder leer fichas de otros alumnos.
+const normalizarTextoAforo = (valor = '') => String(valor)
+  .trim()
+  .toLowerCase()
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .replace(/[^a-z0-9_-]+/g, '_')
+  .replace(/^_+|_+$/g, '');
+
+const obtenerDiasAforo = (textoDias = '') => {
+  const texto = normalizarTextoAforo(textoDias);
+  return ['lunes', 'martes', 'miercoles', 'jueves', 'viernes'].filter(dia => texto.includes(dia));
+};
+
+const obtenerActividadIdAlumno = (alumno = {}) => {
+  if (alumno.actividadId && OFERTA_ACTIVIDADES.some(a => a.id === alumno.actividadId)) return alumno.actividadId;
+  const nombre = String(alumno.actividad || '').toLowerCase();
+  if (!nombre.trim()) return '';
+  return OFERTA_ACTIVIDADES.find(a => nombre.includes(a.nombre.toLowerCase()) || a.nombre.toLowerCase().includes(nombre))?.id || '';
+};
+
+const obtenerSegmentoAforo = (actividadId, curso = '') => {
+  if (actividadId !== 'primaria_1615') return 'general';
+  return ['1PRI', '2PRI', '3PRI'].includes(String(curso).toUpperCase()) ? '1a3' : '4a6';
+};
+
+const construirSlotsAforo = ({ actividadId, dias, horario, curso }) => {
+  const actividad = OFERTA_ACTIVIDADES.find(a => a.id === actividadId);
+  if (!actividad) throw new Error('ACTIVIDAD_AFORO_INVALIDA');
+  const diasNormalizados = obtenerDiasAforo(dias);
+  if (diasNormalizados.length === 0 || !horario) throw new Error('GRUPO_AFORO_INCOMPLETO');
+
+  const segmento = obtenerSegmentoAforo(actividadId, curso);
+  const segmentoDoc = actividad.segmentosFisicos?.find(s =>
+    (segmento === '1a3' && s.id.endsWith('1a3')) || (segmento === '4a6' && s.id.endsWith('4a6'))
+  );
+  const maximo = Number(segmentoDoc?.alumnosMax || actividad.alumnosMax);
+  if (!Number.isInteger(maximo) || maximo <= 0) throw new Error('MAXIMO_AFORO_INVALIDO');
+
+  const hoy = new Date();
+  // Octubre-mayo pertenecen al curso ya iniciado; junio-septiembre preparan
+  // el curso que comienza ese mismo año.
+  const inicio = hoy.getMonth() <= 4 ? hoy.getFullYear() - 1 : hoy.getFullYear();
+  const temporada = `${inicio}-${inicio + 1}`;
+  const horarioId = normalizarTextoAforo(horario);
+  return diasNormalizados.map(dia => ({
+    id: `${temporada}__${normalizarTextoAforo(actividadId)}__${segmento}__${dia}__${horarioId}`,
+    temporada,
+    actividadId,
+    segmento,
+    dia,
+    horario,
+    maximo
+  })).sort((a, b) => a.id.localeCompare(b.id));
+};
+
+const claveListaEspera = (slots) => slots.map(s => s.id).sort().join('|');
+
+const reservarPlazaAtomica = async ({ alumnoId, actividadId, actividad, dias, horario, curso, datosExtra = {} }) => {
+  const slots = construirSlotsAforo({ actividadId, dias, horario, curso });
+  const alumnoRef = doc(db, 'students', alumnoId);
+  const slotRefs = slots.map(slot => doc(db, 'aforos', slot.id));
+
+  const ejecutarReserva = () => runTransaction(db, async transaction => {
+    const alumnoSnap = await transaction.get(alumnoRef);
+    if (!alumnoSnap.exists()) throw new Error('ALUMNO_NO_EXISTE');
+    const slotSnaps = [];
+    for (const ref of slotRefs) slotSnaps.push(await transaction.get(ref));
+    if (slotSnaps.some(s => !s.exists())) throw new Error('AFORO_NO_INICIALIZADO');
+
+    const slotsActuales = Array.isArray(alumnoSnap.data().aforoSlotIds) ? [...alumnoSnap.data().aforoSlotIds].sort() : [];
+    const slotsObjetivo = slots.map(s => s.id).sort();
+    if (alumnoSnap.data().estado === 'inscrito' && JSON.stringify(slotsActuales) === JSON.stringify(slotsObjetivo)) {
+      return { resultado: 'inscrito', slots, repetida: true };
+    }
+    if (alumnoSnap.data().estado === 'inscrito' || alumnoSnap.data().estado === 'baja_pendiente') {
+      throw new Error('CAMBIO_GRUPO_REQUIERE_GESTION_ADMINISTRATIVA');
+    }
+
+    const hayPlazaEnTodos = slotSnaps.every((snap, index) => {
+      const data = snap.data();
+      return Number(data.ocupados || 0) < Number(data.maximo || slots[index].maximo);
+    });
+    const ahora = serverTimestamp();
+
+    if (!hayPlazaEnTodos) {
+      transaction.update(alumnoRef, {
+        ...datosExtra,
+        actividadId,
+        actividad,
+        dias,
+        opcionDias: dias,
+        horario,
+        grupo: `${dias} ${horario}`,
+        estado: 'lista_espera',
+        revisadoAdmin: false,
+        validadoAdmin: false,
+        aforoSlotIds: [],
+        waitlistGroupKey: claveListaEspera(slots),
+        waitlistJoinedAt: alumnoSnap.data().waitlistGroupKey === claveListaEspera(slots)
+          ? (alumnoSnap.data().waitlistJoinedAt || ahora)
+          : ahora,
+        ultimaActualizacion: ahora
+      });
+      return { resultado: 'lista_espera', slots };
+    }
+
+    slotSnaps.forEach((snap, index) => {
+      const data = snap.data();
+      transaction.update(slotRefs[index], {
+        ocupados: Number(data.ocupados || 0) + 1,
+        lastStudentId: alumnoId,
+        lastActorUid: auth.currentUser?.uid || '',
+        lastOperation: 'RESERVA',
+        updatedAt: ahora
+      });
+    });
+    transaction.update(alumnoRef, {
+      ...datosExtra,
+      actividadId,
+      actividad,
+      dias,
+      opcionDias: dias,
+      horario,
+      grupo: `${dias} ${horario}`,
+      estado: 'inscrito',
+      revisadoAdmin: true,
+      validadoAdmin: true,
+      aforoSlotIds: slots.map(s => s.id),
+      waitlistGroupKey: null,
+      waitlistJoinedAt: null,
+      ultimaActualizacion: ahora
+    });
+    return { resultado: 'inscrito', slots };
+  });
+
+  // Si dos familias intentan ocupar la última plaza a la vez, Firestore puede
+  // rechazar el primer intento obsoleto antes de reintentarlo. Una relectura
+  // inmediata convierte correctamente la segunda solicitud en lista de espera.
+  for (let intento = 0; intento < 3; intento += 1) {
+    try {
+      return await ejecutarReserva();
+    } catch (error) {
+      const reintentable = ['permission-denied', 'aborted', 'unavailable'].includes(error?.code);
+      if (!reintentable || intento === 2) throw error;
+      await new Promise(resolve => setTimeout(resolve, 75 * (intento + 1)));
+    }
+  }
+  throw new Error('NO_SE_PUDO_CONFIRMAR_AFORO');
+};
+
+const liberarPlazaAtomica = async ({ alumnoId, datosFinales }) => {
+  const alumnoRef = doc(db, 'students', alumnoId);
+  return runTransaction(db, async transaction => {
+    const alumnoSnap = await transaction.get(alumnoRef);
+    if (!alumnoSnap.exists()) throw new Error('ALUMNO_NO_EXISTE');
+    const alumno = alumnoSnap.data();
+    const actividadId = obtenerActividadIdAlumno(alumno);
+    let slotIds = Array.isArray(alumno.aforoSlotIds) ? alumno.aforoSlotIds : [];
+    if (slotIds.length === 0 && alumno.estado === 'inscrito' && actividadId) {
+      slotIds = construirSlotsAforo({ actividadId, dias: alumno.dias || alumno.opcionDias, horario: alumno.horario, curso: alumno.curso }).map(s => s.id);
+    }
+    const refs = slotIds.map(id => doc(db, 'aforos', id));
+    const snaps = [];
+    for (const ref of refs) snaps.push(await transaction.get(ref));
+
+    if (alumno.estado === 'inscrito' || alumno.estado === 'baja_pendiente') {
+      snaps.forEach((snap, index) => {
+        if (!snap.exists()) throw new Error('AFORO_NO_INICIALIZADO');
+        transaction.update(refs[index], {
+          ocupados: Math.max(0, Number(snap.data().ocupados || 0) - 1),
+          lastStudentId: alumnoId,
+          lastActorUid: auth.currentUser?.uid || '',
+          lastOperation: 'LIBERACION',
+          updatedAt: serverTimestamp()
+        });
+      });
+    }
+    transaction.update(alumnoRef, {
+      ...datosFinales,
+      validadoAdmin: false,
+      revisadoAdmin: false,
+      aforoSlotIds: [],
+      waitlistGroupKey: null,
+      waitlistJoinedAt: null,
+      ultimaActualizacion: serverTimestamp()
+    });
+  });
+};
+
+// Se ejecuta desde el panel de administración. Solo crea contadores que aún no
+// existen y conserva expresamente situaciones históricas como el actual 17/16.
+const inicializarAforosSiFaltan = async (alumnos = []) => {
+  const slots = new Map();
+  const alumnosNoClasificados = [];
+  OFERTA_ACTIVIDADES.forEach(actividad => actividad.opciones.forEach(opcion => {
+    const cursos = actividad.segmentosFisicos ? ['1PRI', '4PRI'] : [actividad.cursos[0]];
+    cursos.forEach(curso => construirSlotsAforo({ actividadId: actividad.id, dias: opcion.dias, horario: opcion.horario, curso })
+      .forEach(slot => slots.set(slot.id, { ...slot, ocupados: 0 })));
+  }));
+
+  alumnos.filter(a => a.estado === 'inscrito' || a.estado === 'baja_pendiente').forEach(alumno => {
+    const actividadId = obtenerActividadIdAlumno(alumno);
+    const diasAlumno = alumno.dias || alumno.opcionDias;
+    if (!actividadId || !diasAlumno || !alumno.horario) {
+      alumnosNoClasificados.push(alumno.nombre || alumno.id);
+      return;
+    }
+    try {
+      construirSlotsAforo({ actividadId, dias: diasAlumno, horario: alumno.horario, curso: alumno.curso }).forEach(slot => {
+        const actual = slots.get(slot.id) || { ...slot, ocupados: 0 };
+        slots.set(slot.id, { ...actual, ocupados: actual.ocupados + 1 });
+      });
+    } catch (error) {
+      console.warn('Alumno no incluido en la inicialización de aforo:', alumno.id, error.message);
+      alumnosNoClasificados.push(alumno.nombre || alumno.id);
+    }
+  });
+
+  if (alumnosNoClasificados.length > 0) {
+    throw new Error(`AFORO_INCOMPLETO: revisa actividad, días y horario de ${alumnosNoClasificados.join(', ')}`);
+  }
+
+  for (const slot of slots.values()) {
+    const ref = doc(db, 'aforos', slot.id);
+    await runTransaction(db, async transaction => {
+      const snap = await transaction.get(ref);
+      if (!snap.exists()) transaction.set(ref, {
+        temporada: slot.temporada,
+        actividadId: slot.actividadId,
+        segmento: slot.segmento,
+        dia: slot.dia,
+        horario: slot.horario,
+        maximo: slot.maximo,
+        ocupados: slot.ocupados,
+        lastStudentId: '',
+        lastActorUid: auth.currentUser?.uid || '',
+        lastOperation: 'INICIALIZACION',
+        updatedAt: serverTimestamp()
+      });
+    });
+  }
+
+  // Las fichas anteriores al control de aforo carecen de IDs de contador.
+  // Los añadimos sin alterar la ocupación ya contabilizada arriba.
+  for (const alumno of alumnos.filter(a => a.estado === 'inscrito' || a.estado === 'baja_pendiente')) {
+    if (Array.isArray(alumno.aforoSlotIds) && alumno.aforoSlotIds.length > 0) continue;
+    const actividadId = obtenerActividadIdAlumno(alumno);
+    const ids = construirSlotsAforo({
+      actividadId,
+      dias: alumno.dias || alumno.opcionDias,
+      horario: alumno.horario,
+      curso: alumno.curso
+    }).map(slot => slot.id);
+    await runTransaction(db, async transaction => {
+      const ref = doc(db, 'students', alumno.id);
+      const actual = await transaction.get(ref);
+      if (actual.exists() && ['inscrito', 'baja_pendiente'].includes(actual.data().estado) &&
+          (!Array.isArray(actual.data().aforoSlotIds) || actual.data().aforoSlotIds.length === 0)) {
+        transaction.update(ref, { aforoSlotIds: ids });
+      }
+    });
+  }
+};
+
 // Sistema global de Toasts Premium
 let globalShowToast = (msg, type) => { console.log("Toast: ", msg, type); };
 const showToast = (message, type = 'success') => {
@@ -396,7 +667,8 @@ const getHumanDate = (d) => {
 const enviarEmailConfirmacion = async (email, alumno, detalle, tipo, fechaInicio) => { // 🚩 Quitamos el '= cita' para que use el valor real
   try {
     const nombreAlumno = String(alumno).trim();
-    const esAlta = tipo === 'alta'; 
+    const esAlta = tipo === 'alta';
+    const esListaEspera = tipo === 'lista_espera';
 
     // Formateamos la fecha si viene (de 2026-03-11 a 11/03/2026)
     const fechaFormateada = fechaInicio && fechaInicio !== 'cita' 
@@ -406,22 +678,26 @@ const enviarEmailConfirmacion = async (email, alumno, detalle, tipo, fechaInicio
     await addDoc(collection(db, 'mail'), {
       to: [email],
       message: {
-        subject: esAlta ? `✅ Plaza Confirmada: ${nombreAlumno}` : `Reserva Confirmada: ${nombreAlumno}`,
+        subject: esListaEspera
+          ? `⏳ Lista de espera: ${nombreAlumno}`
+          : (esAlta ? `✅ Plaza Confirmada: ${nombreAlumno}` : `Reserva Confirmada: ${nombreAlumno}`),
         html: `
           <div style="font-family: sans-serif; padding: 20px; color: #333; border: 1px solid #ddd; border-radius: 15px; max-width: 600px;">
-            <h2 style="color: ${esAlta ? '#059669' : '#2563EB'}; border-bottom: 2px solid ${esAlta ? '#059669' : '#2563EB'}; padding-bottom: 10px;">
-               ${esAlta ? '🏊 Plaza Validada Correctamente' : '🏊 Reserva Prueba de Nivel'}
+            <h2 style="color: ${esListaEspera ? '#B45309' : (esAlta ? '#059669' : '#2563EB')}; border-bottom: 2px solid ${esListaEspera ? '#F59E0B' : (esAlta ? '#059669' : '#2563EB')}; padding-bottom: 10px;">
+               ${esListaEspera ? '⏳ Inscripción en lista de espera' : (esAlta ? '🏊 Plaza Validada Correctamente' : '🏊 Reserva Prueba de Nivel')}
             </h2>
             <p>Hola familia de <strong>${nombreAlumno}</strong>,</p>
             
-            ${esAlta 
+            ${esListaEspera
+              ? `<p><strong>El grupo está completo y todavía NO existe una plaza confirmada.</strong> La solicitud se ha guardado correctamente y se atenderá por orden de inscripción dentro de este grupo y horario.</p>`
+              : esAlta 
               ? `<p>¡Buenas noticias! La inscripción ha sido revisada y validada por la coordinación. El alumno ya tiene su plaza definitiva confirmada.</p>`
               : `<p>Os confirmamos que la prueba de nivel ha sido reservada correctamente. Rogamos acudan con tiempo suficiente para estar listos a la hora indicada.</p>`
             }
 
-            <div style="background: ${esAlta ? '#ECFDF5' : '#EFF6FF'}; padding: 15px; border-radius: 10px; margin: 20px 0; border: 1px solid ${esAlta ? '#10B981' : '#BFDBFE'};">
-              <p style="margin: 0; color: ${esAlta ? '#065F46' : '#1E40AF'}; font-weight: bold;">
-                ${esAlta ? '📍 Detalles de la Inscripción:' : '📅 Detalles de la Cita:'}
+            <div style="background: ${esListaEspera ? '#FFFBEB' : (esAlta ? '#ECFDF5' : '#EFF6FF')}; padding: 15px; border-radius: 10px; margin: 20px 0; border: 1px solid ${esListaEspera ? '#F59E0B' : (esAlta ? '#10B981' : '#BFDBFE')};">
+              <p style="margin: 0; color: ${esListaEspera ? '#92400E' : (esAlta ? '#065F46' : '#1E40AF')}; font-weight: bold;">
+                ${esListaEspera ? '📍 Grupo solicitado:' : (esAlta ? '📍 Detalles de la Inscripción:' : '📅 Detalles de la Cita:')}
               </p>
               <p style="margin: 10px 0 0 0; font-size: 16px;">${detalle}</p>
               
@@ -432,7 +708,9 @@ const enviarEmailConfirmacion = async (email, alumno, detalle, tipo, fechaInicio
               ` : ''}
             </div>
 
-            ${esAlta 
+            ${esListaEspera
+              ? `<p>Cuando quede una plaza libre, coordinación contactará con la primera persona de la lista antes de confirmar el alta.</p>`
+              : esAlta 
               ? `<p>🎒 <strong>Recordad traer:</strong> Bañador, gorro, toalla, gafas y chanclas.</p>`
               : `<p>🎒 <strong>Recordad traer:</strong> Bañador, gorro, toalla, gafas y chanclas.</p>`
             }
@@ -2338,6 +2616,7 @@ const AdminDashboard = ({ userRole, logout, userEmail }) => {
   const [alumnoSeleccionado, setAlumnoSeleccionado] = useState(null);
   const [vistaMes, setVistaMes] = useState('actual');
   const [radarHueco, setRadarHueco] = useState(null);
+  const aforosInicializadosRef = useRef(false);
   // --- 👑 JERARQUÍA DE PODERES ---
 const emailJefe = 'extraescolares@sanbuenaventura.org';
 const emailCoordinador = 'extraescolarespiscina@sanbuenaventura.org'; 
@@ -2389,7 +2668,16 @@ const confirmarInscripcion = async (alumnoId) => {
   useEffect(() => {
     // 1. Radar de Alumnos (Intacto)
     const unsubStudents = onSnapshot(query(collection(db, 'students')), (s) => {
-      setAlumnos(s.docs.map(d => ({ id: d.id, ...d.data() })));
+      const alumnosCargados = s.docs.map(d => ({ id: d.id, ...d.data() }));
+      setAlumnos(alumnosCargados);
+      if (puedeGestionarTodo && !aforosInicializadosRef.current) {
+        aforosInicializadosRef.current = true;
+        inicializarAforosSiFaltan(alumnosCargados).catch(error => {
+          aforosInicializadosRef.current = false;
+          console.error('No se pudieron inicializar los contadores de aforo:', error);
+          showToast('No se pudo preparar el control de plazas. No se admitirán altas hasta corregirlo.', 'error');
+        });
+      }
     }, (error) => {
       console.error("Error en alumnos:", error);
       showToast("Error al cargar alumnos: " + error.message, "error");
@@ -2481,31 +2769,37 @@ const confirmarInscripcion = async (alumnoId) => {
         }
       }
 
-      // Actualizamos al alumno blindando todos los campos para el cartel azul
-      await updateDoc(alumnoRef, {
-        estado: 'inscrito',
-        grupo: grupoDestino,
-        fechaValidacion: hoy.toISOString(),
-        fechaAlta: fechaParaDB, 
-        fecha_alta: fechaParaDB,
-        inicioDeseado: fechaParaDB,
-        fechaSolicitud: fechaParaDB, // 🚩 Esto es vital para el visor
-        revisadoAdmin: true,
-        validadoAdmin: true 
+      const actividadId = obtenerActividadIdAlumno(alumno);
+      if (!actividadId) throw new Error('No se ha podido identificar la actividad del alumno.');
+      const actividadDoc = OFERTA_ACTIVIDADES.find(a => a.id === actividadId);
+      const resultadoReserva = await reservarPlazaAtomica({
+        alumnoId: alumno.id,
+        actividadId,
+        actividad: alumno.actividad || actividadDoc.nombre,
+        dias: alumno.dias,
+        horario: alumno.horario,
+        curso: alumno.curso,
+        datosExtra: {
+          fechaValidacion: hoy.toISOString(),
+          fechaAlta: fechaParaDB,
+          fecha_alta: fechaParaDB,
+          inicioDeseado: fechaParaDB,
+          fechaSolicitud: fechaParaDB
+        }
       });
-
-      // ACTUALIZAMOS EL AFORO
-      const grupoRef = doc(db, 'clases', grupoDestino); 
-      try {
-        // await updateDoc(grupoRef, { cupo: increment(-1) });
-      } catch (errAforo) { console.warn("Aforo no actualizado"); }
 
       // 📧 ENVÍO DE EMAIL
       const padreId = alumno.parentId || alumno.user;
       const emailPadre = padres[padreId]?.email || padres[padreId]?.emailContacto || padres[padreId]?.emailPagador || alumno.emailContacto || alumno.emailPagador || alumno.email || null;
       if (emailPadre) {
         const detalleGrupoCompleto = `${alumno.actividad} — ${alumno.dias} a las ${alumno.horario}`;
-        await enviarEmailConfirmacion(emailPadre, alumno.nombre, detalleGrupoCompleto, 'alta', fechaParaDB);
+        await enviarEmailConfirmacion(
+          emailPadre,
+          alumno.nombre,
+          detalleGrupoCompleto,
+          resultadoReserva.resultado === 'lista_espera' ? 'lista_espera' : 'alta',
+          fechaParaDB
+        );
       }
 
       // 🚩 LOG DE AUDITORÍA
@@ -2518,7 +2812,12 @@ const confirmarInscripcion = async (alumnoId) => {
         adminEmail: emailNormalizado || 'admin' 
       });
 
-      showToast(`¡Perfecto! La ficha de ${alumno.nombre} se ha activado para el: ${fechaParaDB.split('-').reverse().join('/')}`, "success");
+      showToast(
+        resultadoReserva.resultado === 'lista_espera'
+          ? `El grupo está completo. ${alumno.nombre} pasa a la lista de espera.`
+          : `¡Perfecto! La ficha de ${alumno.nombre} se ha activado para el: ${fechaParaDB.split('-').reverse().join('/')}`,
+        resultadoReserva.resultado === 'lista_espera' ? 'warning' : 'success'
+      );
       
       // ✨ ¡MAGIA! Hemos quitado window.location.reload();
       // Si tienes el radar de nombres abierto abajo, lo cerramos para limpiar la vista:
@@ -2749,6 +3048,33 @@ const validarPlaza = async (alumno) => {
       else if (actText.includes('adulto')) actId = 'adultos';
       else if (actText.includes('aquagym')) actId = 'aquagym';
   }
+  if (!actId) return showToast('No se ha podido identificar la actividad.', 'error');
+
+  // La promoción respeta el orden de llegada dentro del grupo exacto.
+  if (alumno.estado === 'lista_espera') {
+    const slotsSolicitados = construirSlotsAforo({ actividadId: actId, dias: alumno.dias, horario: alumno.horario, curso: alumno.curso });
+    const grupoEspera = alumno.waitlistGroupKey || claveListaEspera(slotsSolicitados);
+    const fechaOrden = item => {
+      const valor = item.waitlistJoinedAt || item.fechaInscripcion;
+      if (valor?.toMillis) return valor.toMillis();
+      if (valor?.seconds) return valor.seconds * 1000;
+      const ms = new Date(valor || 0).getTime();
+      return Number.isFinite(ms) ? ms : 0;
+    };
+    const primero = alumnos
+      .filter(item => {
+        if (item.estado !== 'lista_espera') return false;
+        try {
+          const itemActId = obtenerActividadIdAlumno(item);
+          const itemKey = item.waitlistGroupKey || claveListaEspera(construirSlotsAforo({ actividadId: itemActId, dias: item.dias, horario: item.horario, curso: item.curso }));
+          return itemKey === grupoEspera;
+        } catch (_) { return false; }
+      })
+      .sort((a, b) => fechaOrden(a) - fechaOrden(b))[0];
+    if (primero && primero.id !== alumno.id) {
+      return showToast(`Debe entrar primero ${primero.nombre}, que encabeza la lista de este grupo.`, 'warning');
+    }
+  }
 
   // --- 📅 2. LÓGICA DE FECHAS ÚNICA Y BLINDADA ---
   const info = obtenerInfoAlta();
@@ -2787,16 +3113,19 @@ const validarPlaza = async (alumno) => {
       const padreId = alumno.parentId || alumno.user;
       const emailPadre = padres[padreId]?.email || padres[padreId]?.emailContacto || padres[padreId]?.emailPagador || alumno.emailContacto || alumno.emailPagador || alumno.email || null;
       
-      // 🎯 GUARDADO ÚNICO
-      await setDoc(doc(db, 'students', idCorrecto), { 
-        estado: 'inscrito',
-        actividadId: actId || 'sin_asignar',
-        validadoAdmin: true,
-        fechaAlta: fechaParaDB, // 👈 Aquí se guarda el texto real: "2026-03-06" o "2026-04-01"
-        revisadoAdmin: true,
-        fechaInicioReal: textoInicioReal,
-        ultimaActualizacion: new Date().getTime()
-      }, { merge: true });
+      const actividadDoc = OFERTA_ACTIVIDADES.find(a => a.id === actId);
+      const resultadoReserva = await reservarPlazaAtomica({
+        alumnoId: idCorrecto,
+        actividadId: actId,
+        actividad: alumno.actividad || actividadDoc.nombre,
+        dias: alumno.dias,
+        horario: alumno.horario,
+        curso: alumno.curso,
+        datosExtra: {
+          fechaAlta: fechaParaDB,
+          fechaInicioReal: textoInicioReal
+        }
+      });
 
       // 📧 4. EMAIL
       if (emailPadre) {
@@ -2805,7 +3134,7 @@ const validarPlaza = async (alumno) => {
             emailPadre, 
             alumno.nombre, 
             `${alumno.actividad || 'Natación'} — ${alumno.dias || ''} ${alumno.horario || ''}`, 
-            'alta', 
+            resultadoReserva.resultado === 'lista_espera' ? 'lista_espera' : 'alta', 
             fechaParaDB
           );
         } catch (e) { console.warn("Email falló: ", e); }
@@ -2821,7 +3150,12 @@ const validarPlaza = async (alumno) => {
         adminEmail: emailNormalizado || 'admin'
       });
 
-      showToast(`GUARDADO CON ÉXITO. Fecha Alta: ${fechaParaDB}`, "success");
+      showToast(
+        resultadoReserva.resultado === 'lista_espera'
+          ? 'El grupo sigue completo. El alumno permanece en lista de espera.'
+          : `GUARDADO CON ÉXITO. Fecha Alta: ${fechaParaDB}`,
+        resultadoReserva.resultado === 'lista_espera' ? 'warning' : 'success'
+      );
       // La recarga ya no es necesaria gracias al listener en tiempo real onSnapshot
 
   } catch (error) {
@@ -2849,10 +3183,13 @@ const tramitarBaja = async (alumno) => {
 
   if (confirm(`📉 ¿Aceptar baja de ${alumno.nombre}?\n\n📅 Fecha efectiva: ${fechaCalculada}\n\n(Se enviará un correo de confirmación a la familia)`)) {
       try {
-          // 1. Actualizamos el estado del alumno a baja
-          await updateDoc(doc(db, 'students', alumno.id), {
-              estado: 'baja_finalizada', 
+          // 1. La baja y la liberación de plaza se hacen en la misma transacción.
+          await liberarPlazaAtomica({
+            alumnoId: alumno.id,
+            datosFinales: {
+              estado: 'baja_finalizada',
               fechaBaja: fechaCalculada
+            }
           });
 
           // 2. BÚSQUEDA OPTIMIZADA A COSTE CERO DEL EMAIL DEL PADRE
@@ -2910,20 +3247,25 @@ const tramitarBaja = async (alumno) => {
 const archivarBaja = async (alumno) => {
     if (userRole !== 'admin') return;
     if (confirm(`🗑️ ¿Eliminar DEFINITIVAMENTE a ${alumno.nombre} de la lista?\n\nLa plaza quedará libre.`)) {
-        await updateDoc(doc(db, 'students', alumno.id), {
+        await liberarPlazaAtomica({ alumnoId: alumno.id, datosFinales: {
             estado: 'sin_inscripcion', // Aquí desaparece de la lista
             actividad: null, dias: null, horario: null, precio: null,
             citaId: null, citaNivel: null, citaFecha: null, citaHora: null,
             validadoAdmin: null, fechaSolicitudBaja: null,
             fechaAlta: null, fechaBaja: null, grupo: null, revisadoAdmin: null
-        });
+        }});
     }
 };
 
   const borrarAlumno = async (e, id) => { 
       e.stopPropagation(); // Evita abrir ficha al borrar
       if (userRole !== 'admin') return; 
-      if(confirm('⚠️ ¿Borrar definitivamente?')) await deleteDoc(doc(db, 'students', id)); 
+      const alumno = alumnos.find(a => a.id === id);
+      if (!confirm('⚠️ ¿Retirar al alumno?')) return;
+      if (alumno?.estado === 'inscrito' || alumno?.estado === 'baja_pendiente') {
+        await liberarPlazaAtomica({ alumnoId: id, datosFinales: { estado: 'sin_inscripcion' } });
+      }
+      await deleteDoc(doc(db, 'students', id));
   }
   
   const agregarAviso = async (e) => { e.preventDefault(); if (!nuevoAviso) return; await addDoc(collection(db, 'avisos'), { texto: nuevoAviso, fecha: new Date().toISOString() }); setNuevoAviso(''); };
@@ -2938,7 +3280,8 @@ const archivarBaja = async (alumno) => {
     setLoadingStaff(true); 
     try { 
         // 2. Crea el usuario (Email + Contraseña)
-        const credencial = await createUserWithEmailAndPassword(auth, newStaff.email, newStaff.password);
+        // La sesión principal conserva los permisos de administración.
+        const credencial = await createUserWithEmailAndPassword(secondaryAuth, newStaff.email, newStaff.password);
         
         // 3. Guarda el Rol (Profe/Admin) en la base de datos
         await setDoc(doc(db, 'users', credencial.user.uid), {
@@ -2946,6 +3289,7 @@ const archivarBaja = async (alumno) => {
             role: newStaff.role,
             createdAt: new Date().toISOString()
         });
+        await signOut(secondaryAuth);
 
         showToast(`✅ Usuario ${newStaff.email} creado. Cierra sesión y entra como Admin.`, "success");
         setNewStaff({ email: '', password: '', role: 'profe' }); 
@@ -3985,8 +4329,10 @@ const listadoBajas = alumnos.filter(a => a.estado === 'baja_pendiente' || a.esta
                     .filter(a => a.estado === 'lista_espera')
                     .sort((a, b) => {
                         // 🚩 PRIORIDAD ÚNICA: Fecha de inscripción (Antigüedad)
-                        const fechaA = a.fechaInscripcion?.seconds || a.fechaInscripcion || 0;
-                        const fechaB = b.fechaInscripcion?.seconds || b.fechaInscripcion || 0;
+                        const valorA = a.waitlistJoinedAt || a.fechaInscripcion;
+                        const valorB = b.waitlistJoinedAt || b.fechaInscripcion;
+                        const fechaA = valorA?.toMillis ? valorA.toMillis() : (valorA?.seconds ? valorA.seconds * 1000 : new Date(valorA || 0).getTime());
+                        const fechaB = valorB?.toMillis ? valorB.toMillis() : (valorB?.seconds ? valorB.seconds * 1000 : new Date(valorB || 0).getTime());
                         return fechaA - fechaB;
                     })
                     .map((a, index) => (
@@ -3997,9 +4343,25 @@ const listadoBajas = alumnos.filter(a => a.estado === 'baja_pendiente' || a.esta
                         >
                             {/* PUESTO POR ORDEN DE LLEGADA */}
                             <td className="p-3 text-center">
-                                <span className={`inline-block w-6 h-6 leading-6 rounded-full text-[10px] font-black ${index === 0 ? 'bg-amber-600 text-white shadow-md' : 'bg-slate-100 text-slate-500'}`}>
-                                    {index + 1}
-                                </span>
+                                {(() => {
+                                  let key = a.waitlistGroupKey;
+                                  try {
+                                    if (!key) key = claveListaEspera(construirSlotsAforo({ actividadId: obtenerActividadIdAlumno(a), dias: a.dias, horario: a.horario, curso: a.curso }));
+                                  } catch (_) { key = `${a.actividadId}|${a.dias}|${a.horario}`; }
+                                  const fechaOrden = item => {
+                                    const valor = item.waitlistJoinedAt || item.fechaInscripcion;
+                                    return valor?.toMillis ? valor.toMillis() : (valor?.seconds ? valor.seconds * 1000 : new Date(valor || 0).getTime());
+                                  };
+                                  const mismaLista = alumnos.filter(item => {
+                                    if (item.estado !== 'lista_espera') return false;
+                                    try {
+                                      const itemKey = item.waitlistGroupKey || claveListaEspera(construirSlotsAforo({ actividadId: obtenerActividadIdAlumno(item), dias: item.dias, horario: item.horario, curso: item.curso }));
+                                      return itemKey === key;
+                                    } catch (_) { return false; }
+                                  }).sort((x, y) => fechaOrden(x) - fechaOrden(y));
+                                  const puesto = mismaLista.findIndex(item => item.id === a.id) + 1;
+                                  return <span className={`inline-block w-6 h-6 leading-6 rounded-full text-[10px] font-black ${puesto === 1 ? 'bg-amber-600 text-white shadow-md' : 'bg-slate-100 text-slate-500'}`}>{puesto || index + 1}</span>;
+                                })()}
                             </td>
 
                             {/* ALUMNO */}
@@ -4016,17 +4378,27 @@ const listadoBajas = alumnos.filter(a => a.estado === 'baja_pendiente' || a.esta
 
                             {/* ACCIÓN */}
                             <td className="p-3 text-right">
+                            <div className="flex justify-end gap-2">
                             <button 
     onClick={(e) => {
         e.stopPropagation();
         // CAMBIAMOS validarPlazaDirecto POR validarPlaza
-        validarPlaza(a); 
-        registrarLog("VALIDAR_PLAZA", `Validada plaza para ${a.nombre} (Puesto #${index + 1})`);
+        validarPlaza(a);
     }}
     className="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded font-black text-[10px] uppercase shadow transition-all active:scale-95"
 >
     Validar Plaza
 </button>
+                            {userRole === 'admin' && (
+                              <button
+                                type="button"
+                                onClick={(e) => borrarAlumno(e, a.id)}
+                                className="bg-red-50 hover:bg-red-100 text-red-700 px-3 py-1.5 rounded font-bold text-[10px] uppercase border border-red-200"
+                              >
+                                Retirar de espera
+                              </button>
+                            )}
+                            </div>
                             </td>
                         </tr>
                     ))}
@@ -5549,7 +5921,7 @@ const handleUpdatePassword = async () => {
     if (!window.confirm(`⚠️ ¿Cancelar la solicitud de ${hijo.nombre}?\n\nAl no estar inscrito todavía, se borrará la reserva inmediatamente y podrás empezar de cero.`)) return;
 
     try {
-        await updateDoc(doc(db, 'students', hijo.id), {
+        await liberarPlazaAtomica({ alumnoId: hijo.id, datosFinales: {
             estado: 'sin_inscripcion',
             actividad: null,
             dias: null,
@@ -5566,7 +5938,7 @@ const handleUpdatePassword = async () => {
             fechaBaja: null,
             grupo: null,
             revisadoAdmin: null
-        });
+        }});
         showToast('✅ Solicitud cancelada correctamente.', 'success');
     } catch (e) {
         showToast('Error al cancelar: ' + e.message, 'error');
@@ -5594,13 +5966,13 @@ const handleUpdatePassword = async () => {
       // BAJA DIRECTA AUTOMÁTICA (ANTES DEL 25 DE SEPTIEMBRE)
       if (window.confirm(`⚠️ ¿Deseas cancelar la inscripción de ${hijo.nombre}?\n\nAl no haber comenzado el curso escolar todavía (inicia el ${academicInfo.formattedStartDate}), la inscripción se cancelará inmediatamente y sin ningún coste.`)) {
         try {
-          await updateDoc(doc(db, 'students', hijo.id), {
+          await liberarPlazaAtomica({ alumnoId: hijo.id, datosFinales: {
             estado: 'sin_inscripcion',
             actividad: null, dias: null, horario: null, precio: null,
             citaId: null, citaNivel: null, citaFecha: null, citaHora: null,
             fechaInscripcion: null, aceptaNormas: false, autorizaFotos: false,
             fechaAlta: null, fechaBaja: null, grupo: null, revisadoAdmin: null
-          });
+          }});
 
           // Encolar email de confirmación de cancelación directa
           if (user?.email) {
@@ -6079,6 +6451,13 @@ if (hijo.estado === 'inscrito') {
                         ✖️ Cancelar Solicitud
                     </button>
                 )}
+
+                {/* Una solicitud en espera no ocupa aforo: la familia puede retirarla. */}
+                {hijo.estado === 'lista_espera' && (
+                    <button onClick={() => cancelarSolicitud(hijo)} className="w-full bg-white text-red-600 px-3 py-2 rounded-lg text-sm font-bold border border-red-200 hover:bg-red-50">
+                        ✖️ Salir de la lista de espera
+                    </button>
+                )}
               </div>
             </div>
           );
@@ -6314,21 +6693,18 @@ const PantallaInscripcion = ({ alumno, close, onRequirePrueba, user }) => {
       normasRef.current = nuevoValor;        // Guardamos en la referencia (Lógica)
       setAceptaNormasVisual(nuevoValor);     // Guardamos en el estado (Visual)
   };
-  // 1. Estado para guardar la ocupación global
-  const [todosLosAlumnos, setTodosLosAlumnos] = useState([]);
+  // 1. Estado para guardar únicamente cifras agregadas de ocupación (sin datos de otros alumnos)
+  const [aforosPublicos, setAforosPublicos] = useState({});
 
-  // 2. Escuchamos solo a los alumnos activos inscritos para poder contar plazas eficientemente
+  // 2. Los documentos de aforo son públicos y no contienen nombres ni identificadores personales.
   useEffect(() => {
-    const q = query(collection(db, 'students'), where('estado', '==', 'inscrito'));
-    const unsub = onSnapshot(q, (s) => {
-      setTodosLosAlumnos(s.docs.map(doc => ({
-        actividadId: doc.data().actividadId,
-        estado: doc.data().estado,
-        dias: doc.data().dias,
-        curso: doc.data().curso
-      })));
+    const unsub = onSnapshot(collection(db, 'aforos'), (s) => {
+      const siguiente = {};
+      s.forEach(documento => { siguiente[documento.id] = documento.data(); });
+      setAforosPublicos(siguiente);
     }, (error) => {
       console.error("Error al escuchar ocupación de plazas:", error);
+      setAforosPublicos({});
     });
     return () => unsub();
   }, []);
@@ -6360,60 +6736,26 @@ const PantallaInscripcion = ({ alumno, close, onRequirePrueba, user }) => {
 
 
 
-  const obtenerEstadoPlaza = (actividadId, textoDiasSeleccionado, cursoAlumno) => {
-    // 1. Buscamos la actividad en tu catálogo oficial
-    const actividadDoc = OFERTA_ACTIVIDADES.find(a => a.id === actividadId);
-    const max = actividadDoc?.alumnosMax || 10;
-  
-    // 2. Extraemos los días individuales del texto seleccionado
-    // (Transforma "[PACK] Lunes y Miércoles" en ["lunes", "miercoles"])
-    const diasAComprobar = [];
-    const textoLimpiado = textoDiasSeleccionado.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-    
-    if (textoLimpiado.includes('lunes')) diasAComprobar.push('lunes');
-    if (textoLimpiado.includes('martes')) diasAComprobar.push('martes');
-    if (textoLimpiado.includes('miercoles')) diasAComprobar.push('miercoles');
-    if (textoLimpiado.includes('jueves')) diasAComprobar.push('jueves');
-    if (textoLimpiado.includes('viernes')) diasAComprobar.push('viernes');
-  
-    // 3. Calculamos la ocupación máxima entre los días elegidos
-    // Si un Pack es Lunes/Miércoles, miramos cuál de los dos días está más lleno
-    let ocupacionMaxEnDias = 0;
-  
-    diasAComprobar.forEach(dia => {
-      const inscritosEseDia = todosLosAlumnos.filter(a => {
-        const coincideAct = a.actividadId === actividadId;
-        const estaInscrito = a.estado === 'inscrito';
-        const diasAlumno = a.dias?.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "") || '';
-        
-        const ocupaEsteDia = diasAlumno.includes(dia);
-  
-        // Filtro especial Primaria 16:15 (Subgrupos por curso)
-        if (actividadId === 'primaria_1615') {
-          const esPeque = ['1PRI', '2PRI', '3PRI'].includes(cursoAlumno);
-          const cursosFiltro = esPeque ? ['1PRI', '2PRI', '3PRI'] : ['4PRI', '5PRI', '6PRI'];
-          return coincideAct && estaInscrito && ocupaEsteDia && cursosFiltro.includes(a.curso);
-        }
-  
-        return coincideAct && estaInscrito && ocupaEsteDia;
-      }).length;
-  
-      if (inscritosEseDia > ocupacionMaxEnDias) {
-        ocupacionMaxEnDias = inscritosEseDia;
-      }
-    });
-  
-    // 4. Resultados finales
-    const plazasLibres = max - ocupacionMaxEnDias;
-  
-    return {
-      lleno: ocupacionMaxEnDias >= max,
+  const obtenerEstadoPlaza = (actividadId, textoDiasSeleccionado, cursoAlumno, horarioSeleccionado) => {
+    try {
+      const slots = construirSlotsAforo({ actividadId, dias: textoDiasSeleccionado, horario: horarioSeleccionado, curso: cursoAlumno });
+      const datos = slots.map(slot => aforosPublicos[slot.id]).filter(Boolean);
+      const inicializado = datos.length === slots.length;
+      const ocupacionMaxEnDias = inicializado ? Math.max(...datos.map(d => Number(d.ocupados || 0))) : 0;
+      const max = slots[0]?.maximo || 0;
+      const plazasLibres = Math.max(0, max - ocupacionMaxEnDias);
+      return {
+      lleno: !inicializado || datos.some(d => Number(d.ocupados || 0) >= Number(d.maximo || max)),
+      inicializado,
       // 🚩 REGLA DE ORO: Si quedan 3 o menos plazas reales
       esCritico: max > 0 && plazasLibres <= 3 && plazasLibres > 0,
       cupoActual: ocupacionMaxEnDias,
       maximo: max,
       libres: plazasLibres
     };
+    } catch (error) {
+      return { lleno: true, inicializado: false, esCritico: false, cupoActual: 0, maximo: 0, libres: 0 };
+    }
   };
   // 2. FUNCIÓN DE INSCRIPCIÓN
   const inscribir = async (act, op) => {
@@ -6488,7 +6830,10 @@ const PantallaInscripcion = ({ alumno, close, onRequirePrueba, user }) => {
     }
 
     // CASO B: INSCRIPCIÓN DIRECTA O LISTA DE ESPERA
-    const infoPlaza = obtenerEstadoPlaza(act.id, op.dias, d.curso);
+    const infoPlaza = obtenerEstadoPlaza(act.id, op.dias, d.curso, op.horario);
+    if (!infoPlaza.inicializado) {
+      return showToast('Estamos comprobando las plazas. Inténtalo de nuevo en unos minutos.', 'warning');
+    }
     
     let estadoFinalReal;
     if (tienePaseVIP || esInfantil || esAdulto) {
@@ -6507,35 +6852,45 @@ const PantallaInscripcion = ({ alumno, close, onRequirePrueba, user }) => {
 
     if (!confirm(mensajeConfirmacion)) return;
     
-    const grupoFormateado = `${op.dias} ${op.horario}`;
-    let idLimpio = act.id;
-    if (act.nombre.toLowerCase().includes('16:15')) idLimpio = 'primaria_1615';
-    
     try {
-        await updateDoc(alumnoRef, { 
-          ...datosComunes,
-          estado: estadoFinalReal,
-          grupo: grupoFormateado, 
-          revisadoAdmin: (estadoFinalReal === 'inscrito'),
-          validadoAdmin: (estadoFinalReal === 'inscrito'),
-          fechaInscripcion: new Date().toISOString(),
-          // Limpieza de citas anteriores si se inscribe directamente
-          citaNivel: null,
-          citaFecha: null,
-          citaHora: null,
-          citaId: null
+        const resultadoReserva = await reservarPlazaAtomica({
+          alumnoId: alumno.id,
+          actividadId: act.id,
+          actividad: act.nombre,
+          dias: op.dias,
+          horario: op.horario,
+          curso: d.curso,
+          datosExtra: {
+            ...datosComunes,
+            fechaInscripcion: serverTimestamp(),
+            citaNivel: null,
+            citaFecha: null,
+            citaHora: null,
+            citaId: null
+          }
         });
+        estadoFinalReal = resultadoReserva.resultado;
 
         // Envío de Email
         if (user && user.email) {
             let detalleParaEmail = estadoFinalReal === 'lista_espera' 
                 ? `LISTA DE ESPERA para ${act.nombre} (${op.dias})` 
                 : `${act.nombre} — ${op.dias} a las ${op.horario}`; 
-            await enviarEmailConfirmacion(user.email, d.nombre, detalleParaEmail, 'alta');
+            await enviarEmailConfirmacion(
+              user.email,
+              d.nombre,
+              detalleParaEmail,
+              estadoFinalReal === 'lista_espera' ? 'lista_espera' : 'alta'
+            );
         }
 
         close();
-        showToast("✅ Proceso completado correctamente.", "success");
+        showToast(
+          estadoFinalReal === 'lista_espera'
+            ? '⏳ Grupo completo: inscripción guardada en lista de espera.'
+            : '✅ Plaza confirmada correctamente.',
+          estadoFinalReal === 'lista_espera' ? 'warning' : 'success'
+        );
 
     } catch (error) {
         console.error("Error final:", error);
@@ -6708,13 +7063,14 @@ return (
         <div className="p-3 grid gap-2">
             {act.opciones.map((op, idx) => {
                 // 🔍 CALCULAMOS EL ESTADO PARA ESTA OPCIÓN
-                const info = obtenerEstadoPlaza(act.id, op.dias, alumno.curso);
+                const info = obtenerEstadoPlaza(act.id, op.dias, alumno.curso, op.horario);
                 const plazasLibres = info.maximo - info.cupoActual;
 
                 return (
                     <div key={idx} className="space-y-1">
                         <button 
                             type="button"
+                            disabled={!info.inicializado}
                             onClick={() => inscribir(act, op)} 
                             className={`flex justify-between items-center w-full p-3 rounded-lg border transition-all text-left relative ${
                                 info.lleno 
@@ -6741,7 +7097,7 @@ return (
                                 {/* 🚦 ETIQUETAS DINÁMICAS */}
                                 {info.lleno ? (
                                     <span className="text-[9px] bg-amber-500 text-white px-2 py-0.5 rounded-full font-black uppercase">
-                                        ⏳ Lista Espera
+                                        {info.inicializado ? '⏳ Lista Espera' : '🔄 Comprobando plazas'}
                                     </span>
                                 ) : info.esCritico ? (
                                     <span className="text-[9px] bg-orange-100 text-orange-600 px-2 py-0.5 rounded-full font-black uppercase animate-pulse">
@@ -6756,7 +7112,7 @@ return (
                         </button>
 
                         {/* PEQUEÑA NOTA ACLARATORIA SI ESTÁ LLENO */}
-                        {info.lleno && (
+                        {info.lleno && info.inicializado && (
                             <p className="text-[9px] text-amber-600 font-bold px-2 italic">
                                 * Se inscribirá automáticamente en lista de espera
                             </p>
@@ -6915,16 +7271,38 @@ const confirmarReserva = async () => {
           <button 
             onClick={async () => {
               try {
-                const alumnoRef = doc(db, 'students', alumno.id);
-                await updateDoc(alumnoRef, {
-                  estado: 'inscrito',
-                  revisadoAdmin: true,
-                  validadoAdmin: true,
-                  citaNivel: 'EXENTO - ANTIGUO ALUMNO' 
+                const actividadId = obtenerActividadIdAlumno(alumno);
+                if (!actividadId) throw new Error('No se ha podido identificar la actividad elegida.');
+                const actividadDoc = OFERTA_ACTIVIDADES.find(a => a.id === actividadId);
+                const resultadoReserva = await reservarPlazaAtomica({
+                  alumnoId: alumno.id,
+                  actividadId,
+                  actividad: alumno.actividad || actividadDoc.nombre,
+                  dias: alumno.dias,
+                  horario: alumno.horario,
+                  curso: alumno.curso,
+                  datosExtra: { citaNivel: 'EXENTO - ANTIGUO ALUMNO' }
                 });
-                if (onSuccess) onSuccess(); 
+                if (user?.email) {
+                  await enviarEmailConfirmacion(
+                    user.email,
+                    alumno.nombre,
+                    `${alumno.actividad || actividadDoc.nombre} — ${alumno.dias} a las ${alumno.horario}`,
+                    resultadoReserva.resultado === 'lista_espera' ? 'lista_espera' : 'alta'
+                  );
+                }
+                showToast(
+                  resultadoReserva.resultado === 'lista_espera'
+                    ? 'El grupo está completo. La solicitud queda en lista de espera.'
+                    : '✅ Plaza confirmada correctamente.',
+                  resultadoReserva.resultado === 'lista_espera' ? 'warning' : 'success'
+                );
+                if (onSuccess) onSuccess({ citaNivel: 'EXENTO - ANTIGUO ALUMNO' });
                 close();
-              } catch (err) { console.error(err); }
+              } catch (err) {
+                console.error(err);
+                showToast('No se pudo completar la inscripción: ' + err.message, 'error');
+              }
             }}
             className="w-full bg-green-600 text-white p-4 rounded-2xl font-black shadow-lg hover:bg-green-700 transition transform active:scale-95"
           >
