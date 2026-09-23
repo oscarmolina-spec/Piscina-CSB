@@ -41,6 +41,20 @@ test('Chapoteo no cambia precio ni horario', () => {
   assert.throws(() => planificarTraslado(alumno, act, alterada, [slot('lunes')], [slot('martes')]), /CHAPOTEO_SOLO_DIA/);
 });
 
+test('Cambia de actividad compatible sin conservar la plaza de origen', () => {
+  const nueva = { id: 'waterpolo', cursos: ['3PRI'], opciones: [{ dias: 'Martes', horario: '17:30-18:30', precio: '45€' }] };
+  const anterior = { estado: 'inscrito', actividadId: 'natacion', curso: '3PRI', aforoSlotIds: ['natacion_lunes'] };
+  assert.deepEqual(planificarTraslado(anterior, nueva, nueva.opciones[0], [slot('natacion_lunes')], [slot('waterpolo_martes')]), {
+    liberar: ['natacion_lunes'], reservar: ['waterpolo_martes'], mantener: [], destino: ['waterpolo_martes']
+  });
+});
+
+test('No admite Chapoteo como origen ni como destino de otra actividad', () => {
+  const nueva = { id: 'waterpolo', cursos: ['INF3'], opciones: [{ dias: 'Martes', horario: '16:00-17:00', precio: '45€' }] };
+  assert.throws(() => planificarTraslado(alumno, nueva, nueva.opciones[0], [slot('lunes')], [slot('waterpolo_martes')]), /TRASLADO_NO_PERMITIDO/);
+  assert.throws(() => planificarTraslado({ ...alumno, actividadId: 'otra' }, actividad, actividad.opciones[1], [slot('lunes')], [slot('martes')]), /TRASLADO_NO_PERMITIDO/);
+});
+
 test('Rechaza destinos completos y plazas de origen inconsistentes', () => {
   const plan = { liberar: ['lunes'], reservar: ['martes'] };
   assert.throws(() => comprobarAforoTraslado(plan, new Map([

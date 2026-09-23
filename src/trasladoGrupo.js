@@ -1,9 +1,10 @@
-// Comparte la validación entre la vista y la transacción: nunca se traslada
-// a una opción fuera de la actividad actual ni se altera una plaza compartida.
+// Valida la opción del catálogo y excluye Chapoteo de cambios de actividad.
+// Un día compartido entre dos opciones conserva su plaza.
 export function planificarTraslado(alumno, actividad, opcion, slotsOrigen, slotsDestino) {
-  if (alumno.estado !== 'inscrito' || alumno.actividadId !== actividad?.id ||
-      !actividad.cursos.includes(alumno.curso) ||
-      !actividad.opciones.some(o => o.dias === opcion?.dias && o.horario === opcion?.horario && o.precio === opcion?.precio)) {
+  if (alumno.estado !== 'inscrito' || !actividad?.cursos.includes(alumno.curso) ||
+      !actividad.opciones.some(o => o.dias === opcion?.dias && o.horario === opcion?.horario && o.precio === opcion?.precio) ||
+      (alumno.actividadId !== actividad.id &&
+        (alumno.actividadId === 'chapoteo' || actividad.id === 'chapoteo'))) {
     throw new Error('TRASLADO_NO_PERMITIDO');
   }
   if (actividad.id === 'chapoteo' && (slotsDestino.length !== 1 ||
