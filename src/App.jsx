@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';import { db, auth, secondaryAuth } from './firebase.js';
+import { planificarTraslado, comprobarAforoTraslado } from './trasladoGrupo.js';
 import {
   collection,
   addDoc,
@@ -559,6 +560,66 @@ const liberarPlazaAtomica = async ({ alumnoId, datosFinales }) => {
   });
 };
 
+const trasladarGrupoAtomico = async ({ alumnoId, actividadId, opcion, origenEsperado }) => {
+  const actividad = OFERTA_ACTIVIDADES.find(a => a.id === actividadId);
+  if (!actividad || !auth.currentUser || ![
+    'extraescolares@sanbuenaventura.org',
+    'extraescolarespiscina@sanbuenaventura.org'
+  ].includes((auth.currentUser.email || '').toLowerCase())) throw new Error('TRASLADO_NO_PERMITIDO');
+
+  const alumnoRef = doc(db, 'students', alumnoId);
+  // La lectura previa permite conocer todos los documentos que leerá la transacción.
+  // Dentro se comprueba otra vez el grupo, para descartar vistas desactualizadas.
+  const inicial = await getDoc(alumnoRef);
+  if (!inicial.exists()) throw new Error('ALUMNO_NO_EXISTE');
+  const previo = inicial.data();
+  if (previo.actividadId !== actividadId) throw new Error('GRUPO_CAMBIADO');
+  const slotsOrigen = construirSlotsAforo({ actividadId, dias: previo.dias, horario: previo.horario, curso: previo.curso });
+  const slotsDestino = construirSlotsAforo({ actividadId, dias: opcion.dias, horario: opcion.horario, curso: previo.curso });
+  planificarTraslado(previo, actividad, opcion, slotsOrigen, slotsDestino);
+  const ids = [...new Set([...slotsOrigen, ...slotsDestino].map(s => s.id))].sort();
+  const referencias = ids.map(id => doc(db, 'aforos', id));
+
+  return runTransaction(db, async transaction => {
+    const snap = await transaction.get(alumnoRef);
+    if (!snap.exists()) throw new Error('ALUMNO_NO_EXISTE');
+    const actual = snap.data();
+    if (actual.actividadId !== actividadId || actual.dias !== origenEsperado.dias ||
+        actual.horario !== origenEsperado.horario || actual.precio !== origenEsperado.precio ||
+        actual.estado !== 'inscrito' || actual.curso !== previo.curso ||
+        JSON.stringify(actual.aforoSlotIds || []) !== JSON.stringify(previo.aforoSlotIds || [])) {
+      throw new Error('GRUPO_CAMBIADO');
+    }
+    const plan = planificarTraslado(actual, actividad, opcion, slotsOrigen, slotsDestino);
+    const documentos = [];
+    for (const referencia of referencias) documentos.push(await transaction.get(referencia));
+    const contadores = new Map(ids.map((id, index) => [id, documentos[index]]));
+    if (documentos.some(d => !d.exists())) throw new Error('AFORO_NO_INICIALIZADO');
+    comprobarAforoTraslado(plan, new Map(ids.map(id => [id, contadores.get(id).data()])));
+    const ahora = serverTimestamp();
+    for (const id of plan.liberar) {
+      transaction.update(doc(db, 'aforos', id), {
+        ocupados: Number(contadores.get(id).data().ocupados) - 1,
+        lastStudentId: alumnoId, lastActorUid: auth.currentUser.uid,
+        lastOperation: 'LIBERACION', updatedAt: ahora
+      });
+    }
+    for (const id of plan.reservar) {
+      transaction.update(doc(db, 'aforos', id), {
+        ocupados: Number(contadores.get(id).data().ocupados) + 1,
+        lastStudentId: alumnoId, lastActorUid: auth.currentUser.uid,
+        lastOperation: 'RESERVA', updatedAt: ahora
+      });
+    }
+    transaction.update(alumnoRef, {
+      dias: opcion.dias, opcionDias: opcion.dias, horario: opcion.horario,
+      grupo: `${opcion.dias} ${opcion.horario}`, precio: opcion.precio,
+      aforoSlotIds: plan.destino, ultimaActualizacion: ahora
+    });
+    return { nombre: actual.nombre, anterior: `${actual.dias} ${actual.horario}`, nuevo: `${opcion.dias} ${opcion.horario}` };
+  });
+};
+
 // Se ejecuta desde el panel de administración. Solo crea contadores que aún no
 // existen y conserva expresamente situaciones históricas como el actual 17/16.
 const inicializarAforosSiFaltan = async (alumnos = []) => {
@@ -726,6 +787,29 @@ const enviarEmailConfirmacion = async (email, alumno, detalle, tipo, fechaInicio
   } catch (e) {
     console.error("Error al encolar email:", e);
   }
+};
+const escaparHtml = texto => String(texto || '').replace(/[&<>"']/g, caracter => ({
+  '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+})[caracter]);
+
+const enviarAvisoTraslado = async (email, nombre, actividad, anterior, nuevo) => {
+  // El documento en `mail` solicita el envío; la entrega definitiva depende
+  // de la extensión de Firebase y puede consultarse en esa colección.
+  return addDoc(collection(db, 'mail'), {
+    to: [email],
+    message: {
+      subject: `Cambio de grupo confirmado: ${nombre}`,
+      html: `<div style="font-family:sans-serif;max-width:600px;line-height:1.6;color:#243044">
+        <h2>Cambio de grupo confirmado</h2>
+        <p>Hola,</p>
+        <p>Os confirmamos el cambio de grupo de <strong>${escaparHtml(nombre)}</strong>
+        en ${escaparHtml(actividad)}.</p>
+        <p><strong>Grupo anterior:</strong> ${escaparHtml(anterior)}<br>
+        <strong>Nuevo grupo:</strong> ${escaparHtml(nuevo)}</p>
+        <p>La plaza ya figura en el nuevo grupo. Para cualquier duda, contactad con
+        Coordinación de Extraescolares CSB.</p></div>`
+    }
+  });
 };
 // ==========================================
 // 🏠 LANDING PAGE (VERSIÓN COMPLETA Y DETALLADA)
@@ -2614,6 +2698,9 @@ const AdminDashboard = ({ userRole, logout, userEmail }) => {
 
   // ESTADO PARA LA FICHA (ALUMNO SELECCIONADO)
   const [alumnoSeleccionado, setAlumnoSeleccionado] = useState(null);
+  const [trasladoId, setTrasladoId] = useState(null);
+  const [opcionTraslado, setOpcionTraslado] = useState('');
+  const [trasladoEnCurso, setTrasladoEnCurso] = useState(false);
   const [vistaMes, setVistaMes] = useState('actual');
   const [radarHueco, setRadarHueco] = useState(null);
   const aforosInicializadosRef = useRef(false);
@@ -2662,6 +2749,67 @@ const confirmarInscripcion = async (alumnoId) => {
   } catch (error) {
     console.error("Error al confirmar:", error);
     showToast("No se pudo confirmar el grupo.", "error");
+  }
+};
+const alumnoTraslado = alumnos.find(a => a.id === trasladoId);
+const actividadTraslado = OFERTA_ACTIVIDADES.find(a => a.id === alumnoTraslado?.actividadId);
+const opcionesTraslado = (actividadTraslado?.opciones || []).filter(o =>
+  actividadTraslado.cursos.includes(alumnoTraslado?.curso) &&
+  !(o.dias === alumnoTraslado?.dias && o.horario === alumnoTraslado?.horario) &&
+  (actividadTraslado.id !== 'chapoteo' ||
+    (o.horario === alumnoTraslado?.horario && o.precio === alumnoTraslado?.precio))
+);
+const destinoTraslado = opcionesTraslado.find((_, index) => String(index) === opcionTraslado);
+
+const confirmarTraslado = async () => {
+  if (!puedeGestionarTodo || trasladoEnCurso || !alumnoTraslado || !actividadTraslado || !destinoTraslado) return;
+  const padreId = alumnoTraslado.parentId || alumnoTraslado.user;
+  const emailDestino = padres[padreId]?.email || padres[padreId]?.emailContacto ||
+    padres[padreId]?.emailPagador || alumnoTraslado.emailContacto ||
+    alumnoTraslado.emailPagador || alumnoTraslado.email;
+  if (!emailDestino) return showToast('Falta un correo de contacto. No se ha cambiado el grupo.', 'error');
+  const anterior = `${alumnoTraslado.dias} ${alumnoTraslado.horario}`;
+  if (!window.confirm(`¿Trasladar a ${alumnoTraslado.nombre}?\n\nDe: ${anterior}\nA: ${destinoTraslado.dias} ${destinoTraslado.horario}\nCuota: ${alumnoTraslado.precio} → ${destinoTraslado.precio}\n\nSe avisará a ${emailDestino}.`)) return;
+  setTrasladoEnCurso(true);
+  try {
+    const resultado = await trasladarGrupoAtomico({
+      alumnoId: alumnoTraslado.id,
+      actividadId: actividadTraslado.id,
+      opcion: destinoTraslado,
+      origenEsperado: { dias: alumnoTraslado.dias, horario: alumnoTraslado.horario, precio: alumnoTraslado.precio }
+    });
+    setTrasladoId(null);
+    setOpcionTraslado('');
+    let avisoSolicitado = false;
+    try {
+      await enviarAvisoTraslado(emailDestino, resultado.nombre, actividadTraslado.nombre, resultado.anterior, resultado.nuevo);
+      avisoSolicitado = true;
+    } catch (error) {
+      console.error('El traslado se guardó, pero falló la solicitud de correo:', error);
+    }
+    try {
+      await addDoc(collection(db, 'logs'), {
+        fecha: Date.now(), alumnoId: alumnoTraslado.id, alumnoNombre: resultado.nombre,
+        accion: 'CAMBIO_GRUPO',
+        detalles: `${actividadTraslado.nombre}: ${resultado.anterior} → ${resultado.nuevo}. Correo solicitado: ${avisoSolicitado ? 'sí' : 'no'}`,
+        adminEmail: emailNormalizado
+      });
+    } catch (error) { console.error('No se pudo registrar el traslado en logs:', error); }
+    showToast(avisoSolicitado
+      ? 'Grupo cambiado. Se ha solicitado el correo de confirmación.'
+      : `Grupo cambiado, pero NO se pudo solicitar el correo a ${emailDestino}. Contacta con la familia.`,
+    avisoSolicitado ? 'success' : 'warning');
+  } catch (error) {
+    console.error('Traslado rechazado:', error);
+    const mensajes = {
+      GRUPO_COMPLETO: 'El grupo de destino ya está completo. No se ha cambiado nada.',
+      GRUPO_CAMBIADO: 'La ficha cambió mientras la consultabas. Vuelve a revisar el grupo.',
+      AFORO_ORIGEN_INCONSISTENTE: 'Las plazas de origen no coinciden con la ficha. No se ha cambiado nada.',
+      AFORO_NO_INICIALIZADO: 'Falta un contador de plazas. No se ha cambiado nada.'
+    };
+    showToast(mensajes[error.message] || 'No se pudo cambiar el grupo. No se ha modificado la inscripción.', 'error');
+  } finally {
+    setTrasladoEnCurso(false);
   }
 };
   // --- 2. CARGA DE DATOS (EFECTOS) ---
@@ -4145,6 +4293,12 @@ const listadoBajas = alumnos.filter(a => a.estado === 'baja_pendiente' || a.esta
                         </td>
                         <td className="p-4 text-right">
                           <div className="flex items-center justify-end gap-2" onClick={(e) => e.stopPropagation()}>
+                            {puedeGestionarTodo && a.estado === 'inscrito' && (
+                              <button
+                                onClick={() => { setTrasladoId(a.id); setOpcionTraslado(''); }}
+                                className="px-3 py-1.5 rounded-xl text-[9px] font-black uppercase border border-blue-200 bg-blue-50 text-blue-800 hover:bg-blue-100"
+                              >Cambiar grupo</button>
+                            )}
                             <button 
                                 onClick={() => a.estado === 'lista_espera' ? abrirFicha(a) : confirmarInscripcion(a.id)}
                                 className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase shadow-sm border transition duration-300 transform active:scale-95 ${
@@ -5569,6 +5723,35 @@ const listadoBajas = alumnos.filter(a => a.estado === 'baja_pendiente' || a.esta
       )}
 
       {/* 🎯 PASO 2: PEGA EL RADAR AQUÍ ABAJO */}
+      {trasladoId && (
+        <div className="fixed inset-0 z-[70] bg-black/60 flex items-center justify-center p-4" role="presentation">
+          <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-lg text-left" role="dialog" aria-modal="true" aria-labelledby="titulo-traslado">
+            <h2 id="titulo-traslado" className="text-xl font-bold text-blue-900">Cambiar grupo</h2>
+            {alumnoTraslado?.estado === 'inscrito' && actividadTraslado ? <>
+              <p className="mt-3 font-semibold">{alumnoTraslado.nombre}</p>
+              <p className="text-sm text-gray-600">{actividadTraslado.nombre}</p>
+              <p className="mt-3 text-sm">Actual: <strong>{alumnoTraslado.dias} · {alumnoTraslado.horario}</strong> ({alumnoTraslado.precio})</p>
+              <label htmlFor="destino-traslado" className="block mt-5 mb-2 text-sm font-bold">Nuevo grupo</label>
+              <select id="destino-traslado" value={opcionTraslado} onChange={e => setOpcionTraslado(e.target.value)}
+                className="w-full p-3 border rounded-lg bg-white">
+                <option value="">Selecciona una opción</option>
+                {opcionesTraslado.map((op, index) => <option key={`${op.dias}-${op.horario}`} value={index}>
+                  {op.dias} · {op.horario} · {op.precio}
+                </option>)}
+              </select>
+              <p className="mt-3 text-xs text-gray-600">La plaza se comprobará al confirmar. Se enviará un aviso al correo de contacto.</p>
+            </> : <p className="mt-4 text-sm text-red-600">Esta inscripción ya no permite el traslado.</p>}
+            <div className="flex justify-end gap-3 mt-6">
+              <button type="button" disabled={trasladoEnCurso} onClick={() => { setTrasladoId(null); setOpcionTraslado(''); }}
+                className="px-4 py-2 rounded-lg border disabled:opacity-50">Cancelar</button>
+              <button type="button" disabled={!destinoTraslado || trasladoEnCurso || !puedeGestionarTodo}
+                onClick={confirmarTraslado} className="px-4 py-2 rounded-lg bg-blue-700 text-white font-bold disabled:opacity-50">
+                {trasladoEnCurso ? 'Guardando...' : 'Confirmar cambio'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {radarHueco && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm animate-fade-in">
           <div className="bg-white w-full max-w-md rounded-[32px] overflow-hidden shadow-2xl border border-white/20">
