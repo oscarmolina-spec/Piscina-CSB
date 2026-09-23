@@ -560,8 +560,8 @@ const liberarPlazaAtomica = async ({ alumnoId, datosFinales }) => {
   });
 };
 
-const trasladarGrupoAtomico = async ({ alumnoId, actividadId, opcion, origenEsperado }) => {
-  const actividad = OFERTA_ACTIVIDADES.find(a => a.id === actividadId);
+const trasladarGrupoAtomico = async ({ alumnoId, actividadOrigenId, actividadDestinoId, opcion, origenEsperado }) => {
+  const actividad = OFERTA_ACTIVIDADES.find(a => a.id === actividadDestinoId);
   if (!actividad || !auth.currentUser || ![
     'extraescolares@sanbuenaventura.org',
     'extraescolarespiscina@sanbuenaventura.org'
@@ -573,9 +573,9 @@ const trasladarGrupoAtomico = async ({ alumnoId, actividadId, opcion, origenEspe
   const inicial = await getDoc(alumnoRef);
   if (!inicial.exists()) throw new Error('ALUMNO_NO_EXISTE');
   const previo = inicial.data();
-  if (previo.actividadId !== actividadId) throw new Error('GRUPO_CAMBIADO');
-  const slotsOrigen = construirSlotsAforo({ actividadId, dias: previo.dias, horario: previo.horario, curso: previo.curso });
-  const slotsDestino = construirSlotsAforo({ actividadId, dias: opcion.dias, horario: opcion.horario, curso: previo.curso });
+  if (previo.actividadId !== actividadOrigenId || !OFERTA_ACTIVIDADES.some(a => a.id === actividadOrigenId)) throw new Error('GRUPO_CAMBIADO');
+  const slotsOrigen = construirSlotsAforo({ actividadId: actividadOrigenId, dias: previo.dias, horario: previo.horario, curso: previo.curso });
+  const slotsDestino = construirSlotsAforo({ actividadId: actividadDestinoId, dias: opcion.dias, horario: opcion.horario, curso: previo.curso });
   planificarTraslado(previo, actividad, opcion, slotsOrigen, slotsDestino);
   const ids = [...new Set([...slotsOrigen, ...slotsDestino].map(s => s.id))].sort();
   const referencias = ids.map(id => doc(db, 'aforos', id));
@@ -584,7 +584,7 @@ const trasladarGrupoAtomico = async ({ alumnoId, actividadId, opcion, origenEspe
     const snap = await transaction.get(alumnoRef);
     if (!snap.exists()) throw new Error('ALUMNO_NO_EXISTE');
     const actual = snap.data();
-    if (actual.actividadId !== actividadId || actual.dias !== origenEsperado.dias ||
+    if (actual.actividadId !== actividadOrigenId || actual.dias !== origenEsperado.dias ||
         actual.horario !== origenEsperado.horario || actual.precio !== origenEsperado.precio ||
         actual.estado !== 'inscrito' || actual.curso !== previo.curso ||
         JSON.stringify(actual.aforoSlotIds || []) !== JSON.stringify(previo.aforoSlotIds || [])) {
@@ -612,11 +612,16 @@ const trasladarGrupoAtomico = async ({ alumnoId, actividadId, opcion, origenEspe
       });
     }
     transaction.update(alumnoRef, {
+      actividadId: actividad.id, actividad: actividad.nombre,
       dias: opcion.dias, opcionDias: opcion.dias, horario: opcion.horario,
       grupo: `${opcion.dias} ${opcion.horario}`, precio: opcion.precio,
       aforoSlotIds: plan.destino, ultimaActualizacion: ahora
     });
-    return { nombre: actual.nombre, anterior: `${actual.dias} ${actual.horario}`, nuevo: `${opcion.dias} ${opcion.horario}` };
+    return {
+      nombre: actual.nombre,
+      anterior: `${actual.actividad} — ${actual.dias} ${actual.horario}`,
+      nuevo: `${actividad.nombre} — ${opcion.dias} ${opcion.horario}`
+    };
   });
 };
 
@@ -792,20 +797,19 @@ const escaparHtml = texto => String(texto || '').replace(/[&<>"']/g, caracter =>
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
 })[caracter]);
 
-const enviarAvisoTraslado = async (email, nombre, actividad, anterior, nuevo) => {
+const enviarAvisoTraslado = async (email, nombre, anterior, nuevo) => {
   // El documento en `mail` solicita el envío; la entrega definitiva depende
   // de la extensión de Firebase y puede consultarse en esa colección.
   return addDoc(collection(db, 'mail'), {
     to: [email],
     message: {
-      subject: `Cambio de grupo confirmado: ${nombre}`,
+      subject: `Cambio de actividad o grupo confirmado: ${nombre}`,
       html: `<div style="font-family:sans-serif;max-width:600px;line-height:1.6;color:#243044">
-        <h2>Cambio de grupo confirmado</h2>
+        <h2>Cambio de actividad o grupo confirmado</h2>
         <p>Hola,</p>
-        <p>Os confirmamos el cambio de grupo de <strong>${escaparHtml(nombre)}</strong>
-        en ${escaparHtml(actividad)}.</p>
-        <p><strong>Grupo anterior:</strong> ${escaparHtml(anterior)}<br>
-        <strong>Nuevo grupo:</strong> ${escaparHtml(nuevo)}</p>
+        <p>Os confirmamos el cambio de inscripción de <strong>${escaparHtml(nombre)}</strong>.</p>
+        <p><strong>Actividad y grupo anteriores:</strong> ${escaparHtml(anterior)}<br>
+        <strong>Nueva actividad y grupo:</strong> ${escaparHtml(nuevo)}</p>
         <p>La plaza ya figura en el nuevo grupo. Para cualquier duda, contactad con
         Coordinación de Extraescolares CSB.</p></div>`
     }
@@ -2753,12 +2757,14 @@ const confirmarInscripcion = async (alumnoId) => {
 };
 const alumnoTraslado = alumnos.find(a => a.id === trasladoId);
 const actividadTraslado = OFERTA_ACTIVIDADES.find(a => a.id === alumnoTraslado?.actividadId);
-const opcionesTraslado = (actividadTraslado?.opciones || []).filter(o =>
-  actividadTraslado.cursos.includes(alumnoTraslado?.curso) &&
-  !(o.dias === alumnoTraslado?.dias && o.horario === alumnoTraslado?.horario) &&
-  (actividadTraslado.id !== 'chapoteo' ||
-    (o.horario === alumnoTraslado?.horario && o.precio === alumnoTraslado?.precio))
-);
+const opcionesTraslado = OFERTA_ACTIVIDADES.flatMap(actividad => {
+  if (!actividadTraslado || !actividad.cursos.includes(alumnoTraslado?.curso) ||
+      (actividadTraslado.id === 'chapoteo' && actividad.id !== 'chapoteo') ||
+      (actividadTraslado.id !== 'chapoteo' && actividad.id === 'chapoteo')) return [];
+  return actividad.opciones
+    .filter(opcion => !(actividad.id === actividadTraslado.id && opcion.dias === alumnoTraslado.dias && opcion.horario === alumnoTraslado.horario))
+    .map(opcion => ({ actividad, opcion }));
+});
 const destinoTraslado = opcionesTraslado.find((_, index) => String(index) === opcionTraslado);
 
 const confirmarTraslado = async () => {
@@ -2769,20 +2775,21 @@ const confirmarTraslado = async () => {
     alumnoTraslado.emailPagador || alumnoTraslado.email;
   if (!emailDestino) return showToast('Falta un correo de contacto. No se ha cambiado el grupo.', 'error');
   const anterior = `${alumnoTraslado.dias} ${alumnoTraslado.horario}`;
-  if (!window.confirm(`¿Trasladar a ${alumnoTraslado.nombre}?\n\nDe: ${anterior}\nA: ${destinoTraslado.dias} ${destinoTraslado.horario}\nCuota: ${alumnoTraslado.precio} → ${destinoTraslado.precio}\n\nSe avisará a ${emailDestino}.`)) return;
+  if (!window.confirm(`¿Trasladar a ${alumnoTraslado.nombre}?\n\nDe: ${actividadTraslado.nombre} — ${anterior}\nA: ${destinoTraslado.actividad.nombre} — ${destinoTraslado.opcion.dias} ${destinoTraslado.opcion.horario}\nCuota: ${alumnoTraslado.precio} → ${destinoTraslado.opcion.precio}\n\nSe avisará a ${emailDestino}.`)) return;
   setTrasladoEnCurso(true);
   try {
     const resultado = await trasladarGrupoAtomico({
       alumnoId: alumnoTraslado.id,
-      actividadId: actividadTraslado.id,
-      opcion: destinoTraslado,
+      actividadOrigenId: actividadTraslado.id,
+      actividadDestinoId: destinoTraslado.actividad.id,
+      opcion: destinoTraslado.opcion,
       origenEsperado: { dias: alumnoTraslado.dias, horario: alumnoTraslado.horario, precio: alumnoTraslado.precio }
     });
     setTrasladoId(null);
     setOpcionTraslado('');
     let avisoSolicitado = false;
     try {
-      await enviarAvisoTraslado(emailDestino, resultado.nombre, actividadTraslado.nombre, resultado.anterior, resultado.nuevo);
+      await enviarAvisoTraslado(emailDestino, resultado.nombre, resultado.anterior, resultado.nuevo);
       avisoSolicitado = true;
     } catch (error) {
       console.error('El traslado se guardó, pero falló la solicitud de correo:', error);
@@ -2791,13 +2798,13 @@ const confirmarTraslado = async () => {
       await addDoc(collection(db, 'logs'), {
         fecha: Date.now(), alumnoId: alumnoTraslado.id, alumnoNombre: resultado.nombre,
         accion: 'CAMBIO_GRUPO',
-        detalles: `${actividadTraslado.nombre}: ${resultado.anterior} → ${resultado.nuevo}. Correo solicitado: ${avisoSolicitado ? 'sí' : 'no'}`,
+        detalles: `${resultado.anterior} → ${resultado.nuevo}. Correo solicitado: ${avisoSolicitado ? 'sí' : 'no'}`,
         adminEmail: emailNormalizado
       });
     } catch (error) { console.error('No se pudo registrar el traslado en logs:', error); }
     showToast(avisoSolicitado
-      ? 'Grupo cambiado. Se ha solicitado el correo de confirmación.'
-      : `Grupo cambiado, pero NO se pudo solicitar el correo a ${emailDestino}. Contacta con la familia.`,
+      ? 'Inscripción cambiada. Se ha solicitado el correo de confirmación.'
+      : `Inscripción cambiada, pero NO se pudo solicitar el correo a ${emailDestino}. Contacta con la familia.`,
     avisoSolicitado ? 'success' : 'warning');
   } catch (error) {
     console.error('Traslado rechazado:', error);
@@ -4297,7 +4304,7 @@ const listadoBajas = alumnos.filter(a => a.estado === 'baja_pendiente' || a.esta
                               <button
                                 onClick={() => { setTrasladoId(a.id); setOpcionTraslado(''); }}
                                 className="px-3 py-1.5 rounded-xl text-[9px] font-black uppercase border border-blue-200 bg-blue-50 text-blue-800 hover:bg-blue-100"
-                              >Cambiar grupo</button>
+                              >Cambiar actividad / grupo</button>
                             )}
                             <button 
                                 onClick={() => a.estado === 'lista_espera' ? abrirFicha(a) : confirmarInscripcion(a.id)}
@@ -5726,19 +5733,22 @@ const listadoBajas = alumnos.filter(a => a.estado === 'baja_pendiente' || a.esta
       {trasladoId && (
         <div className="fixed inset-0 z-[70] bg-black/60 flex items-center justify-center p-4" role="presentation">
           <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-lg text-left" role="dialog" aria-modal="true" aria-labelledby="titulo-traslado">
-            <h2 id="titulo-traslado" className="text-xl font-bold text-blue-900">Cambiar grupo</h2>
+            <h2 id="titulo-traslado" className="text-xl font-bold text-blue-900">Cambiar actividad o grupo</h2>
             {alumnoTraslado?.estado === 'inscrito' && actividadTraslado ? <>
               <p className="mt-3 font-semibold">{alumnoTraslado.nombre}</p>
               <p className="text-sm text-gray-600">{actividadTraslado.nombre}</p>
               <p className="mt-3 text-sm">Actual: <strong>{alumnoTraslado.dias} · {alumnoTraslado.horario}</strong> ({alumnoTraslado.precio})</p>
-              <label htmlFor="destino-traslado" className="block mt-5 mb-2 text-sm font-bold">Nuevo grupo</label>
+              <label htmlFor="destino-traslado" className="block mt-5 mb-2 text-sm font-bold">Nueva actividad y grupo</label>
               <select id="destino-traslado" value={opcionTraslado} onChange={e => setOpcionTraslado(e.target.value)}
                 className="w-full p-3 border rounded-lg bg-white">
                 <option value="">Selecciona una opción</option>
-                {opcionesTraslado.map((op, index) => <option key={`${op.dias}-${op.horario}`} value={index}>
-                  {op.dias} · {op.horario} · {op.precio}
+                {opcionesTraslado.map(({ actividad, opcion }, index) => <option key={`${actividad.id}-${opcion.dias}-${opcion.horario}`} value={index}>
+                  {actividad.nombre} · {opcion.dias} · {opcion.horario} · {opcion.precio}
                 </option>)}
               </select>
+              {destinoTraslado?.actividad.id !== actividadTraslado.id && destinoTraslado?.actividad.requierePrueba && (
+                <p className="mt-3 text-xs font-semibold text-amber-800">Esta actividad requiere prueba de nivel. Comprueba que el participante tenga el nivel adecuado antes de confirmar.</p>
+              )}
               <p className="mt-3 text-xs text-gray-600">La plaza se comprobará al confirmar. Se enviará un aviso al correo de contacto.</p>
             </> : <p className="mt-4 text-sm text-red-600">Esta inscripción ya no permite el traslado.</p>}
             <div className="flex justify-end gap-3 mt-6">
