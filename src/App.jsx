@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';import { db, auth, secondaryAuth } from './firebase.js';
 import { planificarTraslado, comprobarAforoTraslado } from './trasladoGrupo.js';
+import ComunicacionesPanel from './ComunicacionesPanel.jsx';
 import {
   collection,
   addDoc,
@@ -3748,7 +3749,8 @@ const listadoBajas = alumnos.filter(a => a.estado === 'baja_pendiente' || a.esta
 
 {/* PESTAÑAS AJUSTADAS ESTILO CHIPS FLOTANTES GLASSMORPHIC */}
 <div className="flex gap-2 p-1.5 mb-8 overflow-x-auto scrollbar-hide bg-white/80 backdrop-blur-md border border-gray-100 rounded-2xl sticky top-2 z-40 shadow-sm">
-  {['global', 'ocupacion', 'pruebas', 'espera', 'prevision', 'bajas', 'rentabilidad', 'equipo', 'avisos'].map(t => {
+  {['global', 'ocupacion', 'pruebas', 'espera', 'prevision', 'bajas', 'rentabilidad', 'equipo', 'avisos', 'correos'].map(t => {
+     if (t === 'correos' && !puedeGestionarTodo) return null;
      if ((t === 'equipo' || t === 'bajas' || t === 'prevision' || t === 'rentabilidad') && userRole !== 'admin') return null;
      
      let count = 0; 
@@ -3783,11 +3785,13 @@ const listadoBajas = alumnos.filter(a => a.estado === 'baja_pendiente' || a.esta
   {t === 'rentabilidad' && '💰'}
   {t === 'equipo' && '🛡️'}
   {t === 'avisos' && '📢'}
+  {t === 'correos' && '✉️'}
   {t === 'mis_clases' && '🏊‍♂️'}
 </span>
             
 <span>
-  {t === 'ocupacion' ? 'PLAZAS' : 
+  {t === 'ocupacion' ? 'PLAZAS' :
+   t === 'correos' ? 'CORREOS' :
    t === 'espera' ? 'ESPERA' : 
    t === 'prevision' ? 'PREVISIÓN' : 
    t === 'rentabilidad' ? 'RENTABILIDAD' :
@@ -3810,6 +3814,9 @@ const listadoBajas = alumnos.filter(a => a.estado === 'baja_pendiente' || a.esta
      );
   })}
 </div>
+     {tab === 'correos' && puedeGestionarTodo && <ComunicacionesPanel
+       alumnos={alumnos} padres={padres} userEmail={emailNormalizado} showToast={showToast}
+     />}
      {/* 📊 MATRIZ DE OCUPACIÓN DIARIA (INTELIGENTE TEMPORADA OCTUBRE) */}
 {tab === 'ocupacion' && (
   <div className="space-y-4 animate-fade-in">
