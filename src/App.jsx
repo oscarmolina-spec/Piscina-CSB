@@ -3838,10 +3838,10 @@ const listadoBajas = alumnos.filter(a => a.estado === 'baja_pendiente' || a.esta
             onClick={() => setVistaMes('proximo')}
             className={`px-3 py-1 rounded text-[9px] font-black uppercase transition-all ${vistaMes === 'proximo' ? 'bg-blue-500 text-white' : 'text-slate-400'}`}
           >
-            {/* 🚩 CAMBIO CLAVE: Si hoy es antes de Octubre, forzamos el nombre a Octubre */}
-            {new Date() < new Date(`${getDynamicAcademicYear().startYear}-10-01`) 
-              ? 'PREVISIÓN OCTUBRE' 
-              : new Date(new Date().setMonth(new Date().getMonth() + 1)).toLocaleString('es-ES', { month: 'long' })}
+            {/* Antes de octubre mostramos el estreno del curso; después, el mes siguiente. */}
+            PREVISIÓN {mesActualNum < 10
+              ? 'octubre'
+              : new Date(hoyD.getFullYear(), hoyD.getMonth() + 1, 1).toLocaleString('es-ES', { month: 'long' })}
           </button>
         </div>
       </div>
@@ -3894,7 +3894,7 @@ const listadoBajas = alumnos.filter(a => a.estado === 'baja_pendiente' || a.esta
                       return (a.estado === 'inscrito' || a.estado === 'baja_pendiente') && !esAltaOctubre;
                     } else {
                       // VISTA OCTUBRE (PREVISIÓN):
-                      if (hoy < new Date(academicInfo.isoStartDate)) {
+                      if (hoy.getMonth() < 9) {
                         // Si estamos en pre-inscripción: Contamos los que están (y no son baja) + los de Octubre
                         if (a.estado === 'baja_pendiente' || a.estado === 'baja_finalizada') return false;
                         return a.estado === 'inscrito' || esAltaOctubre;
