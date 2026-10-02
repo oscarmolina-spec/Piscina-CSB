@@ -5829,6 +5829,10 @@ const listadoBajas = alumnos.filter(a => a.estado === 'baja_pendiente' || a.esta
 function FichaAlumno({ alumno, cerrar, userRole }) {
   const { user } = useAuth();
   if (!alumno) return null;
+  const fechaAltaNormalizada = normalizarFechaFirestore(alumno.fechaAlta);
+  const fechaInicioActividad = fechaAltaNormalizada && !isNaN(fechaAltaNormalizada.getTime())
+    ? (typeof alumno.fechaAlta === 'string' ? alumno.fechaAlta.split('T')[0] : fechaAltaNormalizada.toISOString().split('T')[0])
+    : '';
   const p = alumno.datosPadre || {}; 
 // 📜 FUNCIÓN INTERNA PARA REGISTRAR MOVIMIENTOS
 const registrarLog = async (accion, detalles) => {
@@ -5927,10 +5931,11 @@ const cambiarFecha = async (campo, e) => {
 {/* 1. FECHAS (BLOQUE REPARADO Y SIN ENGAÑOS) */}
 <div className="bg-gray-100 p-4 rounded border border-gray-300 grid grid-cols-2 gap-4 shadow-inner">
     <div>
-        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">📅 Fecha de Alta Real</label>
+        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">📅 Inicio en la actividad</label>
         <input 
           type="date" 
-          defaultValue={alumno.fechaAlta || ""} 
+          key={`${alumno.id}-${fechaInicioActividad}`}
+          defaultValue={fechaInicioActividad}
           disabled={userRole !== 'admin'}
           onChange={(e) => {
             cambiarFecha('fechaAlta', e);
@@ -5939,9 +5944,9 @@ const cambiarFecha = async (campo, e) => {
           className={`w-full p-2 rounded border font-bold ${userRole === 'admin' ? 'bg-white border-blue-400' : 'bg-gray-200'}`}
         />
         {/* 🚩 CAMBIO: Usamos una condición más sólida */}
-        {(!alumno.fechaAlta || alumno.fechaAlta === "") && (
+        {!fechaInicioActividad && (
           <p className="text-[9px] text-red-600 font-black mt-1 uppercase">
-            ⚠️ SIN FECHA (Saldrá en el mes anterior)
+            Sin fecha de inicio
           </p>
         )}
     </div>
