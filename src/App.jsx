@@ -6876,8 +6876,8 @@ const PantallaInscripcion = ({ alumno, close, onRequirePrueba, user }) => {
     nombre: alumno.nombre, 
     curso: alumno.curso, 
     fechaNacimiento: alumno.fechaNacimiento || '',
-    // 🚩 AÑADE ESTO AQUÍ: Es el valor por defecto
-    inicioDeseado: 'proximo' 
+    // La familia debe elegir expresamente cuándo comenzar.
+    inicioDeseado: ''
   });
   const [verNormas, setVerNormas] = useState(false);
   const [autorizaFotos, setAutorizaFotos] = useState(alumno.autorizaFotos === true);
@@ -6964,6 +6964,9 @@ const PantallaInscripcion = ({ alumno, close, onRequirePrueba, user }) => {
   };
   // 2. FUNCIÓN DE INSCRIPCIÓN
   const inscribir = async (act, op) => {
+    if (!['proximo', 'inmediato'].includes(datosAlumno.inicioDeseado)) {
+      return showToast('Elige cuándo quieres comenzar antes de inscribirte.', 'warning');
+    }
     // 1. Verificación de Normas
     if (normasRef.current !== true) {
         return showToast("⚠️ Es obligatorio aceptar las normas.", "warning");
@@ -6984,7 +6987,7 @@ const PantallaInscripcion = ({ alumno, close, onRequirePrueba, user }) => {
     const hoyParaCalculo = new Date();
     const diaActual = hoyParaCalculo.getDate();
     const mesActualNum = hoyParaCalculo.getMonth() + 1; 
-    const inicioDeseado = datosAlumno.inicioDeseado || 'proximo';
+    const inicioDeseado = datosAlumno.inicioDeseado;
 
     let fechaFinalISO;
 
@@ -7122,7 +7125,7 @@ return (
     <div className="flex items-center justify-center gap-2 mb-4">
         <span className="bg-blue-600 text-white text-[10px] font-black px-2 py-0.5 rounded-full">PASO 1</span>
         <p className="text-[11px] font-black text-blue-900 uppercase tracking-widest">
-            ¿Cuándo quieres comenzar?
+            ¿Cuándo quieres comenzar? Elige una opción
         </p>
     </div>
     
@@ -7137,7 +7140,7 @@ return (
                 : 'border-gray-200 bg-gray-50/50 grayscale hover:grayscale-0'
             }`}
         >
-            <span className={`text-[10px] font-bold mb-1 ${datosAlumno.inicioDeseado === 'proximo' ? 'text-blue-600' : 'text-gray-400'}`}>OPCIÓN RECOMENDADA</span>
+            <span className={`text-[10px] font-bold mb-1 ${datosAlumno.inicioDeseado === 'proximo' ? 'text-blue-600' : 'text-gray-400'}`}>INICIO EL DÍA 1</span>
             <span className="text-sm font-black text-gray-800 uppercase">1 de {infoAlta.sigMes}</span>
             {datosAlumno.inicioDeseado === 'proximo' && <span className="absolute -top-2 -right-2 bg-blue-600 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs shadow-md">✓</span>}
         </button>
