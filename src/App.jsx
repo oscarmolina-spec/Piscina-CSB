@@ -3477,9 +3477,10 @@ const archivarBaja = async (alumno) => {
   };
   
   const descargarExcel = () => {
+    if (!puedeGestionarTodo) return;
     // 1. Cabeceras
     let cabecera = [];
-    if (soySuperAdmin) {
+    if (puedeGestionarTodo) {
       cabecera = ['Alumno,Curso,Letra,Tipo,Actividad,Días,Horario,Fecha Alta,Precio,Pagador,DNI Pagador,Email Pagador,CP,Población,Dirección,IBAN,Telefono\n'];
     } else {
       cabecera = ['Alumno,Curso,Letra,Tipo,Actividad,Días,Horario,Fecha Alta\n'];
@@ -3513,7 +3514,7 @@ const archivarBaja = async (alumno) => {
       // Limpiamos el símbolo € por si acaso para que en el Excel sea un número puro
       precioFinal = String(precioFinal).replace('€', '').trim();
 
-      if (soySuperAdmin) {
+      if (puedeGestionarTodo) {
         const pagador = (p.nombrePagador || '').replace(new RegExp('"', 'g'), '""');
         const iban = (p.iban || '').replace(new RegExp('"', 'g'), '""');
         const direccion = (p.direccion || '').replace(new RegExp('"', 'g'), '""');
@@ -3531,11 +3532,16 @@ const archivarBaja = async (alumno) => {
 
     // 3. Generación del archivo
     const link = document.createElement("a"); 
-    link.href = "data:text/csv;charset=utf-8,\uFEFF" + encodeURI(cabecera + filas.join("\n")); 
+    const archivo = new Blob(["\uFEFF", cabecera + filas.join("\r\n")], { type: "text/csv;charset=utf-8" });
+    const urlArchivo = URL.createObjectURL(archivo);
+    link.href = urlArchivo;
     
-    const nombreArchivo = soySuperAdmin ? "listado_PAGOS_completo.csv" : "listado_asistencia_profes.csv";
+    const nombreArchivo = puedeGestionarTodo ? "listado_PAGOS_completo.csv" : "listado_asistencia_profes.csv";
     link.download = nombreArchivo; 
+    document.body.appendChild(link);
     link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(urlArchivo), 1000);
   };
   // 🔄 FUNCIÓN PARA SINCRONIZAR IDs ANTIGUOS
   const sincronizarAlumnosAntiguos = async () => {
@@ -3716,7 +3722,7 @@ const listadoBajas = alumnos.filter(a => a.estado === 'baja_pendiente' || a.esta
       )}
 
       {/* 📊 BOTÓN EXCEL */}
-      {userRole === 'admin' && (
+      {puedeGestionarTodo && (
         <button 
           onClick={descargarExcel} 
           className="flex-1 md:flex-none bg-green-600 text-white px-3 py-2 md:py-1 rounded text-xs font-bold shadow-sm hover:bg-green-700 transition-colors uppercase whitespace-nowrap"
