@@ -271,6 +271,11 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // Notas mensuales privadas: no se guardan en la ficha accesible a las familias.
+    match /observacionesAdministracion/{notaId} {
+      allow read, write: if isAdmin();
+    }
+
     match /actividades_cole/{actId} {
       allow read: if true;
       allow write: if isAdmin();

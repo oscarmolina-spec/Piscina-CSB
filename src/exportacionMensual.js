@@ -12,12 +12,12 @@ function importe(valor) {
   const texto = String(valor ?? '').replace('€', '').trim();
   return /^\d+(?:[.,]\d{1,2})?$/.test(texto) ? Number(texto.replace(',', '.')) : null;
 }
-export function prepararExportacion(alumnos, padres, catalogo, mes, completo = false) {
+export function prepararExportacion(alumnos, padres, catalogo, mes, completo = false, notas = []) {
   if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(mes)) throw new Error('Selecciona un mes válido.');
   const [year, month] = mes.split('-').map(Number);
   const inicioMes = mes + '-01';
   const finMes = new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10);
-  const cabecera = ['Alumno','Curso','Letra','Tipo','Actividad','Días','Horario','Fecha Alta','Precio','Pagador','DNI Pagador','Email Pagador','CP','Población','Dirección','IBAN','Telefono','Estado','Fecha Baja','Mes de referencia','Importe de referencia','Revisión'];
+  const cabecera = ['Alumno','Curso','Letra','Tipo','Actividad','Días','Horario','Fecha Alta','Precio','Pagador','DNI Pagador','Email Pagador','CP','Población','Dirección','IBAN','Telefono','Estado','Fecha Baja','Mes de referencia','Importe de referencia','Revisión','Observaciones para Administración'];
   const filas = [];
   let excluidos = 0, revisar = 0;
   for (const a of alumnos) {
@@ -25,8 +25,10 @@ export function prepararExportacion(alumnos, padres, catalogo, mes, completo = f
     const baja = fechaExportacion(a.fechaBaja);
     const retirada = a.motivoBaja === 'Retirada de solicitud sin inscripción confirmada';
     const activo = ['inscrito','baja_pendiente','baja_finalizada'].includes(a.estado) && !retirada;
-    // fechaBaja es la primera fecha sin actividad (administración registra el día 1).
-    if (!completo && (!activo || (alta && alta > finMes) || (baja && baja <= inicioMes))) { excluidos++; continue; }
+    const observacion = notas.filter(n => n.alumnoId === a.id && n.mes === mes && n.incluir === true && typeof n.texto === 'string').map(n => n.texto.trim()).filter(Boolean).join(' · ');
+    // Una nota marcada permite revisar un ajuste de una inscripción ya finalizada.
+    const fueraDelMes = (alta && alta > finMes) || (baja && baja <= inicioMes);
+    if (!completo && (!activo || (fueraDelMes && !observacion))) { excluidos++; continue; }
     if (completo && !['inscrito','requiere_prueba','prueba_reservada','baja_pendiente','baja_finalizada'].includes(a.estado)) continue;
     const p = padres[a.parentId || a.user] || {};
     const actividad = catalogo.find(act => act.id === a.actividadId || act.nombre === a.actividad);
@@ -40,9 +42,11 @@ export function prepararExportacion(alumnos, padres, catalogo, mes, completo = f
     if (a.estado === 'baja_pendiente') avisos.push('Baja pendiente de tramitar');
     if (!activo) avisos.push('Solicitud sin inscripción confirmada');
     if (retirada) avisos.push('Solicitud retirada sin plaza confirmada');
+    if (fueraDelMes && observacion) avisos.push('Fuera del periodo de actividad: revisar ajuste indicado, sin cuota mensual calculada');
+    if (observacion) avisos.push('Observación de Administración: revisar ajuste manual');
     if (avisos.length) revisar++;
     const calculable = activo && alta && alta <= finMes && (!baja || baja > inicioMes) && cuota !== null && !(a.fechaBaja && !baja) && !(a.estado === 'baja_finalizada' && !baja);
-    filas.push([a.nombre,a.curso,a.letra,p.tipo === 'externo' ? 'EXTERNO' : 'INTERNO',a.actividad,a.dias,a.horario,alta,cuota ?? '',p.nombrePagador,p.dniPagador,p.email,p.cp,p.poblacion,p.direccion,p.iban,p.telefono1,a.estado,baja,completo ? '' : mes,completo || !calculable ? '' : cuota,avisos.join(' · ')]);
+    filas.push([a.nombre,a.curso,a.letra,p.tipo === 'externo' ? 'EXTERNO' : 'INTERNO',a.actividad,a.dias,a.horario,alta,cuota ?? '',p.nombrePagador,p.dniPagador,p.email,p.cp,p.poblacion,p.direccion,p.iban,p.telefono1,a.estado,baja,completo ? '' : mes,completo || !calculable ? '' : cuota,avisos.join(' · '),observacion]);
   }
   // Cada registro se mantiene: dos días contratados no se deduplican.
   const celda = valor => {
@@ -50,5 +54,5 @@ export function prepararExportacion(alumnos, padres, catalogo, mes, completo = f
     if (typeof valor !== 'number' && /^[=+@-]/.test(texto)) texto = "'" + texto;
     return '"' + texto.replaceAll('"','""') + '"';
   };
-  return { csv: '\uFEFF' + [cabecera, ...filas].map(f => f.map(celda).join(',')).join('\r\n'), filas: filas.length, revisar, excluidos };
+  return { cabecera, datos: filas, mes, completo, csv: '\uFEFF' + [cabecera, ...filas].map(f => f.map(celda).join(',')).join('\r\n'), filas: filas.length, revisar, excluidos };
 }

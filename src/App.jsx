@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';import { db, auth, se
 import { planificarTraslado, comprobarAforoTraslado } from './trasladoGrupo.js';
 import ComunicacionesPanel from './ComunicacionesPanel.jsx';
 import { planificarBajaFamiliar } from './bajaFamilia.js';
+import ObservacionesAdministracion from './ObservacionesAdministracion.jsx';
 import { prepararExportacion } from './exportacionMensual.js';
 import {
   collection,
@@ -3483,31 +3484,28 @@ const archivarBaja = async (alumno) => {
     }
   };
   
-  const descargarExcel = async (completo = false) => {
+  const descargarExcel = async (completo = false, formato = 'xlsx') => {
     if (!puedeGestionarTodo || exportando) return;
     setExportando(true);
     try {
       // La exportación consulta el servidor y no depende del buscador ni de la caché local.
-      const [studentsSnap, usersSnap] = await Promise.all([
+      const [studentsSnap, usersSnap, notasSnap] = await Promise.all([
         getDocsFromServer(collection(db, 'students')),
-        getDocsFromServer(collection(db, 'users'))
+        getDocsFromServer(collection(db, 'users')),
+        getDocsFromServer(query(collection(db, 'observacionesAdministracion'), where('mes', '==', mesExportacion)))
       ]);
       const responsables = Object.fromEntries(usersSnap.docs.map(d => [d.id, d.data()]));
-      const resultado = prepararExportacion(studentsSnap.docs.map(d => ({ ...d.data(), id: d.id })), responsables, OFERTA_ACTIVIDADES, mesExportacion, completo);
+      const resultado = prepararExportacion(studentsSnap.docs.map(d => ({ ...d.data(), id: d.id })), responsables, OFERTA_ACTIVIDADES, mesExportacion, completo, notasSnap.docs.map(d => d.data()));
       if (!resultado.filas) return showToast('No hay registros para esta selección.', 'warning');
       const detalle = completo ? 'Listado completo de gestión' : `Borrador mensual: ${mesExportacion}`;
       if (!window.confirm(`${detalle}\n\n${resultado.filas} registros; ${resultado.revisar} para revisar.\n\nSe conserva cada día contratado. Los importes usan la tarifa actual; los descuentos, devoluciones o cambios históricos deben revisarse. No se ejecutará ningún cobro. ¿Descargar?`)) return;
-      const urlArchivo = URL.createObjectURL(new Blob([resultado.csv], { type: 'text/csv;charset=utf-8' }));
-      const link = document.createElement('a');
-      link.href = urlArchivo;
-      link.download = completo ? 'listado_PAGOS_completo.csv' : `borrador_PAGOS_${mesExportacion}.csv`;
-      document.body.appendChild(link); link.click(); link.remove();
-      setTimeout(() => URL.revokeObjectURL(urlArchivo), 1000);
+      const { descargarListado } = await import('./formatosExportacion.js');
+      await descargarListado(resultado, formato);
       setMostrarExportacion(false);
       showToast(`Descargados ${resultado.filas} registros; ${resultado.revisar} para revisar.`, 'success');
     } catch (error) {
       console.error('Error de exportación:', error);
-      showToast('No se pudo consultar el listado actualizado. Comprueba la conexión y vuelve a intentarlo.', 'error');
+      showToast(error.code === 'permission-denied' ? 'Faltan permisos para las observaciones. Publica las reglas actualizadas de Firebase antes de exportar.' : 'No se pudo generar el archivo actualizado. Comprueba la conexión y vuelve a intentarlo.', 'error');
     } finally { setExportando(false); }
   };
   // 🔄 FUNCIÓN PARA SINCRONIZAR IDs ANTIGUOS
@@ -3794,10 +3792,12 @@ const listadoBajas = alumnos.filter(a => a.estado === 'baja_pendiente' || a.esta
            <label className="block font-bold text-sm">Mes de referencia
              <input aria-label="Mes de referencia" type="month" value={mesExportacion} onChange={e => setMesExportacion(e.target.value)} disabled={exportando} className="block w-full border rounded p-2 mt-2" />
            </label>
-           <p className="text-sm text-slate-600">El borrador mensual excluye altas posteriores al mes y solicitudes sin inscripción confirmada. Conserva los dos días si hay dos registros. Los casos sin fecha quedan señalados para revisión y sin importe calculado.</p>
+           <p className="text-sm text-slate-600">El borrador mensual incluye las inscripciones del mes. Las observaciones marcadas permiten revisar ajustes de inscripciones fuera de ese periodo, sin calcular cuota mensual. Excluye solicitudes sin inscripción confirmada y conserva los dos días si hay dos registros. Los casos sin fecha quedan señalados para revisión.</p>
            <p className="text-sm bg-amber-50 border border-amber-200 rounded p-3">Los importes son una referencia con la tarifa actual. Revisa descuentos, devoluciones y cambios históricos antes de cobrar. No se aplica ningún ajuste automáticamente.</p>
-           <button disabled={exportando || !mesExportacion} onClick={() => descargarExcel(false)} className="w-full bg-green-600 text-white font-bold rounded p-3 disabled:opacity-50">{exportando ? 'Consultando datos…' : 'Descargar borrador del mes'}</button>
-           <button disabled={exportando || !mesExportacion} onClick={() => descargarExcel(true)} className="w-full border rounded p-3 disabled:opacity-50">Descargar listado completo de gestión</button>
+           <button disabled={exportando || !mesExportacion} onClick={() => descargarExcel(false)} className="w-full bg-green-600 text-white font-bold rounded p-3 disabled:opacity-50">{exportando ? 'Consultando datos…' : 'Descargar Excel del mes (.xlsx)'}</button>
+           <button disabled={exportando || !mesExportacion} onClick={() => descargarExcel(false, 'pdf')} className="w-full bg-blue-700 text-white font-bold rounded p-3 disabled:opacity-50">Descargar PDF del mes para imprimir</button>
+           <p className="text-sm text-slate-600">Excel y PDF incluyen las mismas columnas y las observaciones marcadas para el mes seleccionado. El PDF organiza las columnas en bloques legibles.</p>
+           <button disabled={exportando || !mesExportacion} onClick={() => descargarExcel(true)} className="w-full border rounded p-3 disabled:opacity-50">Descargar Excel completo de gestión</button>
            <button disabled={exportando} onClick={() => setMostrarExportacion(false)} className="w-full text-slate-500 p-2 disabled:opacity-50">Cerrar</button>
          </div>
        </div>
@@ -6052,6 +6052,7 @@ const cambiarFecha = async (campo, e) => {
   </div>
 )}
 
+          {userRole === 'admin' && <ObservacionesAdministracion key={alumno.id || alumno.uid} alumnoId={alumno.id || alumno.uid} />}
           {/* 4. SALUD (SIEMPRE VISIBLE) */}
           {(alumno.alergias || alumno.observaciones) && (
             <div className="grid gap-3 pt-2">
