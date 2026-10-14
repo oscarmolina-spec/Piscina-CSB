@@ -2,12 +2,14 @@ import React, { useState, useEffect, useRef } from 'react';import { db, auth, se
 import { planificarTraslado, comprobarAforoTraslado } from './trasladoGrupo.js';
 import ComunicacionesPanel from './ComunicacionesPanel.jsx';
 import { planificarBajaFamiliar } from './bajaFamilia.js';
+import { prepararExportacion } from './exportacionMensual.js';
 import {
   collection,
   addDoc,
   query,
   where,
   getDocs,
+  getDocsFromServer,
   doc,
   setDoc,
   getDoc, // <--- ¡AQUÍ ESTABA EL CULPABLE! FALTABA ESTO
@@ -2681,6 +2683,9 @@ const AdminDashboard = ({ userRole, logout, userEmail }) => {
   const [tab, setTab] = useState('global');
   const [busqueda, setBusqueda] = useState('');
   const [filtroGrupo, setFiltroGrupo] = useState('');
+  const [mostrarExportacion, setMostrarExportacion] = useState(false);
+  const [mesExportacion, setMesExportacion] = useState(() => new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Madrid' }).slice(0, 7));
+  const [exportando, setExportando] = useState(false);
   const [filtroRadar, setFiltroRadar] = useState(null);
   const [nuevoAviso, setNuevoAviso] = useState('');
   
@@ -3478,72 +3483,32 @@ const archivarBaja = async (alumno) => {
     }
   };
   
-  const descargarExcel = () => {
-    if (!puedeGestionarTodo) return;
-    // 1. Cabeceras
-    let cabecera = [];
-    if (puedeGestionarTodo) {
-      cabecera = ['Alumno,Curso,Letra,Tipo,Actividad,Días,Horario,Fecha Alta,Precio,Pagador,DNI Pagador,Email Pagador,CP,Población,Dirección,IBAN,Telefono\n'];
-    } else {
-      cabecera = ['Alumno,Curso,Letra,Tipo,Actividad,Días,Horario,Fecha Alta\n'];
-    }
-    
-    // 2. Mapeo de datos con CÁLCULO DE PRECIO REAL
-    const filas = listadoGlobal.map(a => {
-      const p = padres[a.parentId] || {}; 
-      
-      const nombre = (a.nombre || '').replace(new RegExp('"', 'g'), '""');
-      const actividad = (a.actividad || '-').replace(new RegExp('"', 'g'), '""');
-      const dias = (a.dias || '-').replace(new RegExp('"', 'g'), '""');
-      const horario = (a.horario || '-').replace(new RegExp('"', 'g'), '""');
-      const fAlta = (a.fechaAlta || '-').replace(new RegExp('"', 'g'), '""');
-      const tipoAlumno = (p.tipo === 'externo') ? 'EXTERNO' : 'INTERNO';
-
-      // 💰 LÓGICA DE PRECIO INTELIGENTE PARA EL EXCEL
-      let precioFinal = '0';
-      if (a.precio && parseInt(a.precio) > 0) {
-        precioFinal = a.precio;
-      } else {
-        // Si es 0 o está vacío, buscamos en el catálogo de actividades
-        const actividadMatch = OFERTA_ACTIVIDADES.find(act => 
-          act.nombre === a.actividad || act.id === a.actividadId
-        );
-        if (actividadMatch) {
-          const opcionMatch = actividadMatch.opciones?.find(op => op.dias === a.dias);
-          precioFinal = opcionMatch ? opcionMatch.precio : actividadMatch.precioResumen;
-        }
-      }
-      // Limpiamos el símbolo € por si acaso para que en el Excel sea un número puro
-      precioFinal = String(precioFinal).replace('€', '').trim();
-
-      if (puedeGestionarTodo) {
-        const pagador = (p.nombrePagador || '').replace(new RegExp('"', 'g'), '""');
-        const iban = (p.iban || '').replace(new RegExp('"', 'g'), '""');
-        const direccion = (p.direccion || '').replace(new RegExp('"', 'g'), '""');
-        const tel = p.telefono1 || '';
-        const dni = (p.dniPagador || '').replace(new RegExp('"', 'g'), '""');
-        const mail = (p.email || '').replace(new RegExp('"', 'g'), '""');
-        const cp = (p.cp || '').replace(new RegExp('"', 'g'), '""');
-        const pob = (p.poblacion || '').replace(new RegExp('"', 'g'), '""');
-
-        return `"${nombre}","${a.curso}","${a.letra}","${tipoAlumno}","${actividad}","${dias}","${horario}","${fAlta}","${precioFinal}","${pagador}","${dni}","${mail}","${cp}","${pob}","${direccion}","${iban}","${tel}"`;
-      } else {
-        return `"${nombre}","${a.curso}","${a.letra}","${tipoAlumno}","${actividad}","${dias}","${horario}","${fAlta}"`;
-      }
-    });
-
-    // 3. Generación del archivo
-    const link = document.createElement("a"); 
-    const archivo = new Blob(["\uFEFF", cabecera + filas.join("\r\n")], { type: "text/csv;charset=utf-8" });
-    const urlArchivo = URL.createObjectURL(archivo);
-    link.href = urlArchivo;
-    
-    const nombreArchivo = puedeGestionarTodo ? "listado_PAGOS_completo.csv" : "listado_asistencia_profes.csv";
-    link.download = nombreArchivo; 
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    setTimeout(() => URL.revokeObjectURL(urlArchivo), 1000);
+  const descargarExcel = async (completo = false) => {
+    if (!puedeGestionarTodo || exportando) return;
+    setExportando(true);
+    try {
+      // La exportación consulta el servidor y no depende del buscador ni de la caché local.
+      const [studentsSnap, usersSnap] = await Promise.all([
+        getDocsFromServer(collection(db, 'students')),
+        getDocsFromServer(collection(db, 'users'))
+      ]);
+      const responsables = Object.fromEntries(usersSnap.docs.map(d => [d.id, d.data()]));
+      const resultado = prepararExportacion(studentsSnap.docs.map(d => ({ ...d.data(), id: d.id })), responsables, OFERTA_ACTIVIDADES, mesExportacion, completo);
+      if (!resultado.filas) return showToast('No hay registros para esta selección.', 'warning');
+      const detalle = completo ? 'Listado completo de gestión' : `Borrador mensual: ${mesExportacion}`;
+      if (!window.confirm(`${detalle}\n\n${resultado.filas} registros; ${resultado.revisar} para revisar.\n\nSe conserva cada día contratado. Los importes usan la tarifa actual; los descuentos, devoluciones o cambios históricos deben revisarse. No se ejecutará ningún cobro. ¿Descargar?`)) return;
+      const urlArchivo = URL.createObjectURL(new Blob([resultado.csv], { type: 'text/csv;charset=utf-8' }));
+      const link = document.createElement('a');
+      link.href = urlArchivo;
+      link.download = completo ? 'listado_PAGOS_completo.csv' : `borrador_PAGOS_${mesExportacion}.csv`;
+      document.body.appendChild(link); link.click(); link.remove();
+      setTimeout(() => URL.revokeObjectURL(urlArchivo), 1000);
+      setMostrarExportacion(false);
+      showToast(`Descargados ${resultado.filas} registros; ${resultado.revisar} para revisar.`, 'success');
+    } catch (error) {
+      console.error('Error de exportación:', error);
+      showToast('No se pudo consultar el listado actualizado. Comprueba la conexión y vuelve a intentarlo.', 'error');
+    } finally { setExportando(false); }
   };
   // 🔄 FUNCIÓN PARA SINCRONIZAR IDs ANTIGUOS
   const sincronizarAlumnosAntiguos = async () => {
@@ -3726,7 +3691,7 @@ const listadoBajas = alumnos.filter(a => a.estado === 'baja_pendiente' || a.esta
       {/* 📊 BOTÓN EXCEL */}
       {puedeGestionarTodo && (
         <button 
-          onClick={descargarExcel} 
+          onClick={() => setMostrarExportacion(true)}
           className="flex-1 md:flex-none bg-green-600 text-white px-3 py-2 md:py-1 rounded text-xs font-bold shadow-sm hover:bg-green-700 transition-colors uppercase whitespace-nowrap"
         >
           Excel
@@ -3822,6 +3787,21 @@ const listadoBajas = alumnos.filter(a => a.estado === 'baja_pendiente' || a.esta
      );
   })}
 </div>
+     {mostrarExportacion && puedeGestionarTodo && (
+       <div role="dialog" aria-modal="true" aria-labelledby="titulo-exportacion" className="fixed inset-0 z-[80] bg-black/60 flex items-center justify-center p-4">
+         <div className="bg-white rounded-2xl p-6 max-w-lg w-full max-h-[90vh] overflow-y-auto space-y-4">
+           <h2 id="titulo-exportacion" className="text-xl font-bold">Exportar alumnado y cuotas</h2>
+           <label className="block font-bold text-sm">Mes de referencia
+             <input aria-label="Mes de referencia" type="month" value={mesExportacion} onChange={e => setMesExportacion(e.target.value)} disabled={exportando} className="block w-full border rounded p-2 mt-2" />
+           </label>
+           <p className="text-sm text-slate-600">El borrador mensual excluye altas posteriores al mes y solicitudes sin inscripción confirmada. Conserva los dos días si hay dos registros. Los casos sin fecha quedan señalados para revisión y sin importe calculado.</p>
+           <p className="text-sm bg-amber-50 border border-amber-200 rounded p-3">Los importes son una referencia con la tarifa actual. Revisa descuentos, devoluciones y cambios históricos antes de cobrar. No se aplica ningún ajuste automáticamente.</p>
+           <button disabled={exportando || !mesExportacion} onClick={() => descargarExcel(false)} className="w-full bg-green-600 text-white font-bold rounded p-3 disabled:opacity-50">{exportando ? 'Consultando datos…' : 'Descargar borrador del mes'}</button>
+           <button disabled={exportando || !mesExportacion} onClick={() => descargarExcel(true)} className="w-full border rounded p-3 disabled:opacity-50">Descargar listado completo de gestión</button>
+           <button disabled={exportando} onClick={() => setMostrarExportacion(false)} className="w-full text-slate-500 p-2 disabled:opacity-50">Cerrar</button>
+         </div>
+       </div>
+     )}
      {tab === 'correos' && puedeGestionarTodo && <ComunicacionesPanel
        alumnos={alumnos} padres={padres} userEmail={emailNormalizado} showToast={showToast}
      />}
