@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';import { db, auth, secondaryAuth } from './firebase.js';
 import { planificarTraslado, comprobarAforoTraslado } from './trasladoGrupo.js';
 import ComunicacionesPanel from './ComunicacionesPanel.jsx';
+import { planificarBajaFamiliar } from './bajaFamilia.js';
 import {
   collection,
   addDoc,
@@ -522,12 +523,13 @@ const reservarPlazaAtomica = async ({ alumnoId, actividadId, actividad, dias, ho
   throw new Error('NO_SE_PUDO_CONFIRMAR_AFORO');
 };
 
-const liberarPlazaAtomica = async ({ alumnoId, datosFinales }) => {
+const liberarPlazaAtomica = async ({ alumnoId, datosFinales, estadosPermitidos }) => {
   const alumnoRef = doc(db, 'students', alumnoId);
   return runTransaction(db, async transaction => {
     const alumnoSnap = await transaction.get(alumnoRef);
     if (!alumnoSnap.exists()) throw new Error('ALUMNO_NO_EXISTE');
     const alumno = alumnoSnap.data();
+    if (estadosPermitidos && !estadosPermitidos.includes(alumno.estado)) throw new Error('El estado ha cambiado. Recarga la ficha.');
     const actividadId = obtenerActividadIdAlumno(alumno);
     let slotIds = Array.isArray(alumno.aforoSlotIds) ? alumno.aforoSlotIds : [];
     if (slotIds.length === 0 && alumno.estado === 'inscrito' && actividadId) {
@@ -550,7 +552,7 @@ const liberarPlazaAtomica = async ({ alumnoId, datosFinales }) => {
       });
     }
     transaction.update(alumnoRef, {
-      ...datosFinales,
+      ...(typeof datosFinales === 'function' ? datosFinales(alumno) : datosFinales),
       validadoAdmin: false,
       revisadoAdmin: false,
       aforoSlotIds: [],
@@ -5933,6 +5935,14 @@ const cambiarFecha = async (campo, e) => {
 
         {/* CONTENIDO */}
         <div className="p-6 space-y-6 text-gray-800">
+          {alumno.historialInscripciones?.length > 0 && (
+            <div className="bg-slate-50 p-4 rounded border">
+              <h3 className="font-bold text-sm">Historial de solicitudes y bajas</h3>
+              {alumno.historialInscripciones.map((registro, index) => (
+                <p key={index} className="text-xs mt-2">{registro.fecha?.split('T')[0]} · {registro.accion} · {registro.actividad || 'Sin actividad'} · {registro.dias || ''} · Inicio: {registro.fechaAlta || 'Sin fecha'} · Precio: {registro.precio || 'Sin precio'}</p>
+              ))}
+            </div>
+          )}
           
 {/* 1. FECHAS (BLOQUE REPARADO Y SIN ENGAÑOS) */}
 <div className="bg-gray-100 p-4 rounded border border-gray-300 grid grid-cols-2 gap-4 shadow-inner">
@@ -6127,146 +6137,50 @@ const handleUpdatePassword = async () => {
     });
   };
 
-  // 👇 1. FUNCIÓN NUEVA: CANCELAR SOLICITUD (Borrado rápido)
-  const cancelarSolicitud = async (hijo) => {
-    if (!window.confirm(`⚠️ ¿Cancelar la solicitud de ${hijo.nombre}?\n\nAl no estar inscrito todavía, se borrará la reserva inmediatamente y podrás empezar de cero.`)) return;
+  // Las familias solicitan bajas; nunca eliminan inscripciones ni perfiles históricos.
+  const cancelarSolicitud = async (hijo) => gestionarBaja(hijo);
 
-    try {
-        await liberarPlazaAtomica({ alumnoId: hijo.id, datosFinales: {
-            estado: 'sin_inscripcion',
-            actividad: null,
-            dias: null,
-            horario: null,
-            precio: null,
-            citaId: null,
-            citaNivel: null,
-            citaFecha: null,
-            citaHora: null,
-            fechaInscripcion: null,
-            aceptaNormas: false,
-            autorizaFotos: false,
-            fechaAlta: null,
-            fechaBaja: null,
-            grupo: null,
-            revisadoAdmin: null
-        }});
-        showToast('✅ Solicitud cancelada correctamente.', 'success');
-    } catch (e) {
-        showToast('Error al cancelar: ' + e.message, 'error');
-    }
-  };
-
-  // 👇 2. FUNCIÓN DE SIEMPRE: GESTIONAR BAJA (Trámite administrativo)
   const gestionarBaja = async (hijo) => {
-    // Si por error llama a esto un 'sin_inscripcion', lo borramos directo
     if (hijo.estado === 'sin_inscripcion') {
-        if (window.confirm(`🗑️ ¿Eliminar perfil de ${hijo.nombre}?`)) {
-            await deleteDoc(doc(db, 'students', hijo.id));
-        }
-        return;
+      return showToast('Para retirar un perfil, contacta con coordinación. Se conserva su historial.', 'warning');
     }
-
-    const academicInfo = getDynamicAcademicYear();
-    const hoy = new Date();
-    // Límite de baja libre para el curso: 25 de Septiembre del año de inicio
-    const fechaLimiteLibre = new Date(academicInfo.startYear, 8, 25); // 8 = Septiembre
-
-    const esBajaLibre = hoy < fechaLimiteLibre;
-
-    if (esBajaLibre) {
-      // BAJA DIRECTA AUTOMÁTICA (ANTES DEL 25 DE SEPTIEMBRE)
-      if (window.confirm(`⚠️ ¿Deseas cancelar la inscripción de ${hijo.nombre}?\n\nAl no haber comenzado el curso escolar todavía (inicia el ${academicInfo.formattedStartDate}), la inscripción se cancelará inmediatamente y sin ningún coste.`)) {
-        try {
-          await liberarPlazaAtomica({ alumnoId: hijo.id, datosFinales: {
-            estado: 'sin_inscripcion',
-            actividad: null, dias: null, horario: null, precio: null,
-            citaId: null, citaNivel: null, citaFecha: null, citaHora: null,
-            fechaInscripcion: null, aceptaNormas: false, autorizaFotos: false,
-            fechaAlta: null, fechaBaja: null, grupo: null, revisadoAdmin: null
-          }});
-
-          // Encolar email de confirmación de cancelación directa
-          if (user?.email) {
-            await addDoc(collection(db, 'mail'), {
-              to: [user.email],
-              message: {
-                subject: `❌ Inscripción Cancelada: ${hijo.nombre}`,
-                html: `
-                  <div style="font-family: sans-serif; padding: 20px; color: #333; border: 1px solid #ddd; border-radius: 15px; max-width: 600px;">
-                    <h2 style="color: #dc2626; border-bottom: 2px solid #dc2626; padding-bottom: 10px; margin-top: 0;">
-                       🏊 Inscripción Cancelada (Antes del Curso)
-                    </h2>
-                    <p>Hola familia de <strong>${hijo.nombre}</strong>,</p>
-                    <p>Te confirmamos que se ha cancelado correctamente tu reserva de plaza en la actividad de natación extraescolar antes del inicio del curso.</p>
-                    <p>Al no haber comenzado la actividad escolar (inicio el ${academicInfo.formattedStartDate}), este trámite no conlleva **ningún tipo de coste ni cargo**.</p>
-                    <p>Saludos,<br><strong>Coordinación de Extraescolares CSB</strong></p>
-                  </div>
-                `
-              }
-            });
-          }
-          showToast('✅ Inscripción cancelada y plaza liberada.', 'success');
-        } catch (e) {
-          showToast('Error al cancelar: ' + e.message, 'error');
-        }
+    const esInscripcion = hijo.estado === 'inscrito';
+    const aviso = esInscripcion
+      ? 'La solicitud quedará registrada en Bajas para que coordinación revise la fecha efectiva y los posibles cargos. Tu inscripción se conservará hasta tramitarla.'
+      : 'Se retirará la solicitud y se conservará un registro para coordinación.';
+    if (!window.confirm(`¿${esInscripcion ? 'Solicitar la baja' : 'Retirar la solicitud'} de ${hijo.nombre}?\n\n${aviso}`)) return;
+    try {
+      if (esInscripcion) {
+        await runTransaction(db, async transaction => {
+          const ref = doc(db, 'students', hijo.id);
+          const snap = await transaction.get(ref);
+          if (!snap.exists() || snap.data().estado !== 'inscrito') throw new Error('El estado ha cambiado. Recarga la ficha.');
+          transaction.update(ref, planificarBajaFamiliar(snap.data()));
+        });
+      } else {
+        // Releer evita retirar una inscripción aceptada desde que se abrió la pantalla.
+        const snap = await getDoc(doc(db, 'students', hijo.id));
+        if (!snap.exists()) throw new Error('No se encuentra el alumno.');
+        const actual = snap.data();
+        if (actual.estado !== hijo.estado || actual.estado === 'inscrito') throw new Error('El estado ha cambiado. Recarga la ficha.');
+        await liberarPlazaAtomica({
+          alumnoId: hijo.id, datosFinales: actualEnTransaccion => planificarBajaFamiliar(actualEnTransaccion),
+          estadosPermitidos: [hijo.estado]
+        });
       }
-      return;
-    }
-
-    // SI YA ES 25 DE SEPTIEMBRE O DESPUÉS, ENTRA LA REGLA NORMAL DE CADA MES
-    const diaActual = hoy.getDate();
-
-    // Bloqueo después del día 25
-    if (diaActual > 25) {
-        return showToast('⛔ PLAZO CERRADO. Las bajas para el mes siguiente deben tramitarse antes del día 25.', 'error');
-    }
-
-    // Tramitación de Baja estándar
-    if (window.confirm(`⚠️ ¿Solicitar BAJA de ${hijo.nombre}?\n\nℹ️ AVISO: Al ser día ${diaActual}, se cobrará el mes en curso completo. La baja será efectiva el último día de este mes.`)) {
-      await updateDoc(doc(db, 'students', hijo.id), {
-        estado: 'baja_pendiente',
-        fechaSolicitudBaja: new Date().toISOString()
-      });
-
-      // 📧 Encolar email de solicitud de baja recibida
+      showToast(esInscripcion ? 'Solicitud de baja registrada para revisión de coordinación.' : 'Solicitud retirada y registrada en Bajas.', 'success');
       if (user?.email) {
         try {
           await addDoc(collection(db, 'mail'), {
             to: [user.email],
             message: {
-              subject: `📉 Solicitud de Baja Recibida: ${hijo.nombre}`,
-              html: `
-                <div style="font-family: sans-serif; padding: 20px; color: #333; border: 1px solid #ddd; border-radius: 15px; max-width: 600px;">
-                  <h2 style="color: #ea580c; border-bottom: 2px solid #ea580c; padding-bottom: 10px; margin-top: 0;">
-                     🏊 Solicitud de Baja Registrada
-                  </h2>
-                  <p>Hola familia de <strong>${hijo.nombre}</strong>,</p>
-                  <p>Hemos recibido correctamente tu solicitud de baja para la actividad de natación extraescolar.</p>
-                  
-                  <div style="background: #FFF7ED; padding: 15px; border-radius: 10px; margin: 20px 0; border: 1px solid #FED7AA;">
-                    <p style="margin: 0; color: #C2410C; font-weight: bold;">📍 Detalles de la Solicitud:</p>
-                    <p style="margin: 10px 0 0 0; font-size: 16px;"><strong>Alumno:</strong> ${hijo.nombre}</p>
-                    <p style="margin: 5px 0 0 0; font-size: 14px; color: #4b5563;"><strong>Estado:</strong> Baja Pendiente (Tramitando)</p>
-                    <p style="margin: 5px 0 0 0; font-size: 14px; color: #4b5563;"><strong>ℹ️ Nota:</strong> Tu plaza se mantendrá activa hasta final de mes y la baja se hará efectiva antes del día 1 del próximo mes.</p>
-                  </div>
-
-                  <p style="font-size: 14px; color: #374151; line-height: 1.5;">
-                    Si no has realizado esta solicitud o deseas reactivar la plaza, por favor ponte en contacto con la coordinación lo antes posible.
-                  </p>
-                  <p style="margin-top: 25px;">Saludos,<br><strong>Coordinación de Extraescolares CSB</strong></p>
-                  <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;" />
-                  <p style="font-size: 11px; color: #999;">Este es un mensaje automático generado por el sistema de gestión de piscina.</p>
-                </div>
-              `
+              subject: `${esInscripcion ? 'Solicitud de baja recibida' : 'Solicitud retirada'}: ${hijo.nombre}`,
+              html: `<div style="font-family:sans-serif"><h2>${esInscripcion ? 'Solicitud de baja registrada' : 'Retirada de solicitud registrada'}</h2><p>${esInscripcion ? 'Coordinación revisará la fecha efectiva y los posibles cargos. La inscripción y sus datos se conservan hasta la tramitación. Este aviso no confirma una baja sin coste.' : 'Se ha registrado la retirada de la solicitud. Contacta con coordinación si necesitas aclarar tu situación.'}</p><p>Coordinación de Extraescolares CSB</p></div>`
             }
           });
-        } catch (mailError) {
-          console.error("Error al encolar email de solicitud de baja:", mailError);
-        }
+        } catch (error) { console.error('La solicitud se guardó, pero falló el aviso por email:', error); }
       }
-
-      showToast('✅ Solicitud de baja registrada. Tu plaza se mantendrá activa hasta final de mes.', 'success');
-    }
+    } catch (error) { showToast(error.message || 'No se pudo registrar la solicitud.', 'error'); }
   };
 
   return (
@@ -6631,16 +6545,9 @@ if (hijo.estado === 'inscrito') {
               <div className="mt-6 pt-4 ml-3 border-t border-gray-100 flex gap-2">
                 
                 {/* 1. SOLO SI TIENE PLAZA CONFIRMADA -> TRAMITAR BAJA (Oficial) */}
-                {hijo.estado === 'inscrito' && estaAdmitido && (
+                {hijo.estado === 'inscrito' && (
                     <button onClick={() => gestionarBaja(hijo)} className="w-full bg-white text-red-600 px-3 py-2 rounded-lg text-sm font-bold border border-red-200 hover:bg-red-50">
                         Tramitar Baja
-                    </button>
-                )}
-
-                {/* 2. SI ESTÁ INSCRITO PERO PENDIENTE -> CANCELAR (Borrado simple) */}
-                {hijo.estado === 'inscrito' && !estaAdmitido && (
-                    <button onClick={() => cancelarSolicitud(hijo)} className="w-full bg-white text-red-500 px-3 py-2 rounded-lg text-sm font-bold border border-red-200 hover:bg-red-50">
-                        ✖️ Cancelar Solicitud
                     </button>
                 )}
 
@@ -6650,9 +6557,7 @@ if (hijo.estado === 'inscrito') {
                     <button onClick={() => { setAlumnoSeleccionado(hijo); setModoModal('inscripcion'); }} className="flex-1 bg-blue-600 text-white py-2 rounded-lg text-sm font-bold shadow-sm hover:bg-blue-700">
                         Inscribir
                     </button>
-                    {hijo.estado === 'sin_inscripcion' && (
-                        <button onClick={() => gestionarBaja(hijo)} className="bg-white text-red-500 px-3 py-2 rounded-lg text-sm font-bold border border-red-200 hover:bg-red-50">🗑️</button>
-                    )}
+
                   </div>
                 )}
 
