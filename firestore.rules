@@ -1,0 +1,289 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && (
+        request.auth.token.email == 'extraescolares@sanbuenaventura.org' ||
+        request.auth.token.email == 'extraescolarespiscina@sanbuenaventura.org'
+      );
+    }
+
+    function isMonitor() {
+      return isAuthenticated() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'profe' ||
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'monitor');
+    }
+
+    function isStaff() {
+      return isAdmin() || isMonitor();
+    }
+
+    function studentPath(studentId) {
+      return /databases/$(database)/documents/students/$(studentId);
+    }
+
+    function aforoPath(slotId) {
+      return /databases/$(database)/documents/aforos/$(slotId);
+    }
+
+    function slots(data) {
+      return data.get('aforoSlotIds', []);
+    }
+
+    function hasValidSlots(data) {
+      return slots(data) is list && slots(data).size() > 0 && slots(data).size() <= 2;
+    }
+
+    function reservedSlot(slotId, studentId) {
+      return exists(aforoPath(slotId)) &&
+        getAfter(aforoPath(slotId)).data.ocupados == get(aforoPath(slotId)).data.ocupados + 1 &&
+        getAfter(aforoPath(slotId)).data.lastStudentId == studentId &&
+        getAfter(aforoPath(slotId)).data.lastActorUid == request.auth.uid &&
+        getAfter(aforoPath(slotId)).data.lastOperation == 'RESERVA';
+    }
+
+    function releasedSlot(slotId, studentId) {
+      return exists(aforoPath(slotId)) &&
+        getAfter(aforoPath(slotId)).data.ocupados == get(aforoPath(slotId)).data.ocupados - 1 &&
+        getAfter(aforoPath(slotId)).data.lastStudentId == studentId &&
+        getAfter(aforoPath(slotId)).data.lastActorUid == request.auth.uid &&
+        getAfter(aforoPath(slotId)).data.lastOperation == 'LIBERACION';
+    }
+
+    function allReserved(data, studentId) {
+      return hasValidSlots(data) && reservedSlot(slots(data)[0], studentId) &&
+        (slots(data).size() == 1 || reservedSlot(slots(data)[1], studentId));
+    }
+
+    function allReleased(data, studentId) {
+      return hasValidSlots(data) && releasedSlot(slots(data)[0], studentId) &&
+        (slots(data).size() == 1 || releasedSlot(slots(data)[1], studentId));
+    }
+
+    function auditValue(data, key) {
+      return data.get(key, null) in [null, '', 0, false] ? null : data.get(key, null);
+    }
+
+    function validHistoryAppend() {
+      let before = resource.data.get('historialInscripciones', []);
+      let after = request.resource.data.get('historialInscripciones', []);
+      let entry = after[after.size() - 1];
+      return before is list && after is list && after.size() == before.size() + 1 &&
+        after == before.concat([entry]) && entry is map &&
+        entry.estadoAnterior == resource.data.estado &&
+        entry.actividadId == auditValue(resource.data, 'actividadId') &&
+        entry.actividad == auditValue(resource.data, 'actividad') &&
+        entry.dias == auditValue(resource.data, 'dias') &&
+        entry.horario == auditValue(resource.data, 'horario') &&
+        entry.precio == auditValue(resource.data, 'precio') &&
+        entry.fecha is string &&
+        entry.accion == (resource.data.estado == 'inscrito'
+          ? 'SOLICITUD_BAJA_FAMILIA' : 'RETIRADA_SOLICITUD_FAMILIA');
+    }
+
+    function validFamilyStudentUpdate(studentId) {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      let sensitive = ['estado', 'aforoSlotIds', 'validadoAdmin', 'revisadoAdmin',
+        'waitlistGroupKey', 'waitlistJoinedAt', 'historialInscripciones',
+        'fechaAlta', 'fechaBaja', 'fechaSolicitudBaja', 'motivoBaja', 'precio',
+        'fechaInscripcion', 'fechaCreacion', 'createdAt', 'inicioDeseado', 'fechaInicioReal'];
+      let groupFields = ['actividad', 'actividadId', 'dias', 'opcionDias', 'horario', 'grupo', 'curso'];
+      let sameHistory = request.resource.data.get('historialInscripciones', []) ==
+        resource.data.get('historialInscripciones', []);
+      return request.resource.data.parentId == resource.data.parentId &&
+        request.resource.data.get('user', null) == resource.data.get('user', null) &&
+        (
+          // Datos personales: no pueden borrar fechas, precio ni historial.
+          (sameHistory && !changed.hasAny(sensitive) &&
+            (!(resource.data.estado in ['inscrito', 'baja_pendiente', 'baja_finalizada']) ||
+             !changed.hasAny(groupFields))) ||
+          // Alta: conserva el historial y reserva cada plaza atómicamente.
+          (sameHistory && !(resource.data.estado in ['inscrito', 'baja_pendiente']) &&
+            slots(resource.data) == [] && request.resource.data.estado == 'inscrito' &&
+            request.resource.data.validadoAdmin == true &&
+            allReserved(request.resource.data, studentId)) ||
+          // Solicitudes sin plaza: una baja histórica no se puede vaciar desde un cliente antiguo.
+          (sameHistory && !(resource.data.estado in ['inscrito', 'baja_pendiente']) &&
+            request.resource.data.estado in ['lista_espera', 'prueba_reservada', 'sin_inscripcion'] &&
+            !(resource.data.estado == 'baja_finalizada' && request.resource.data.estado == 'sin_inscripcion') &&
+            slots(request.resource.data) == [] &&
+            request.resource.data.get('validadoAdmin', false) != true &&
+            request.resource.data.get('revisadoAdmin', false) != true) ||
+          // Inscritos: solo solicitan baja. No liberan plaza ni borran sus datos.
+          (resource.data.estado == 'inscrito' && request.resource.data.estado == 'baja_pendiente' &&
+            changed.hasOnly(['estado', 'fechaSolicitudBaja', 'historialInscripciones']) &&
+            request.resource.data.fechaSolicitudBaja is string && validHistoryAppend()) ||
+          // Retirada de espera o prueba: queda visible en Bajas y conserva actividad y fechas de alta.
+          (resource.data.estado in ['lista_espera', 'prueba_reservada', 'requiere_prueba'] &&
+            slots(resource.data) == [] && request.resource.data.estado == 'baja_finalizada' &&
+            slots(request.resource.data) == [] &&
+            request.resource.data.get('validadoAdmin', false) == false &&
+            request.resource.data.get('revisadoAdmin', false) == false &&
+            changed.hasOnly(['estado', 'fechaSolicitudBaja', 'fechaBaja', 'motivoBaja',
+              'historialInscripciones', 'validadoAdmin', 'revisadoAdmin', 'aforoSlotIds',
+              'waitlistGroupKey', 'waitlistJoinedAt', 'ultimaActualizacion']) &&
+            request.resource.data.fechaBaja is string &&
+            request.resource.data.fechaSolicitudBaja is string && validHistoryAppend())
+        );
+    }
+
+    match /students/{studentId} {
+      allow read: if isStaff() ||
+        (isAuthenticated() && resource.data.parentId == request.auth.uid);
+
+      allow create: if isAuthenticated() &&
+        (isAdmin() || (request.resource.data.parentId == request.auth.uid &&
+          request.resource.data.estado == 'sin_inscripcion' &&
+          slots(request.resource.data) == [] &&
+          request.resource.data.get('validadoAdmin', false) != true &&
+          request.resource.data.get('revisadoAdmin', false) != true));
+
+      allow update: if isAdmin() ||
+        (isMonitor() && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+          'parentId', 'user', 'estado', 'aforoSlotIds', 'validadoAdmin',
+          'revisadoAdmin', 'actividad', 'actividadId', 'dias', 'opcionDias',
+          'horario', 'grupo', 'curso', 'precio', 'fechaAlta', 'fechaBaja',
+          'fechaSolicitudBaja', 'motivoBaja', 'historialInscripciones'
+        ])) ||
+        (isAuthenticated() &&
+         resource.data.parentId == request.auth.uid &&
+         validFamilyStudentUpdate(studentId));
+
+      // Solo administración puede eliminar perfiles.
+      allow delete: if isAdmin();
+    }
+
+    match /users/{userId} {
+      allow read: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
+      allow create: if isAdmin() || (isAuthenticated() &&
+        request.auth.uid == userId && request.resource.data.role == 'user');
+      allow update: if isAuthenticated() &&
+        ((request.auth.uid == userId && request.resource.data.role == resource.data.role) || isAdmin());
+      allow delete: if isAdmin();
+    }
+
+    match /equipo/{docId} {
+      allow read: if isStaff();
+      allow write: if isAdmin();
+    }
+
+    match /avisos/{avisoId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /logs/{logId} {
+      allow read, write: if isStaff();
+    }
+
+    match /mail/{mailId} {
+      allow create: if isAdmin() || (isAuthenticated() &&
+        request.resource.data.to is list && request.resource.data.to.size() == 1 &&
+        request.resource.data.to[0] == request.auth.token.email);
+      allow read, update, delete: if isStaff();
+    }
+
+    match /clases/{claseId} {
+      allow read: if true;
+      allow write: if isStaff();
+    }
+
+    // Contadores agregados por actividad, segmento, día y horario.
+    // No contienen nombres ni IDs de alumnos, por lo que pueden mostrarse a familias.
+    match /aforos/{slotId} {
+      allow read: if true;
+
+      // La primera sincronización la realiza una de las dos cuentas de administración.
+      allow create: if isAdmin() &&
+        request.resource.data.keys().hasOnly([
+          'temporada', 'actividadId', 'segmento', 'dia', 'horario',
+          'maximo', 'ocupados', 'lastStudentId', 'lastActorUid',
+          'lastOperation', 'updatedAt'
+        ]) &&
+        request.resource.data.temporada is string &&
+        request.resource.data.actividadId is string &&
+        request.resource.data.segmento is string &&
+        request.resource.data.dia is string &&
+        request.resource.data.horario is string &&
+        request.resource.data.maximo is int &&
+        request.resource.data.maximo > 0 &&
+        request.resource.data.ocupados is int &&
+        request.resource.data.ocupados >= 0 &&
+        request.resource.data.lastOperation == 'INICIALIZACION';
+
+      // Las reservas y bajas solo pueden variar el contador en una unidad.
+      // Se admite ocupados > maximo únicamente si ya existía ese exceso histórico
+      // (por ejemplo, el 17/16 actual); nunca se permite aumentarlo.
+      allow update: if isAuthenticated() &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'ocupados', 'lastStudentId', 'lastActorUid', 'lastOperation', 'updatedAt'
+        ]) &&
+        request.resource.data.lastActorUid == request.auth.uid &&
+        request.resource.data.lastStudentId is string &&
+        request.resource.data.lastStudentId != '' &&
+        request.resource.data.lastOperation in ['RESERVA', 'LIBERACION'] &&
+        exists(/databases/$(database)/documents/students/$(request.resource.data.lastStudentId)) &&
+        (
+          isAdmin() ||
+          get(/databases/$(database)/documents/students/$(request.resource.data.lastStudentId)).data.parentId == request.auth.uid ||
+          (
+            'user' in get(/databases/$(database)/documents/students/$(request.resource.data.lastStudentId)).data &&
+            get(/databases/$(database)/documents/students/$(request.resource.data.lastStudentId)).data.user == request.auth.uid
+          )
+        ) &&
+        request.resource.data.temporada == resource.data.temporada &&
+        request.resource.data.actividadId == resource.data.actividadId &&
+        request.resource.data.segmento == resource.data.segmento &&
+        request.resource.data.dia == resource.data.dia &&
+        request.resource.data.horario == resource.data.horario &&
+        request.resource.data.maximo == resource.data.maximo &&
+        request.resource.data.ocupados is int &&
+        request.resource.data.ocupados >= 0 &&
+        (
+          (request.resource.data.lastOperation == 'LIBERACION' &&
+            request.resource.data.ocupados == resource.data.ocupados - 1) ||
+          (request.resource.data.lastOperation == 'RESERVA' &&
+            request.resource.data.ocupados == resource.data.ocupados + 1 &&
+            resource.data.ocupados < resource.data.maximo &&
+            request.resource.data.ocupados <= resource.data.maximo)
+        ) &&
+        (
+          isAdmin() ||
+          (
+            request.resource.data.lastOperation == 'RESERVA' &&
+            !(slotId in slots(get(studentPath(request.resource.data.lastStudentId)).data)) &&
+            slotId in slots(getAfter(studentPath(request.resource.data.lastStudentId)).data) &&
+            getAfter(studentPath(request.resource.data.lastStudentId)).data.estado == 'inscrito'
+          ) ||
+          (
+            request.resource.data.lastOperation == 'LIBERACION' &&
+            slotId in slots(get(studentPath(request.resource.data.lastStudentId)).data) &&
+            !(slotId in slots(getAfter(studentPath(request.resource.data.lastStudentId)).data)) &&
+            get(studentPath(request.resource.data.lastStudentId)).data.estado in ['inscrito', 'baja_pendiente']
+          )
+        );
+
+      allow delete: if false;
+    }
+
+    match /actividades_cole/{actId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /clubes_cole/{clubId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /puntos_interes_cole/{puntoId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+  }
+}
