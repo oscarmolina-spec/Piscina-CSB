@@ -50,10 +50,15 @@ rules_version = '2';
 //      - Aggregated slot capacity counters: readable by authenticated users,
 //        created by admins, decremented (`LIBERACION`) only by admins, and
 //        incremented (`RESERVA`) atomically with `students/{studentId}`.
-//   9. observacionesAdministracion/{notaId}
+//   9. aforosPruebas/{slotId}
+//      - Aggregated non-PII level-test slot counters (Doc ID: `YYYY-MM-DD__HH-MM`,
+//        max 2 per 5-minute slot): readable by authenticated users, created/updated
+//        atomically with `students/{studentId}` (`estado == 'prueba_reservada'`,
+//        `citaId == slotId`), supporting atomic family booking & rescheduling.
+//  10. observacionesAdministracion/{notaId}
 //      - Private monthly admin notes (Doc ID: `${alumnoId}__${mes}`), strictly
 //        accessible and writable only by admins (`isAdmin()`).
-//  10. actividades_cole/{docId}, clubes_cole/{docId}, puntos_interes_cole/{docId}
+//  11. actividades_cole/{docId}, clubes_cole/{docId}, puntos_interes_cole/{docId}
 //      - Public catalog and campus map for Portal Extraescolares CSB; admin-managed.
 //
 // ===============================================================
@@ -425,8 +430,9 @@ service cloud.firestore {
             changed.hasOnly([
               'estado', 'fechaSolicitudBaja', 'fechaBaja', 'motivoBaja',
               'historialInscripciones', 'validadoAdmin', 'revisadoAdmin', 'aforoSlotIds',
-              'waitlistGroupKey', 'waitlistJoinedAt', 'ultimaActualizacion'
+              'waitlistGroupKey', 'waitlistJoinedAt', 'ultimaActualizacion', 'citaId'
             ]) &&
+            (!('citaId' in changed) || d.citaId == null) &&
             isNonEmptyString(d.fechaBaja, 50) &&
             isNonEmptyString(d.fechaSolicitudBaja, 50) &&
             validHistoryAppend())
@@ -653,6 +659,89 @@ service cloud.firestore {
         );
     }
 
+    function isStudentOwnerData(stu) {
+      return stu.parentId == request.auth.uid ||
+        ('user' in stu && stu.user == request.auth.uid);
+    }
+
+    function isValidAforoPruebaSchema(slotId, d) {
+      return !('password' in d) &&
+        slotId.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}__[0-9]{2}-[0-9]{2}$') &&
+        hasOnlyAllowedFields(d, [
+          'fecha', 'hora', 'maximo', 'ocupados',
+          'lastStudentId', 'lastActorUid', 'lastOperation', 'updatedAt'
+        ]) &&
+        hasRequiredFields(d, [
+          'fecha', 'hora', 'maximo', 'ocupados',
+          'lastStudentId', 'lastActorUid', 'lastOperation', 'updatedAt'
+        ]) &&
+        d.fecha is string && d.fecha.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$') &&
+        d.hora is string && d.hora.matches('^[0-9]{1,2}:[0-9]{2}$') &&
+        d.maximo is int && d.maximo == 2 &&
+        d.ocupados is int && d.ocupados >= 0 && d.ocupados <= 2 &&
+        isNonEmptyString(d.lastStudentId, 128) &&
+        d.lastActorUid is string && d.lastActorUid == request.auth.uid &&
+        d.lastOperation in ['RESERVA', 'LIBERACION'] &&
+        d.updatedAt is timestamp;
+    }
+
+    function isValidAforoPruebaCreateAtomic(slotId, studentId) {
+      let stuBefore = get(studentPath(studentId)).data;
+      let stuAfter = getAfter(studentPath(studentId)).data;
+      return (isAdmin() || isStudentOwnerData(stuBefore)) &&
+        stuAfter.estado == 'prueba_reservada' &&
+        stuAfter.get('citaId', null) == slotId;
+    }
+
+    function isValidAforoPruebaCreate(slotId) {
+      let d = request.resource.data;
+      return isValidAforoPruebaSchema(slotId, d) &&
+        d.ocupados == 1 &&
+        d.lastOperation == 'RESERVA' &&
+        exists(studentPath(d.lastStudentId)) &&
+        isValidAforoPruebaCreateAtomic(slotId, d.lastStudentId);
+    }
+
+    function isValidFamilyAforoPruebaReserva(slotId, studentId) {
+      let stuBefore = get(studentPath(studentId)).data;
+      let stuAfter = getAfter(studentPath(studentId)).data;
+      return isStudentOwnerData(stuBefore) &&
+        stuBefore.get('citaId', null) != slotId &&
+        stuAfter.estado == 'prueba_reservada' &&
+        stuAfter.get('citaId', null) == slotId;
+    }
+
+    function isValidFamilyAforoPruebaLiberacion(slotId, studentId) {
+      let stuBefore = get(studentPath(studentId)).data;
+      let stuAfter = getAfter(studentPath(studentId)).data;
+      return isStudentOwnerData(stuBefore) &&
+        stuBefore.get('citaId', null) == slotId &&
+        stuAfter.get('citaId', null) != slotId;
+    }
+
+    function isValidAforoPruebaUpdate(slotId) {
+      let d = request.resource.data;
+      return isValidAforoPruebaSchema(slotId, d) &&
+        d.diff(resource.data).affectedKeys().hasOnly([
+          'ocupados', 'lastStudentId', 'lastActorUid', 'lastOperation', 'updatedAt'
+        ]) &&
+        d.fecha == resource.data.fecha &&
+        d.hora == resource.data.hora &&
+        d.maximo == resource.data.maximo &&
+        exists(studentPath(d.lastStudentId)) &&
+        (
+          (d.lastOperation == 'RESERVA' &&
+            d.ocupados == resource.data.ocupados + 1 &&
+            resource.data.ocupados < resource.data.maximo &&
+            d.ocupados <= resource.data.maximo &&
+            (isAdmin() || isValidFamilyAforoPruebaReserva(slotId, d.lastStudentId))) ||
+          (d.lastOperation == 'LIBERACION' &&
+            d.ocupados == resource.data.ocupados - 1 &&
+            d.ocupados >= 0 &&
+            (isAdmin() || isValidFamilyAforoPruebaLiberacion(slotId, d.lastStudentId)))
+        );
+    }
+
     function isValidObservacionAdmin(d) {
       return !('password' in d) &&
         hasOnlyAllowedFields(d, [
@@ -870,6 +959,15 @@ service cloud.firestore {
       allow update: if isAuthenticated() && isValidAforoUpdate(slotId);
 
       allow delete: if false;
+    }
+
+    // Contadores atómicos sin PII para franjas de pruebas de nivel (máx. 2 plazas por turno de 5 min).
+    // Permiten consultar disponibilidad y reservar/reprogramar citas sin exponer la colección `students`.
+    match /aforosPruebas/{slotId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isValidAforoPruebaCreate(slotId);
+      allow update: if isAuthenticated() && isValidAforoPruebaUpdate(slotId);
+      allow delete: if isAdmin();
     }
 
     // Observaciones mensuales privadas para Administración.

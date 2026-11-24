@@ -12,6 +12,13 @@ import {
   construirDocumentoMonitor
 } from './seguridad.js';
 import {
+  obtenerAnioAcademico,
+  obtenerInfoInicioInscripcion,
+  calcularFechaAlta,
+  construirIdSlotPruebaNivel,
+  obtenerPermisoNotificaciones
+} from './temporada.js';
+import {
   collection,
   addDoc,
   query,
@@ -358,20 +365,7 @@ const OFERTA_ACTIVIDADES = [
 // ==========================================
 
 // Ayudante dinámico para obtener el año académico actual/siguiente
-const getDynamicAcademicYear = () => {
-  const today = new Date();
-  const currentYear = today.getFullYear();
-  // El año académico de natación comienza el 1 de octubre.
-  // Si estamos antes de octubre (meses 0 a 8 en JS), la temporada comienza el 1 de octubre de este año.
-  // Si estamos en octubre o después (meses 9 a 11 en JS), comienza el 1 de octubre del año que viene.
-  const startYear = today.getMonth() < 9 ? currentYear : currentYear + 1;
-  return {
-    startYear,
-    isoStartDate: `${startYear}-10-01`,
-    formattedStartDate: `01/10/${startYear}`,
-    rawPattern: `${startYear}-10`
-  };
-};
+const getDynamicAcademicYear = () => obtenerAnioAcademico();
 
 // ==========================================
 // 🔒 CONTROL ATÓMICO DE AFORO Y LISTA DE ESPERA
@@ -544,6 +538,12 @@ const liberarPlazaAtomica = async ({ alumnoId, datosFinales, estadosPermitidos }
     const snaps = [];
     for (const ref of refs) snaps.push(await transaction.get(ref));
 
+    const tieneCitaAforoPrueba = alumno.estado === 'prueba_reservada' &&
+      typeof alumno.citaId === 'string' &&
+      /^\d{4}-\d{2}-\d{2}__\d{2}-\d{2}$/.test(alumno.citaId);
+    const citaPruebaRef = tieneCitaAforoPrueba ? doc(db, 'aforosPruebas', alumno.citaId) : null;
+    const citaPruebaSnap = citaPruebaRef ? await transaction.get(citaPruebaRef) : null;
+
     if (alumno.estado === 'inscrito' || alumno.estado === 'baja_pendiente') {
       snaps.forEach((snap, index) => {
         if (!snap.exists()) throw new Error('AFORO_NO_INICIALIZADO');
@@ -556,8 +556,18 @@ const liberarPlazaAtomica = async ({ alumnoId, datosFinales, estadosPermitidos }
         });
       });
     }
+    if (citaPruebaRef && citaPruebaSnap?.exists() && Number(citaPruebaSnap.data().ocupados || 0) > 0) {
+      transaction.update(citaPruebaRef, {
+        ocupados: Math.max(0, Number(citaPruebaSnap.data().ocupados || 0) - 1),
+        lastStudentId: alumnoId,
+        lastActorUid: auth.currentUser?.uid || '',
+        lastOperation: 'LIBERACION',
+        updatedAt: serverTimestamp()
+      });
+    }
     transaction.update(alumnoRef, {
       ...(typeof datosFinales === 'function' ? datosFinales(alumno) : datosFinales),
+      ...(tieneCitaAforoPrueba ? { citaId: null } : {}),
       validadoAdmin: false,
       revisadoAdmin: false,
       aforoSlotIds: [],
@@ -2682,7 +2692,8 @@ const AdminDashboard = ({ userRole, logout, userEmail }) => {
   const [avisos, setAvisos] = useState([]);
   const [equipo, setEquipo] = useState([]);
   
-  const [tab, setTab] = useState('global');
+  const esPersonalMonitor = userRole === 'monitor' || userRole === 'profe';
+  const [tab, setTab] = useState(() => (userRole === 'monitor' || userRole === 'profe' ? 'mis_clases' : 'global'));
   const [busqueda, setBusqueda] = useState('');
   const [filtroGrupo, setFiltroGrupo] = useState('');
   const [mostrarExportacion, setMostrarExportacion] = useState(false);
@@ -2729,11 +2740,12 @@ const puedeGestionarTodo = soySuperAdmin || soyCoordinador;
 
 // --- 🏊‍♂️ IDENTIFICACIÓN DEL MONITOR ---
 // Buscamos si el que ha entrado está en la lista de equipo como monitor
-const datosMonitor = equipo.find(m => m.email === emailNormalizado);
-const soyMonitor = datosMonitor?.rol === 'monitor';
+const datosMonitor = equipo.find(m => normalizarEmail(m.email) === emailNormalizado);
+const soyMonitor = esPersonalMonitor || datosMonitor?.rol === 'monitor';
+const permisoNotificaciones = obtenerPermisoNotificaciones();
   // --- 🔔 SISTEMA DE NOTIFICACIONES PUSH (CEREBRO) ---
   const solicitarPermisoNotificaciones = async () => {
-    if (!("Notification" in window)) {
+    if (obtenerPermisoNotificaciones() === 'unsupported') {
       showToast("Este navegador no soporta notificaciones de escritorio.", "warning");
       return;
     }
@@ -2747,7 +2759,7 @@ const soyMonitor = datosMonitor?.rol === 'monitor';
   };
 
   const enviarPushLocal = (titulo, mensaje) => {
-    if (Notification.permission === "granted") {
+    if (obtenerPermisoNotificaciones() === "granted") {
       new Notification(titulo, {
         body: mensaje,
         icon: "https://cdn-icons-png.flaticon.com/512/5822/5822050.png"
@@ -2860,8 +2872,7 @@ const confirmarTraslado = async () => {
       });
     }
 
-    // 3. 🚀 NUEVO: Radar de Equipo (Monitores y Coordinadores)
-    // Solo se activa si el usuario tiene permisos de gestión
+    // 3. 🚀 Radar de Equipo (Admins ven todo el equipo; monitores ven su propia ficha)
     let unsubEquipo = () => {};
     if (puedeGestionarTodo) {
       unsubEquipo = onSnapshot(query(collection(db, 'equipo'), orderBy('nombre', 'asc')), (s) => {
@@ -2870,6 +2881,16 @@ const confirmarTraslado = async () => {
         console.error("Error en equipo:", error);
         showToast("Error al cargar equipo: " + error.message, "error");
       });
+    } else if (esPersonalMonitor && emailNormalizado) {
+      unsubEquipo = onSnapshot(
+        query(collection(db, 'equipo'), where('email', '==', emailNormalizado)),
+        (s) => {
+          setEquipo(s.docs.map(d => ({ id: d.id, ...d.data() })));
+        },
+        (error) => {
+          console.error("Error al cargar ficha del monitor:", error);
+        }
+      );
     }
 
     // 4. Radar de Avisos (Intacto)
@@ -2886,13 +2907,13 @@ const confirmarTraslado = async () => {
       unsubEquipo(); 
       unsubAvisos(); 
     };
-  }, [puedeGestionarTodo]); // 🚩 IMPORTANTE: Añadimos esto para que se refresque si cambian los permisos
-// 🏊‍♂️ FILTRO DE ALUMNOS PARA EL MONITOR (NUEVO)
+  }, [puedeGestionarTodo, esPersonalMonitor, emailNormalizado]);
+// 🏊‍♂️ FILTRO DE ALUMNOS PARA EL MONITOR
   // ---------------------------------------------------------
   const alumnosAsignados = alumnos.filter(alumno => {
-    if (!soyMonitor) return false; // Si no es monitor, la lista está vacía
+    if (!soyMonitor) return false;
     const susGrupos = datosMonitor?.gruposAsignados || [];
-    return susGrupos.includes(alumno.actividad) && alumno.estado === 'inscrito';
+    return (susGrupos.includes(alumno.actividad) || susGrupos.includes(alumno.actividadId)) && alumno.estado === 'inscrito';
   });
  
   // --- 3. FUNCIONES ---
@@ -2909,29 +2930,7 @@ const confirmarTraslado = async () => {
       const alumnoRef = doc(db, 'students', alumno.id);
       
       const hoy = new Date();
-      const mesActual = hoy.getMonth() + 1; // 1-12
-      const esPeriodoReserva = mesActual >= 6 && mesActual <= 9;
-      const academicInfo = getDynamicAcademicYear();
-      let fechaParaDB = "";
-
-      // 1. 🛡️ COMPROBACIÓN DE TEMPORADA (Si hoy es periodo de reserva de junio a septiembre)
-      if (esPeriodoReserva) {
-        fechaParaDB = academicInfo.isoStartDate; // Modo Reserva: Todo al estreno del curso
-      } 
-      // 2. 🏊‍♂️ MODO CURSO ACTIVO (Si ya es Octubre a Mayo)
-      else {
-        const diaActual = hoy.getDate();
-        const añoActual = hoy.getFullYear();
-        const preferencia = String(alumno.inicioDeseado || 'proximo').toLowerCase();
-
-        if (diaActual > 20 || preferencia.includes('prox')) {
-          let mSig = mesActual + 1; let aSig = añoActual;
-          if (mSig > 12) { mSig = 1; aSig++; }
-          fechaParaDB = `${aSig}-${String(mSig).padStart(2, '0')}-01`;
-        } else {
-          fechaParaDB = hoy.toISOString().split('T')[0];
-        }
-      }
+      const fechaParaDB = calcularFechaAlta(alumno.inicioDeseado, hoy).fechaYMD;
 
       const actividadId = obtenerActividadIdAlumno(alumno);
       if (!actividadId) throw new Error('No se ha podido identificar la actividad del alumno.');
@@ -3174,34 +3173,8 @@ const imprimirListaAsistencia = (datos, infoGrupo) => {
   `);
   ventana.document.close();
 };
-// --- 🚩 PASO 1: LÓGICA DE FECHAS DE ALTA (BLINDADA) ---
-const obtenerInfoAlta = () => {
-  const hoy = new Date();
-  const diaActual = hoy.getDate();
-  
-  // 1. Datos Mes Actual
-  const mesActualNom = hoy.toLocaleString('es-ES', { month: 'long' });
-  const fechaTecnicaHoy = hoy.toISOString().split('T')[0];
-
-  // 2. Datos Mes Siguiente (Calculado de forma segura)
-  const proximoMesDate = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 1);
-  const mesSiguienteNom = proximoMesDate.toLocaleString('es-ES', { month: 'long' });
-  const fechaTecnicaProximoMes = proximoMesDate.toISOString().split('T')[0];
-
-  const mesActualNum = hoy.getMonth() + 1; // 1-12
-  const esPeriodoReserva = mesActualNum >= 6 && mesActualNum <= 9;
-
-  return {
-    esPeriodoReserva,
-    diaCortePasado: diaActual > 20,
-    mesActual: mesActualNom,
-    mesSiguiente: mesSiguienteNom,
-    fechaInicioSiguiente: `1 de ${mesSiguienteNom}`,
-    // 🚩 CLAVE: Devolvemos ya las fechas listas para Firebase
-    tecnicaHoy: fechaTecnicaHoy,
-    tecnicaProximoMes: fechaTecnicaProximoMes
-  };
-};
+// --- 🚩 PASO 1: LÓGICA DE FECHAS DE ALTA (UNIFICADA) ---
+const obtenerInfoAlta = () => obtenerInfoInicioInscripcion();
 const validarPlaza = async (alumno) => {
   if (userRole !== 'admin') return showToast("Solo coordinadores.", "error");
   
@@ -3247,32 +3220,10 @@ const validarPlaza = async (alumno) => {
     }
   }
 
-  // --- 📅 2. LÓGICA DE FECHAS ÚNICA Y BLINDADA ---
-  const info = obtenerInfoAlta();
-  const hoy = new Date();
-  let fechaParaDB = "";
-  let textoInicioReal = "";
-
-  if (info.esPeriodoReserva) {
-      const academicInfo = getDynamicAcademicYear();
-      fechaParaDB = academicInfo.isoStartDate;
-      textoInicioReal = `Inicio de Curso (${academicInfo.formattedStartDate})`;
-  } else if (info.diaCortePasado) {
-      // CASO A: Día 21 al 31 -> Siempre 1 del mes que viene
-      const proximo = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 1);
-      fechaParaDB = `${proximo.getFullYear()}-${String(proximo.getMonth() + 1).padStart(2, '0')}-01`;
-      textoInicioReal = info.fechaInicioSiguiente;
-  } else {
-      // CASO B: Día 1 al 20
-      if (alumno.inicioDeseado === 'inmediato') {
-          fechaParaDB = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-${String(hoy.getDate()).padStart(2, '0')}`;
-          textoInicioReal = `Inmediato (Mes de ${info.mesActual})`;
-      } else {
-          const proximo = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 1);
-          fechaParaDB = `${proximo.getFullYear()}-${String(proximo.getMonth() + 1).padStart(2, '0')}-01`;
-          textoInicioReal = info.fechaInicioSiguiente;
-      }
-  }
+  // --- 📅 2. LÓGICA DE FECHAS ÚNICA Y UNIFICADA ---
+  const altaCalculada = calcularFechaAlta(alumno.inicioDeseado);
+  const fechaParaDB = altaCalculada.fechaYMD;
+  const textoInicioReal = altaCalculada.textoInicio;
 
   // 3. CONFIRMACIÓN
   if (!confirm(`✅ ¿Validar plaza definitiva para ${alumno.nombre}?\n\n📅 INICIO: ${textoInicioReal}\n📍 GRUPO: ${alumno.actividad}`)) return;
@@ -3560,28 +3511,11 @@ const archivarBaja = async (alumno) => {
 
   // --- 4. LISTAS FILTRADAS ---
   const gruposUnicos = [...new Set(alumnos.map(a => a.actividad).filter(g => g))].sort();
-// --- 📈 LÓGICA DE PREVISIÓN INTELIGENTE (REPARADA) ---
-const hoyD = new Date();
-const mesActualNum = hoyD.getMonth() + 1; 
-
-// 🎯 DETECTOR DE TEMPORADA: De Marzo a Septiembre, la previsión SIEMPRE mira a Octubre
-const esTemporadaReserva = mesActualNum >= 3 && mesActualNum <= 9;
-
-let mesSigNom = "";
-let patronMesSig = "";
-
-if (esTemporadaReserva) {
-    // 🚀 MODO RESERVA: Forzamos la vista al estreno del curso
-    mesSigNom = "octubre";
-    patronMesSig = getDynamicAcademicYear().rawPattern;
-} else {
-    // 🏊 MODO CURSO: Lógica normal de mes siguiente
-    const proximoMesDate = new Date(hoyD.getFullYear(), hoyD.getMonth() + 1, 1);
-    mesSigNom = proximoMesDate.toLocaleString('es-ES', { month: 'long' });
-    const añoRef = proximoMesDate.getFullYear();
-    const mesRef = String(proximoMesDate.getMonth() + 1).padStart(2, '0');
-    patronMesSig = `${añoRef}-${mesRef}`;
-}
+// --- 📈 LÓGICA DE PREVISIÓN UNIFICADA (Junio-Septiembre = Octubre; resto = mes siguiente) ---
+const infoPrevision = obtenerInfoInicioInscripcion();
+const esTemporadaReserva = infoPrevision.esPeriodoReserva;
+const mesSigNom = infoPrevision.mesSiguiente;
+const patronMesSig = infoPrevision.patronMesPrevision;
 
 // 1. Limpiamos la base
 const alumnosReales = alumnos.filter(a => a.nombre && a.estado);
@@ -3700,18 +3634,20 @@ const listadoBajas = alumnos.filter(a => a.estado === 'baja_pendiente' || a.esta
           Excel
         </button>
       )}
-      {/* 🔔 BOTÓN DE NOTIFICACIONES (NUEVO) */}
-      <button 
-        onClick={solicitarPermisoNotificaciones}
-        className={`p-2 rounded-full transition-all shadow-sm flex items-center justify-center border ${
-          Notification.permission === 'granted' 
-            ? 'bg-emerald-50 text-emerald-600 border-emerald-200' 
-            : 'bg-amber-50 text-amber-600 border-amber-200 animate-bounce'
-        }`}
-        title="Activar avisos en este equipo"
-      >
-        <span className="text-sm">{Notification.permission === 'granted' ? '🔔' : '🔕'}</span>
-      </button>
+      {/* 🔔 BOTÓN DE NOTIFICACIONES (SOLO SI EL NAVEGADOR LO SOPORTA; EVITA CRASH EN iOS SAFARI) */}
+      {permisoNotificaciones !== 'unsupported' && (
+        <button 
+          onClick={solicitarPermisoNotificaciones}
+          className={`p-2 rounded-full transition-all shadow-sm flex items-center justify-center border ${
+            permisoNotificaciones === 'granted' 
+              ? 'bg-emerald-50 text-emerald-600 border-emerald-200' 
+              : 'bg-amber-50 text-amber-600 border-amber-200 animate-bounce'
+          }`}
+          title="Activar avisos en este equipo"
+        >
+          <span className="text-sm">{permisoNotificaciones === 'granted' ? '🔔' : '🔕'}</span>
+        </button>
+      )}
 
       {/* 🚪 BOTÓN SALIR */}
       <button 
@@ -3725,7 +3661,8 @@ const listadoBajas = alumnos.filter(a => a.estado === 'baja_pendiente' || a.esta
 
 {/* PESTAÑAS AJUSTADAS ESTILO CHIPS FLOTANTES GLASSMORPHIC */}
 <div className="flex gap-2 p-1.5 mb-8 overflow-x-auto scrollbar-hide bg-white/80 backdrop-blur-md border border-gray-100 rounded-2xl sticky top-2 z-40 shadow-sm">
-  {['global', 'ocupacion', 'pruebas', 'espera', 'prevision', 'bajas', 'rentabilidad', 'equipo', 'avisos', 'correos'].map(t => {
+  {['mis_clases', 'global', 'ocupacion', 'pruebas', 'espera', 'prevision', 'bajas', 'rentabilidad', 'equipo', 'avisos', 'correos'].map(t => {
+     if (t === 'mis_clases' && !esPersonalMonitor && !datosMonitor) return null;
      if (t === 'correos' && !puedeGestionarTodo) return null;
      if ((t === 'equipo' || t === 'bajas' || t === 'prevision' || t === 'rentabilidad') && userRole !== 'admin') return null;
      
@@ -5637,36 +5574,61 @@ const listadoBajas = alumnos.filter(a => a.estado === 'baja_pendiente' || a.esta
               </div>
               
               {/* 🏊 CLASES ASIGNADAS */}
-              <div className="flex-1 flex flex-wrap gap-1.5 justify-start">
+              <div className="flex-1 flex flex-wrap items-center gap-1.5 justify-start">
                 {miembro.gruposAsignados?.length > 0 ? (
                   miembro.gruposAsignados.map(g => (
-                    <span key={g} className="bg-blue-50 text-blue-600 text-[8px] font-black px-2 py-1 rounded-md border border-blue-100 uppercase">
-                      {g}
+                    <span key={g} className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 text-[9px] font-black px-2.5 py-1 rounded-md border border-blue-100 uppercase">
+                      <span>{g}</span>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          try {
+                            const filtrados = (miembro.gruposAsignados || []).filter(item => item !== g);
+                            await updateDoc(doc(db, 'equipo', miembro.id), {
+                              gruposAsignados: filtrados,
+                              password: deleteField()
+                            });
+                          } catch (err) {
+                            showToast('❌ No se pudo quitar el grupo: ' + err.message, 'error');
+                          }
+                        }}
+                        className="ml-1 text-blue-400 hover:text-red-600 font-bold"
+                        title="Quitar grupo"
+                        aria-label={`Quitar ${g}`}
+                      >
+                        ×
+                      </button>
                     </span>
                   ))
                 ) : (
                   <span className="text-[10px] text-gray-300 italic">Sin clases asignadas</span>
                 )}
                 
-                <button 
-                  onClick={async () => {
-                    const grupo = prompt("Escribe el nombre del grupo para este monitor (Ej: Primaria 16:15 L-M):");
-                    if (grupo && grupo.trim()) {
-                      try {
-                        const actuales = miembro.gruposAsignados || [];
-                        await updateDoc(doc(db, 'equipo', miembro.id), {
-                          gruposAsignados: [...actuales, grupo.trim()],
-                          password: deleteField()
-                        });
-                      } catch (err) {
-                        showToast('❌ No se pudo asignar el grupo: ' + err.message, 'error');
-                      }
+                <select
+                  value=""
+                  aria-label={`Asignar grupo a ${miembro.nombre || miembro.email}`}
+                  onChange={async (e) => {
+                    const grupo = e.target.value;
+                    if (!grupo) return;
+                    const actuales = miembro.gruposAsignados || [];
+                    if (actuales.includes(grupo)) return;
+                    try {
+                      await updateDoc(doc(db, 'equipo', miembro.id), {
+                        gruposAsignados: [...actuales, grupo],
+                        password: deleteField()
+                      });
+                      showToast(`✅ Grupo asignado a ${miembro.nombre || miembro.email}.`, 'success');
+                    } catch (err) {
+                      showToast('❌ No se pudo asignar el grupo: ' + err.message, 'error');
                     }
                   }}
-                  className="text-[9px] font-black text-blue-500 hover:bg-blue-50 px-2 py-1 rounded-md border border-dashed border-blue-200 transition-colors"
+                  className="text-[10px] font-bold text-blue-700 bg-white hover:bg-blue-50 px-2.5 py-1 rounded-md border border-dashed border-blue-300 transition-colors cursor-pointer outline-none"
                 >
-                  + ASIGNAR GRUPO
-                </button>
+                  <option value="">+ Asignar actividad...</option>
+                  {OFERTA_ACTIVIDADES.filter(act => !(miembro.gruposAsignados || []).includes(act.nombre)).map(act => (
+                    <option key={act.id} value={act.nombre}>{act.nombre}</option>
+                  ))}
+                </select>
               </div>
 
               <button 
@@ -5698,18 +5660,29 @@ const listadoBajas = alumnos.filter(a => a.estado === 'baja_pendiente' || a.esta
     <div className="grid gap-6">
       {datosMonitor?.gruposAsignados?.length > 0 ? (
         datosMonitor.gruposAsignados.map(nombreGrupo => {
-          // Filtramos los alumnos que tienen esta actividad asignada
-          const alumnosDelGrupo = alumnos.filter(a => a.actividad === nombreGrupo && a.estado === 'inscrito');
+          // Filtramos los alumnos que tienen esta actividad asignada (compatible con nombre o ID)
+          const alumnosDelGrupo = alumnos.filter(a => (a.actividad === nombreGrupo || a.actividadId === nombreGrupo) && a.estado === 'inscrito');
 
           return (
             <div key={nombreGrupo} className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden text-left">
-              <div className="bg-gray-50 p-4 border-b border-gray-100 flex justify-between items-center">
+              <div className="bg-gray-50 p-4 border-b border-gray-100 flex flex-wrap justify-between items-center gap-2">
                 <h3 className="font-black text-blue-900 uppercase text-xs tracking-widest">
                   {nombreGrupo}
                 </h3>
-                <span className="bg-blue-100 text-blue-700 text-[10px] font-black px-3 py-1 rounded-full">
-                  {alumnosDelGrupo.length} ALUMNOS
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="bg-blue-100 text-blue-700 text-[10px] font-black px-3 py-1 rounded-full">
+                    {alumnosDelGrupo.length} ALUMNOS
+                  </span>
+                  {alumnosDelGrupo.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => imprimirListaAsistencia(alumnosDelGrupo, { nombre: nombreGrupo, dia: 'Grupo asignado' })}
+                      className="bg-white text-blue-700 hover:bg-blue-50 border border-blue-200 text-[10px] font-black px-2.5 py-1 rounded-lg uppercase transition-colors"
+                    >
+                      🖨️ Imprimir lista
+                    </button>
+                  )}
+                </div>
               </div>
               
               <div className="divide-y divide-gray-50">
@@ -6836,31 +6809,8 @@ const PantallaInscripcion = ({ alumno, close, onRequirePrueba, user }) => {
     });
     return () => unsub();
   }, []);
-  // 🚩 LÓGICA DE TEMPORADA (MARZO-SEPTIEMBRE = SOLO OCTUBRE)
-  const infoAlta = (() => {
-    const hoy = new Date();
-    const dia = hoy.getDate();
-    const mesActualNum = hoy.getMonth() + 1; // Marzo es 3
-    
-    // 🎯 REGLA DE ORO: Si el mes es menor a 10 (estamos en Marzo, Mayo, Sept...),
-    // bloqueamos el alta inmediata y solo dejamos "Octubre".
-    const esPeriodoReserva = mesActualNum < 10;
-
-    if (esPeriodoReserva) {
-      return { 
-        diaCortePasado: true, // Esto oculta el botón de "Empezar Hoy"
-        mesActual: hoy.toLocaleString('es-ES', { month: 'long' }),
-        sigMes: "octubre" // Forzamos que el texto del botón sea Octubre
-      };
-    }
-
-    // SI YA ES OCTUBRE, NOVIEMBRE O DICIEMBRE: Lógica normal
-    return { 
-      diaCortePasado: dia > 20, 
-      mesActual: hoy.toLocaleString('es-ES', { month: 'long' }), 
-      sigMes: new Date(hoy.getFullYear(), hoy.getMonth() + 1, 1).toLocaleString('es-ES', { month: 'long' })
-    };
-  })();
+  // 🚩 LÓGICA DE TEMPORADA UNIFICADA (Junio-Septiembre = Octubre; Octubre-Mayo = curso activo)
+  const infoAlta = obtenerInfoInicioInscripcion();
 
 
 
@@ -6906,27 +6856,9 @@ const PantallaInscripcion = ({ alumno, close, onRequirePrueba, user }) => {
     const tienePaseVIP = d.natacionPasado === 'si' || d.esAntiguoAlumno === true || d.antiguo === 'si';
     const esAdulto = act.id === 'adultos' || cursoNombre.includes('ADULTO');
 
-    // 🚩 CÁLCULO DE FECHA BLINDADO POR TEMPORADA (REVISADO)
-    const hoyParaCalculo = new Date();
-    const diaActual = hoyParaCalculo.getDate();
-    const mesActualNum = hoyParaCalculo.getMonth() + 1; 
+    // 🚩 CÁLCULO DE FECHA UNIFICADO POR TEMPORADA
     const inicioDeseado = datosAlumno.inicioDeseado;
-
-    let fechaFinalISO;
-
-    // REGLA: De Junio a Septiembre siempre es 1 de Octubre del próximo curso
-    if (mesActualNum >= 6 && mesActualNum <= 9) {
-        const academicInfo = getDynamicAcademicYear();
-        fechaFinalISO = new Date(`${academicInfo.isoStartDate}T12:00:00.000Z`).toISOString();
-    } else {
-        // Temporada activa (Octubre-Mayo)
-        if (inicioDeseado === 'inmediato' && diaActual <= 20) {
-            fechaFinalISO = hoyParaCalculo.toISOString();
-        } else {
-            const proximoMes = new Date(hoyParaCalculo.getFullYear(), hoyParaCalculo.getMonth() + 1, 1, 12, 0, 0);
-            fechaFinalISO = proximoMes.toISOString();
-        }
-    }
+    const fechaFinalISO = calcularFechaAlta(inicioDeseado).fechaISO;
 
     const datosComunes = {
       nombre: d.nombre, 
@@ -7306,28 +7238,28 @@ const PantallaPruebaNivel = ({ alumno, close, onSuccess, user }) => {
     }
   }
 
-  // 3. CONSULTAR AFORO
+  // 3. CONSULTAR AFORO EN TIEMPO REAL SIN PII (`aforosPruebas`)
   useEffect(() => {
-    if (!fecha) return;
-    const consultarAforo = async () => {
-      try {
-        const q = query(collection(db, 'students'), 
-          where('estado', '==', 'prueba_reservada'),
-          where('citaFecha', '==', fecha)
-        );
-        const snap = await getDocs(q);
-        const counts = {};
-        snap.forEach(d => {
-          const h = d.data().citaHora;
-          if (h) counts[h] = (counts[h] || 0) + 1;
-        });
-        setOcupacion(counts);
-      } catch (e) { console.error("Error:", e); }
-    };
-    consultarAforo();
+    if (!fecha) {
+      setOcupacion({});
+      return;
+    }
+    const q = query(collection(db, 'aforosPruebas'), where('fecha', '==', fecha));
+    const unsub = onSnapshot(q, (snap) => {
+      const counts = {};
+      snap.forEach((docSnap) => {
+        const data = docSnap.data();
+        if (data?.hora) counts[data.hora] = Number(data.ocupados || 0);
+      });
+      setOcupacion(counts);
+    }, (e) => {
+      console.error("Error al consultar aforo de pruebas de nivel:", e);
+      setOcupacion({});
+    });
+    return () => unsub();
   }, [fecha]);
 
-// 4. FUNCIÓN GUARDAR RESERVA (BLINDAJE TOTAL OCTUBRE)
+// 4. FUNCIÓN GUARDAR RESERVA ATÓMICA (CAPACIDAD REAL 2 ALUMNOS / 5 MIN + TEMPORADA UNIFICADA)
 const confirmarReserva = async () => {
   if (!fecha || !hora) return showToast("⚠️ Selecciona un lunes y una hora.", "warning");
   
@@ -7336,35 +7268,91 @@ const confirmarReserva = async () => {
 
   setLoading(true);
   try {
+    const slotId = construirIdSlotPruebaNivel(fecha, hora);
     const alumnoRef = doc(db, 'students', alumno.id);
-    
-    // 🎯 LA FECHA DE ORO: 1 de Octubre (Formato ISO puro sin horas de hoy)
-    const academicInfo = getDynamicAcademicYear();
-    const fechaFijaOctubre = `${academicInfo.isoStartDate}T08:00:00.000Z`;
-    const soloFechaOctubre = academicInfo.isoStartDate;
+    const slotRef = doc(db, 'aforosPruebas', slotId);
+    const altaPlanificada = calcularFechaAlta(alumno.inicioDeseado);
+    const actorUid = auth.currentUser?.uid || user?.uid || '';
 
-    await updateDoc(alumnoRef, {
-      estado: 'prueba_reservada',
-      citaNivel: citaTexto, 
-      citaFecha: fecha,
-      citaHora: hora,
+    await runTransaction(db, async (transaction) => {
+      const alumnoSnap = await transaction.get(alumnoRef);
+      if (!alumnoSnap.exists()) throw new Error('ALUMNO_NO_EXISTE');
+      const actual = alumnoSnap.data();
 
-      // 🚩 LIMPIEZA DE SEGURIDAD:
-      // Borramos estos campos para que el Panel Familiar NO muestre "Inscrito" todavía.
-      fechaAlta: null,
-      fechaSolicitud: null,
-      fecha_alta: null,
-      
-      actividad: alumno.actividad || '', 
-      actividadId: alumno.actividadId || '',
-      dias: alumno.dias || '',
-      horario: alumno.horario || '',
-      
-      // 🎯 Solo dejamos anotada la preferencia para cuando el Admin acepte
-      inicioDeseado: academicInfo.isoStartDate, 
-      mesInicio: 'octubre',
-      
-      grupo: (alumno.dias && alumno.horario) ? `${alumno.dias} ${alumno.horario}` : ''
+      const slotSnap = await transaction.get(slotRef);
+      const prevSlotId = typeof actual.citaId === 'string' && /^\d{4}-\d{2}-\d{2}__\d{2}-\d{2}$/.test(actual.citaId)
+        ? actual.citaId
+        : null;
+      const prevSlotRef = prevSlotId && prevSlotId !== slotId ? doc(db, 'aforosPruebas', prevSlotId) : null;
+      const prevSlotSnap = prevSlotRef ? await transaction.get(prevSlotRef) : null;
+
+      const mismoHueco = prevSlotId === slotId && actual.estado === 'prueba_reservada';
+      const ocupadosActuales = slotSnap.exists() ? Number(slotSnap.data().ocupados || 0) : 0;
+      const maximoHueco = slotSnap.exists() ? Number(slotSnap.data().maximo || CAPACIDAD_POR_HUECO) : CAPACIDAD_POR_HUECO;
+
+      if (!mismoHueco && ocupadosActuales >= maximoHueco) {
+        throw new Error('HUECO_COMPLETO');
+      }
+
+      const ahora = serverTimestamp();
+
+      if (prevSlotRef && prevSlotSnap?.exists() && Number(prevSlotSnap.data().ocupados || 0) > 0) {
+        transaction.update(prevSlotRef, {
+          ocupados: Number(prevSlotSnap.data().ocupados) - 1,
+          lastStudentId: alumno.id,
+          lastActorUid: actorUid,
+          lastOperation: 'LIBERACION',
+          updatedAt: ahora
+        });
+      }
+
+      if (!mismoHueco) {
+        if (slotSnap.exists()) {
+          transaction.update(slotRef, {
+            ocupados: ocupadosActuales + 1,
+            lastStudentId: alumno.id,
+            lastActorUid: actorUid,
+            lastOperation: 'RESERVA',
+            updatedAt: ahora
+          });
+        } else {
+          transaction.set(slotRef, {
+            fecha,
+            hora,
+            maximo: CAPACIDAD_POR_HUECO,
+            ocupados: 1,
+            lastStudentId: alumno.id,
+            lastActorUid: actorUid,
+            lastOperation: 'RESERVA',
+            updatedAt: ahora
+          });
+        }
+      }
+
+      transaction.update(alumnoRef, {
+        estado: 'prueba_reservada',
+        citaNivel: citaTexto,
+        citaFecha: fecha,
+        citaHora: hora,
+        citaId: slotId,
+
+        // Borramos estos campos para que el Panel Familiar NO muestre "Inscrito" todavía.
+        fechaAlta: null,
+        fechaSolicitud: null,
+        fecha_alta: null,
+
+        actividad: alumno.actividad || '',
+        actividadId: alumno.actividadId || '',
+        dias: alumno.dias || '',
+        horario: alumno.horario || '',
+
+        // Preferencia coherente con la temporada actual (jun-sep -> octubre; oct-may -> curso activo).
+        inicioDeseado: altaPlanificada.inicioDeseadoFinal,
+        mesInicio: altaPlanificada.mesInicio,
+
+        grupo: (alumno.dias && alumno.horario) ? `${alumno.dias} ${alumno.horario}` : '',
+        ultimaActualizacion: ahora
+      });
     });
 
     if (user?.email) {
@@ -7374,16 +7362,18 @@ const confirmarReserva = async () => {
 
     close(); 
 
-    // ... justo después del close() ...
-
     setTimeout(() => {
-      // 🚩 CAMBIAMOS EL MENSAJE PARA NO DAR FALSAS ESPERANZAS
       showToast(`✅ ¡CITA RESERVADA! Prueba de nivel: ${citaTexto}`, "success");
     }, 300);
 
   } catch (e) {
     console.error("Error crítico en reserva:", e);
-    showToast("❌ Hubo un error al guardar.", "error");
+    if (e?.message === 'HUECO_COMPLETO') {
+      setHora(null);
+      showToast("⚠️ Ese turno se acaba de llenar. Elige otra hora disponible.", "warning");
+    } else {
+      showToast("❌ No se pudo guardar la reserva de prueba de nivel.", "error");
+    }
   } finally {
     setLoading(false);
   }
@@ -7558,20 +7548,26 @@ const confirmarReserva = async () => {
                 <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
                   {franjas.map(f => {
                     const ocupados = ocupacion[f] || 0;
-                    const estaLleno = ocupados >= 2;
+                    const estaLleno = ocupados >= CAPACIDAD_POR_HUECO;
+                    const libres = Math.max(0, CAPACIDAD_POR_HUECO - ocupados);
                     return (
                       <button
                         key={f}
                         type="button"
                         disabled={estaLleno}
                         onClick={() => setHora(f)}
-                        className={`p-2 rounded-xl text-xs font-bold border-2 transition-all ${
-                          estaLleno ? 'bg-gray-100 text-gray-300 border-gray-100' : 
+                        className={`p-2 rounded-xl text-xs font-bold border-2 transition-all flex flex-col items-center justify-center ${
+                          estaLleno ? 'bg-gray-100 text-gray-300 border-gray-100 cursor-not-allowed line-through' : 
                           hora === f ? 'bg-emerald-500 text-white border-emerald-500 scale-105 shadow-md' : 
                           'bg-white text-blue-600 border-blue-50 hover:border-blue-500'
                         }`}
                       >
-                        {f}
+                        <span>{f}</span>
+                        {estaLleno ? (
+                          <span className="text-[8px] font-black uppercase text-gray-400 no-underline">Lleno</span>
+                        ) : libres === 1 ? (
+                          <span className={`text-[8px] font-black uppercase ${hora === f ? 'text-emerald-100' : 'text-amber-600'}`}>1 plaza</span>
+                        ) : null}
                       </button>
                     );
                   })}
