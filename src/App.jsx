@@ -3670,7 +3670,7 @@ const listadoBajas = alumnos.filter(a => a.estado === 'baja_pendiente' || a.esta
 
   // --- 5. RENDERIZADO (HTML) ---
   return (
-    <div className="min-h-screen bg-gray-100 p-6 font-sans relative">
+    <div className="min-h-screen bg-gray-100 p-6 pb-24 font-sans relative">
      {/* HEADER RESPONSIVO CORREGIDO */}
 <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 bg-white p-4 rounded shadow gap-4">
   <div>
@@ -5670,11 +5670,13 @@ const listadoBajas = alumnos.filter(a => a.estado === 'baja_pendiente' || a.esta
               </div>
 
               <button 
+                type="button"
                 onClick={() => borrarMiembroEquipo(miembro)} 
-                className="text-gray-300 hover:text-red-500 transition-colors p-2 text-xl"
+                className="px-3 py-1.5 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 border border-red-200 transition-colors text-xs font-bold flex items-center gap-1.5 shrink-0"
                 title="Eliminar del equipo"
               >
-                🗑️
+                <span>🗑️</span>
+                <span>Eliminar</span>
               </button>
             </div>
           ))
@@ -8425,7 +8427,7 @@ function AppContent() {
       {view === 'login' && <Login setView={setView} />}
       {view === 'dashboard' && <Dashboard user={user} misHijos={misHijos} logout={() => signOut(auth)} />}
       {view === 'admin' && <AdminDashboard userRole={userRole} userEmail={user?.email?.toLowerCase()} logout={() => signOut(auth)} />}
-      <VoiceAssistant />
+      {view !== 'admin' && <VoiceAssistant />}
     </div>
   );
 }
