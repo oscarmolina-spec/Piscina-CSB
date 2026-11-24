@@ -2,7 +2,7 @@ rules_version = '2';
 
 // ===============================================================
 // Assumed Data Model — Piscina CSB + Portal Extraescolares CSB
-// Shared Firebase Project: extraescolarescsb
+// Firebase Project: piscina-sanbuenaventura
 // ===============================================================
 //
 // Access & Trust Model:
@@ -50,7 +50,10 @@ rules_version = '2';
 //      - Aggregated slot capacity counters: readable by authenticated users,
 //        created by admins, decremented (`LIBERACION`) only by admins, and
 //        incremented (`RESERVA`) atomically with `students/{studentId}`.
-//   9. actividades_cole/{docId}, clubes_cole/{docId}, puntos_interes_cole/{docId}
+//   9. observacionesAdministracion/{notaId}
+//      - Private monthly admin notes (Doc ID: `${alumnoId}__${mes}`), strictly
+//        accessible and writable only by admins (`isAdmin()`).
+//  10. actividades_cole/{docId}, clubes_cole/{docId}, puntos_interes_cole/{docId}
 //      - Public catalog and campus map for Portal Extraescolares CSB; admin-managed.
 //
 // ===============================================================
@@ -650,6 +653,23 @@ service cloud.firestore {
         );
     }
 
+    function isValidObservacionAdmin(d) {
+      return !('password' in d) &&
+        hasOnlyAllowedFields(d, [
+          'alumnoId', 'mes', 'texto', 'incluir', 'revision', 'updatedAt', 'updatedBy'
+        ]) &&
+        hasRequiredFields(d, [
+          'alumnoId', 'mes', 'texto', 'incluir', 'revision', 'updatedAt', 'updatedBy'
+        ]) &&
+        isNonEmptyString(d.alumnoId, 128) &&
+        d.mes is string && d.mes.matches('^[0-9]{4}-(0[1-9]|1[0-2])$') &&
+        d.texto is string && d.texto.size() <= 2000 &&
+        d.incluir is bool &&
+        d.revision is int && d.revision >= 1 &&
+        d.updatedAt is timestamp &&
+        d.updatedBy is string && d.updatedBy == request.auth.uid;
+    }
+
     // ===============================================================
     // Portal Extraescolares CSB Domain Validators
     // (actividades_cole, clubes_cole, puntos_interes_cole)
@@ -850,6 +870,13 @@ service cloud.firestore {
       allow update: if isAuthenticated() && isValidAforoUpdate(slotId);
 
       allow delete: if false;
+    }
+
+    // Observaciones mensuales privadas para Administración.
+    // Solo pueden acceder el admin y el superadmin.
+    match /observacionesAdministracion/{notaId} {
+      allow read, delete: if isAdmin();
+      allow create, update: if isAdmin() && isValidObservacionAdmin(request.resource.data);
     }
 
     // ===============================================================
