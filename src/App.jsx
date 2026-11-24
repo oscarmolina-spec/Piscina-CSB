@@ -1657,10 +1657,8 @@ const listadoBajas = alumnos.filter(a => a.estado === 'baja_pendiente' || a.esta
             onClick={() => setVistaMes('proximo')}
             className={`px-3 py-1 rounded text-[9px] font-black uppercase transition-all ${vistaMes === 'proximo' ? 'bg-blue-500 text-white' : 'text-slate-400'}`}
           >
-            {/* Antes de octubre mostramos el estreno del curso; después, el mes siguiente. */}
-            PREVISIÓN {mesActualNum < 10
-              ? 'octubre'
-              : new Date(hoyD.getFullYear(), hoyD.getMonth() + 1, 1).toLocaleString('es-ES', { month: 'long' })}
+            {/* En periodo de reserva (junio-septiembre) mostramos octubre; el resto del año, el mes siguiente. */}
+            PREVISIÓN {mesSigNom}
           </button>
         </div>
       </div>
@@ -1703,7 +1701,6 @@ const listadoBajas = alumnos.filter(a => a.estado === 'baja_pendiente' || a.esta
                     if (!coincideId || !coincideDia || !coincideCurso) return false;
 
                      // --- 🧠 NUEVA LÓGICA TEMPORAL PARA TEMPORADA DE RESERVA ---
-                    const hoy = new Date();
                     const academicInfo = getDynamicAcademicYear();
                     const fechaAlu = (a.fechaAlta || a.fechaInscripcion || "").toString();
                     const esAltaOctubre = fechaAlu.includes(academicInfo.rawPattern);
@@ -1712,17 +1709,15 @@ const listadoBajas = alumnos.filter(a => a.estado === 'baja_pendiente' || a.esta
                       // VISTA ABRIL: Solo inscritos actuales. EXCLUIMOS a los de Octubre.
                       return (a.estado === 'inscrito' || a.estado === 'baja_pendiente') && !esAltaOctubre;
                     } else {
-                      // VISTA OCTUBRE (PREVISIÓN):
-                      if (hoy.getMonth() < 9) {
-                        // Si estamos en pre-inscripción: Contamos los que están (y no son baja) + los de Octubre
+                      // VISTA PREVISIÓN (Octubre en junio-septiembre; mes siguiente el resto del curso):
+                      if (esTemporadaReserva) {
+                        // Si estamos en pre-inscripción (junio-septiembre): Contamos los que están (y no son baja) + los de Octubre
                         if (a.estado === 'baja_pendiente' || a.estado === 'baja_finalizada') return false;
                         return a.estado === 'inscrito' || esAltaOctubre;
                       } else {
-                        // Si ya pasamos Octubre: Lógica de mes siguiente normal
-                        const proximo = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 1);
-                        const mesSiguienteISO = `${proximo.getFullYear()}-${String(proximo.getMonth() + 1).padStart(2, '0')}`;
-                        if (a.estado === 'baja_pendiente') return false;
-                        return a.estado === 'inscrito' || fechaAlu.includes(mesSiguienteISO);
+                        // Resto del curso: Lógica de mes siguiente normal
+                        if (a.estado === 'baja_pendiente' || a.estado === 'baja_finalizada') return false;
+                        return a.estado === 'inscrito' || fechaAlu.includes(patronMesSig);
                       }
                     }
                   }).length;
