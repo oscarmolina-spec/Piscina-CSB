@@ -1,0 +1,92 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html,
+  body {
+    font-family: 'Outfit', system-ui, -apple-system, sans-serif;
+  }
+}
+
+.titulo-escuela {
+  color: white !important;
+  -webkit-text-stroke: 6px #2563eb;
+  paint-order: stroke fill;
+  text-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+  letter-spacing: 0.01em;
+}
+
+@media (max-width: 768px) {
+  .titulo-escuela {
+    -webkit-text-stroke: 4px #2563eb;
+  }
+}
+
+.glass-card {
+  background: rgba(255, 255, 255, 0.75) !important;
+  backdrop-filter: blur(16px) !important;
+  -webkit-backdrop-filter: blur(16px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.3) !important;
+}
+
+.glass-card-dark {
+  background: rgba(15, 23, 42, 0.7) !important;
+  backdrop-filter: blur(16px) !important;
+  -webkit-backdrop-filter: blur(16px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes zoomIn {
+  from {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.animate-fade-in,
+.fade-in {
+  animation: fadeIn 0.28s ease-out forwards;
+}
+
+.animate-fade-in-up,
+.slide-in-from-bottom-4 {
+  animation: fadeInUp 0.38s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.zoom-in {
+  animation: zoomIn 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}

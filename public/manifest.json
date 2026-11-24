@@ -1,23 +1,26 @@
 {
-    "short_name": "Piscina CSB",
-    "name": "Natación Colegio San Buenaventura",
-    "start_url": "/",
-    "display": "standalone",
-    "orientation": "portrait",
-    "theme_color": "#2563eb",
-    "background_color": "#ffffff",
-    "icons": [
-      {
-        "src": "/icon-pwa.png",
-        "sizes": "264x264",
-        "type": "image/png",
-        "purpose": "any"
-      },
-      {
-        "src": "/icon-pwa.png",
-        "sizes": "264x264",
-        "type": "image/png",
-        "purpose": "maskable"
-      }
-    ]
-  }
+  "short_name": "Piscina CSB",
+  "name": "Natación Colegio San Buenaventura",
+  "description": "Portal oficial de natación extraescolar del Colegio San Buenaventura (CSB)",
+  "lang": "es",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#1e3a8a",
+  "background_color": "#ffffff",
+  "icons": [
+    {
+      "src": "/icon-pwa.png",
+      "sizes": "264x264",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-pwa.png",
+      "sizes": "264x264",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

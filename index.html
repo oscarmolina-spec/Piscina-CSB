@@ -2,46 +2,16 @@
 <html lang="es">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0" />
+    <link rel="icon" type="image/png" href="/icon-pwa.png" />
+    <link rel="apple-touch-icon" href="/icon-pwa.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#1e3a8a" />
+    <meta name="description" content="Portal oficial de Natación Extraescolar del Colegio San Buenaventura (CSB): horarios, inscripción online, pruebas de nivel y gestión familiar." />
     <title>Piscina San Buenaventura</title>
     <link rel="manifest" href="/manifest.json" />
-    
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;900&display=swap" rel="stylesheet">
-
-    <script src="https://cdn.tailwindcss.com"></script>
-
-    <style>
-      * {
-        font-family: 'Outfit', sans-serif !important;
-      }
-    
-      .titulo-escuela {
-        /* 1. Relleno blanco puro */
-        color: white !important;
-        
-        /* 2. Grosor del borde (ajústalo a tu gusto, 2px suele ser ideal) */
-        -webkit-text-stroke: 6px #2563eb; 
-        
-        /* 3. LA LLAVE MAESTRA: Envía el borde al fondo */
-        paint-order: stroke fill;
-        
-        /* 4. Sombra para dar profundidad y que resalte sobre el fondo */
-        text-shadow: 0 4px 6px rgba(0,0,0,0.2);
-        
-        /* 5. Un pelín de separación entre letras para que no se toquen los bordes */
-        letter-spacing: 0.01em;
-      }
-    
-      /* Ajuste para que en móvil no se vea gigantesco y se rompa */
-      @media (max-width: 768px) {
-        .titulo-escuela {
-          -webkit-text-stroke: 4px #2563eb; /* Borde un pelín más fino en móvil */
-        }
-      }
-    </style>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800;900&display=swap" rel="stylesheet" />
   </head>
   <body>
     <div id="root"></div>
@@ -49,10 +19,8 @@
 
     <script>
       if ('serviceWorker' in navigator) {
-        window.addEventListener('load', function() {
-          navigator.serviceWorker.register('/sw.js')
-            .then(function() { console.log('🚀 App conectada con éxito'); })
-            .catch(function(err) { console.log('❌ Error al conectar App'); });
+        window.addEventListener('load', function () {
+          navigator.serviceWorker.register('/sw.js').catch(function () {});
         });
       }
     </script>
