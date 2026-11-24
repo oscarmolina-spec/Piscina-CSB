@@ -1,8 +1,16 @@
-import React, { useState, useEffect, useRef } from 'react';import { db, auth, secondaryAuth } from './firebase.js';
+import React, { useState, useEffect, useRef } from 'react';
+import { db, auth, secondaryAuth } from './firebase.js';
 import { planificarTraslado, comprobarAforoTraslado } from './trasladoGrupo.js';
 import ComunicacionesPanel from './ComunicacionesPanel.jsx';
 import { planificarBajaFamiliar } from './bajaFamilia.js';
 import { prepararExportacion } from './exportacionMensual.js';
+import {
+  escaparHtml,
+  normalizarEmail,
+  validarIbanEspanol,
+  validarDniNie,
+  construirDocumentoMonitor
+} from './seguridad.js';
 import {
   collection,
   addDoc,
@@ -15,21 +23,16 @@ import {
   getDoc, // <--- ¡AQUÍ ESTABA EL CULPABLE! FALTABA ESTO
   updateDoc,
   deleteDoc,
+  deleteField,
   onSnapshot,
   orderBy,
   runTransaction,
-  serverTimestamp,
-  enableIndexedDbPersistence
+  serverTimestamp
 } from 'firebase/firestore';
 
-// Habilitar persistencia de Firestore offline para soportar mala cobertura
-enableIndexedDbPersistence(db).catch((err) => {
-  if (err.code === 'failed-precondition') {
-    console.warn("La persistencia falló: múltiples pestañas abiertas.");
-  } else if (err.code === 'unimplemented') {
-    console.warn("El navegador no soporta persistencia offline.");
-  }
-});
+// Seguridad/RGPD: no persistimos la caché de Firestore en IndexedDB local para
+// evitar que datos sensibles (IBAN, DNI, menores) queden almacenados en disco
+// en ordenadores compartidos del centro.
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
@@ -738,12 +741,14 @@ const getHumanDate = (d) => {
 const enviarEmailConfirmacion = async (email, alumno, detalle, tipo, fechaInicio) => { // 🚩 Quitamos el '= cita' para que use el valor real
   try {
     const nombreAlumno = String(alumno).trim();
+    const nombreAlumnoSeguro = escaparHtml(nombreAlumno);
+    const detalleSeguro = escaparHtml(detalle);
     const esAlta = tipo === 'alta';
     const esListaEspera = tipo === 'lista_espera';
 
     // Formateamos la fecha si viene (de 2026-03-11 a 11/03/2026)
     const fechaFormateada = fechaInicio && fechaInicio !== 'cita' 
-      ? fechaInicio.split('-').reverse().join('/') 
+      ? escaparHtml(String(fechaInicio).split('-').reverse().join('/'))
       : null;
 
     await addDoc(collection(db, 'mail'), {
@@ -757,7 +762,7 @@ const enviarEmailConfirmacion = async (email, alumno, detalle, tipo, fechaInicio
             <h2 style="color: ${esListaEspera ? '#B45309' : (esAlta ? '#059669' : '#2563EB')}; border-bottom: 2px solid ${esListaEspera ? '#F59E0B' : (esAlta ? '#059669' : '#2563EB')}; padding-bottom: 10px;">
                ${esListaEspera ? '⏳ Inscripción en lista de espera' : (esAlta ? '🏊 Plaza Validada Correctamente' : '🏊 Reserva Prueba de Nivel')}
             </h2>
-            <p>Hola familia de <strong>${nombreAlumno}</strong>,</p>
+            <p>Hola familia de <strong>${nombreAlumnoSeguro}</strong>,</p>
             
             ${esListaEspera
               ? `<p><strong>El grupo está completo y todavía NO existe una plaza confirmada.</strong> La solicitud se ha guardado correctamente y se atenderá por orden de inscripción dentro de este grupo y horario.</p>`
@@ -770,7 +775,7 @@ const enviarEmailConfirmacion = async (email, alumno, detalle, tipo, fechaInicio
               <p style="margin: 0; color: ${esListaEspera ? '#92400E' : (esAlta ? '#065F46' : '#1E40AF')}; font-weight: bold;">
                 ${esListaEspera ? '📍 Grupo solicitado:' : (esAlta ? '📍 Detalles de la Inscripción:' : '📅 Detalles de la Cita:')}
               </p>
-              <p style="margin: 10px 0 0 0; font-size: 16px;">${detalle}</p>
+              <p style="margin: 10px 0 0 0; font-size: 16px;">${detalleSeguro}</p>
               
               ${esAlta && fechaFormateada ? `
                 <p style="margin: 10px 0 0 0; font-size: 16px; color: #d32f2f;">
@@ -798,9 +803,6 @@ const enviarEmailConfirmacion = async (email, alumno, detalle, tipo, fechaInicio
     console.error("Error al encolar email:", e);
   }
 };
-const escaparHtml = texto => String(texto || '').replace(/[&<>"']/g, caracter => ({
-  '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-})[caracter]);
 
 const enviarAvisoTraslado = async (email, nombre, anterior, nuevo) => {
   // El documento en `mail` solicita el envío; la entrega definitiva depende
@@ -2689,7 +2691,6 @@ const AdminDashboard = ({ userRole, logout, userEmail }) => {
   const [filtroRadar, setFiltroRadar] = useState(null);
   const [nuevoAviso, setNuevoAviso] = useState('');
   
-  const [newStaff, setNewStaff] = useState({ email: '', password: '', role: 'profe' });
   const [loadingStaff, setLoadingStaff] = useState(false);
 
   // --- 💰 ESTADOS MÓDULO DE RENTABILIDAD Y ANÁLISIS OPERATIVO ---
@@ -3025,13 +3026,20 @@ const confirmarTraslado = async () => {
 
 const imprimirListaAsistencia = (datos, infoGrupo) => {
   const ventana = window.open('', '_blank');
-  
-  // Construimos una tabla HTML sencilla y compacta para la impresión
+  if (!ventana) {
+    showToast('Permite las ventanas emergentes para imprimir la lista de asistencia.', 'warning');
+    return;
+  }
+
+  const nombreGrupoSeguro = escaparHtml(infoGrupo?.nombre || '');
+  const diaGrupoSeguro = escaparHtml(infoGrupo?.dia || '');
+
+  // Construimos una tabla HTML sencilla y compacta para la impresión (escapada contra XSS)
   const filas = datos.map((a, i) => `
     <tr style="border-bottom: 1px solid #e2e8f0; height: 32px;">
       <td style="padding: 6px 10px; text-align: center; font-size: 11px; font-weight: bold; color: #475569; border-right: 1px solid #e2e8f0;">${i + 1}</td>
-      <td style="padding: 6px 12px; font-size: 12px; font-weight: 700; color: #0f172a; border-right: 1px solid #e2e8f0;">${a.nombre}</td>
-      <td style="padding: 6px 12px; font-size: 10px; font-weight: 600; color: #475569; text-transform: uppercase; border-right: 1px solid #e2e8f0;">${a.curso}</td>
+      <td style="padding: 6px 12px; font-size: 12px; font-weight: 700; color: #0f172a; border-right: 1px solid #e2e8f0;">${escaparHtml(a.nombre)}</td>
+      <td style="padding: 6px 12px; font-size: 10px; font-weight: 600; color: #475569; text-transform: uppercase; border-right: 1px solid #e2e8f0;">${escaparHtml(a.curso)}</td>
       ${Array(4).fill('<td style="border-right: 1px solid #cbd5e1; width: 45px;"></td>').join('')} 
     </tr>
   `).join('');
@@ -3039,7 +3047,7 @@ const imprimirListaAsistencia = (datos, infoGrupo) => {
   ventana.document.write(`
     <html>
       <head>
-        <title>Lista de Asistencia - ${infoGrupo.nombre}</title>
+        <title>Lista de Asistencia - ${nombreGrupoSeguro}</title>
         <style>
           @page { size: A4; margin: 15mm; }
           body { 
@@ -3135,8 +3143,8 @@ const imprimirListaAsistencia = (datos, infoGrupo) => {
         </div>
         
         <div style="background: #f8fafc; border: 1px solid #e2e8f0; padding: 12px; border-radius: 12px; display: flex; justify-content: space-between; gap: 15px; font-size: 11px;">
-          <div>Grupo: <strong style="color: #1e3a8a; text-transform: uppercase;">${infoGrupo.nombre}</strong></div>
-          <div>Día de Clase: <strong style="color: #1e3a8a; text-transform: uppercase;">${infoGrupo.dia}</strong></div>
+          <div>Grupo: <strong style="color: #1e3a8a; text-transform: uppercase;">${nombreGrupoSeguro}</strong></div>
+          <div>Día de Clase: <strong style="color: #1e3a8a; text-transform: uppercase;">${diaGrupoSeguro}</strong></div>
           <div>Fecha Impresión: <strong style="color: #475569;">${new Date().toLocaleDateString('es-ES')}</strong></div>
         </div>
 
@@ -3363,6 +3371,8 @@ const tramitarBaja = async (alumno) => {
 
           // 4. SI YA TENEMOS EL EMAIL, CREAMOS EL PAPELITO EN FIREBASE
           if (emailDestino) {
+              const nombreSeguroBaja = escaparHtml(alumno.nombre);
+              const fechaSeguraBaja = escaparHtml(fechaFormateada);
               await addDoc(collection(db, 'mail'), {
                   to: [emailDestino],
                   message: {
@@ -3372,13 +3382,13 @@ const tramitarBaja = async (alumno) => {
                               <h2 style="color: #dc2626; border-bottom: 2px solid #dc2626; padding-bottom: 10px; margin-top: 0;">
                                  🏊 Tramitación de Baja Efectiva
                               </h2>
-                              <p>Hola familia de <strong>${alumno.nombre}</strong>,</p>
+                              <p>Hola familia de <strong>${nombreSeguroBaja}</strong>,</p>
                               <p>Te escribimos para confirmarte que hemos procesado correctamente la solicitud de baja en la actividad de natación extraescolar.</p>
 
                               <div style="background: #FEF2F2; padding: 15px; border-radius: 10px; margin: 20px 0; border: 1px solid #FCA5A5;">
                                   <p style="margin: 0; color: #991B1B; font-weight: bold;">📍 Detalles del Trámite:</p>
-                                  <p style="margin: 10px 0 0 0; font-size: 16px;"><strong>Alumno:</strong> ${alumno.nombre}</p>
-                                  <p style="margin: 5px 0 0 0; font-size: 16px; color: #b91c1c;"><strong>📅 Fecha de efecto:</strong> ${fechaFormateada}</p>
+                                  <p style="margin: 10px 0 0 0; font-size: 16px;"><strong>Alumno:</strong> ${nombreSeguroBaja}</p>
+                                  <p style="margin: 5px 0 0 0; font-size: 16px; color: #b91c1c;"><strong>📅 Fecha de efecto:</strong> ${fechaSeguraBaja}</p>
                                   <p style="margin: 5px 0 0 0; font-size: 14px; color: #4b5563;"><strong>Estado:</strong> Baja Tramitada Correctamente</p>
                               </div>
 
@@ -3395,6 +3405,19 @@ const tramitarBaja = async (alumno) => {
               console.log("🚀 ¡Perfecto! Documento de correo creado en la colección 'mail'.");
           } else {
               console.log("⚠️ Alerta: No se encontró ningún email ni en el alumno ni en el usuario padre.");
+          }
+
+          try {
+              await addDoc(collection(db, 'logs'), {
+                  fecha: Date.now(),
+                  alumnoId: alumno.id,
+                  alumnoNombre: alumno.nombre || '',
+                  accion: 'TRAMITAR_BAJA',
+                  detalles: `Baja tramitada con fecha efectiva ${fechaCalculada}`,
+                  adminEmail: emailNormalizado || 'admin'
+              });
+          } catch (logErr) {
+              console.error('No se pudo registrar la baja en logs:', logErr);
           }
 
           showToast("✅ Baja tramitada correctamente.", "success");
@@ -3433,50 +3456,30 @@ const archivarBaja = async (alumno) => {
   
   const agregarAviso = async (e) => { e.preventDefault(); if (!nuevoAviso) return; await addDoc(collection(db, 'avisos'), { texto: nuevoAviso, fecha: new Date().toISOString() }); setNuevoAviso(''); };
   const borrarAviso = async (id) => { if (confirm('¿Borrar aviso?')) await deleteDoc(doc(db, 'avisos', id)); };
-  // PEGA ESTO EN EL HUECO:
-  const handleCrearStaff = async (e) => { 
-    e.preventDefault(); 
-    
-    // 1. Comprobamos que eres admin
-    if (userRole !== 'admin') return showToast("⛔ Solo coordinadores pueden crear usuarios.", "error");
-    
-    setLoadingStaff(true); 
-    try { 
-        // 2. Crea el usuario (Email + Contraseña)
-        // La sesión principal conserva los permisos de administración.
-        const credencial = await createUserWithEmailAndPassword(secondaryAuth, newStaff.email, newStaff.password);
-        
-        // 3. Guarda el Rol (Profe/Admin) en la base de datos
-        await setDoc(doc(db, 'users', credencial.user.uid), {
-            email: newStaff.email,
-            role: newStaff.role,
-            createdAt: new Date().toISOString()
-        });
-        await signOut(secondaryAuth);
-
-        showToast(`✅ Usuario ${newStaff.email} creado. Cierra sesión y entra como Admin.`, "success");
-        setNewStaff({ email: '', password: '', role: 'profe' }); 
-
-    } catch (error) { 
-        console.error(error);
-        showToast("❌ Error: " + error.message, "error"); 
-    } finally { 
-        setLoadingStaff(false); 
-    } 
-};
   const borrarMiembroEquipo = async (miembro) => {
-    if (miembro.email === emailNormalizado) return showToast("No puedes borrarte a ti mismo", "warning");
+    const emailMiembro = normalizarEmail(miembro.email);
+    if (emailMiembro === emailNormalizado) return showToast("No puedes borrarte a ti mismo", "warning");
     if (confirm(`¿Borrar a ${miembro.nombre || miembro.email} del equipo?`)) {
       try {
         await deleteDoc(doc(db, 'equipo', miembro.id));
-        
-        const q = query(collection(db, 'users'), where('email', '==', miembro.email));
-        const querySnapshot = await getDocs(q);
-        if (!querySnapshot.empty) {
-          await deleteDoc(doc(db, 'users', querySnapshot.docs[0].id));
+
+        const idsUsuariosABorrar = new Set();
+        if (miembro.uid) idsUsuariosABorrar.add(miembro.uid);
+
+        const correosConsulta = [...new Set([miembro.email, emailMiembro].filter(Boolean))];
+        for (const correo of correosConsulta) {
+          const snap = await getDocs(query(collection(db, 'users'), where('email', '==', correo)));
+          snap.forEach((d) => {
+            const rol = d.data()?.role;
+            if (rol !== 'admin') idsUsuariosABorrar.add(d.id);
+          });
         }
-        
-        showToast("✅ Miembro eliminado del equipo con éxito.", "success");
+
+        for (const uid of idsUsuariosABorrar) {
+          await deleteDoc(doc(db, 'users', uid));
+        }
+
+        showToast("✅ Miembro eliminado del equipo y permisos revocados.", "success");
       } catch (err) {
         showToast("❌ Error al eliminar: " + err.message, "error");
       }
@@ -5527,27 +5530,47 @@ const listadoBajas = alumnos.filter(a => a.estado === 'baja_pendiente' || a.esta
       
       <form onSubmit={async (e) => {
     e.preventDefault();
-    const nombre = e.target.nombre.value;
-    const email = e.target.email.value.toLowerCase().trim();
-    const password = e.target.password.value; // 👈 Capturamos la clave que tú inventes
+    if (!puedeGestionarTodo || loadingStaff) return;
+    const nombre = e.target.nombre.value.trim();
+    const email = normalizarEmail(e.target.email.value);
+    const password = e.target.password.value;
     
     if(!nombre || !email || !password) return showToast("⚠️ ¡Ups! Falta información. Nombre, email y clave son obligatorios.", "warning");
     if(password.length < 6) return showToast("⚠️ La contraseña debe tener al menos 6 caracteres.", "warning");
 
+    setLoadingStaff(true);
     try {
-      await addDoc(collection(db, 'equipo'), {
-        nombre,
+      // Creamos la cuenta real en Firebase Auth usando secondaryAuth para no cerrar
+      // la sesión del administrador y sin almacenar nunca contraseñas en Firestore.
+      const credencial = await createUserWithEmailAndPassword(secondaryAuth, email, password);
+      const ahoraIso = new Date().toISOString();
+      await setDoc(doc(db, 'users', credencial.user.uid), {
         email,
-        password, // 👈 Se guarda en la ficha del monitor
-        rol: 'monitor',
-        gruposAsignados: [],
-        fechaAlta: new Date().toISOString(),
-        creadoPor: emailNormalizado
+        nombre,
+        role: 'monitor',
+        createdAt: ahoraIso
       });
-      showToast(`✅ ¡Monitor creado! Email: ${email}`, "success");
+      await setDoc(
+        doc(db, 'equipo', credencial.user.uid),
+        construirDocumentoMonitor({
+          uid: credencial.user.uid,
+          nombre,
+          email,
+          creadoPor: emailNormalizado,
+          fechaAlta: ahoraIso
+        })
+      );
+      showToast(`✅ ¡Monitor creado! Ya puede iniciar sesión con ${email}`, "success");
       e.target.reset();
     } catch (err) {
-      showToast("❌ Error al guardar: " + err.message, "error");
+      if (err?.code === 'auth/email-already-in-use') {
+        showToast("⚠️ Ese correo ya tiene cuenta en Firebase Auth.", "warning");
+      } else {
+        showToast("❌ Error al crear monitor: " + err.message, "error");
+      }
+    } finally {
+      await signOut(secondaryAuth).catch(() => {});
+      setLoadingStaff(false);
     }
   }} className="grid md:grid-cols-4 gap-4 items-end"> {/* 👈 Ahora son 4 columnas */}
     <div>
@@ -5560,10 +5583,10 @@ const listadoBajas = alumnos.filter(a => a.estado === 'baja_pendiente' || a.esta
     </div>
     <div>
       <label className="block text-[10px] font-black text-blue-600 uppercase mb-1 ml-1 tracking-widest">Contraseña Privada</label>
-      <input name="password" type="text" className="w-full border-2 border-gray-50 p-3 rounded-xl bg-gray-50 focus:bg-white outline-none focus:border-blue-500 transition-all" placeholder="Escribe una clave" />
+      <input name="password" type="password" autoComplete="new-password" minLength={6} className="w-full border-2 border-gray-50 p-3 rounded-xl bg-gray-50 focus:bg-white outline-none focus:border-blue-500 transition-all" placeholder="Mínimo 6 caracteres" />
     </div>
-    <button type="submit" className="bg-blue-600 text-white p-4 rounded-xl font-black uppercase text-[10px] tracking-widest shadow-lg hover:bg-blue-700 transition-all active:scale-95">
-      Crear Monitor
+    <button type="submit" disabled={loadingStaff} className="bg-blue-600 text-white p-4 rounded-xl font-black uppercase text-[10px] tracking-widest shadow-lg hover:bg-blue-700 transition-all active:scale-95 disabled:opacity-50">
+      {loadingStaff ? 'Creando...' : 'Crear Monitor'}
     </button>
 </form>
     </div>
@@ -5626,11 +5649,18 @@ const listadoBajas = alumnos.filter(a => a.estado === 'baja_pendiente' || a.esta
                 )}
                 
                 <button 
-                  onClick={() => {
+                  onClick={async () => {
                     const grupo = prompt("Escribe el nombre del grupo para este monitor (Ej: Primaria 16:15 L-M):");
-                    if (grupo) {
-                      const actuales = miembro.gruposAsignados || [];
-                      updateDoc(doc(db, 'equipo', miembro.id), { gruposAsignados: [...actuales, grupo] });
+                    if (grupo && grupo.trim()) {
+                      try {
+                        const actuales = miembro.gruposAsignados || [];
+                        await updateDoc(doc(db, 'equipo', miembro.id), {
+                          gruposAsignados: [...actuales, grupo.trim()],
+                          password: deleteField()
+                        });
+                      } catch (err) {
+                        showToast('❌ No se pudo asignar el grupo: ' + err.message, 'error');
+                      }
                     }
                   }}
                   className="text-[9px] font-black text-blue-500 hover:bg-blue-50 px-2 py-1 rounded-md border border-dashed border-blue-200 transition-colors"
@@ -7616,27 +7646,30 @@ const Login = ({ setView }) => {
     if (!regData.aceptaPrivacidad) return showToast("⛔ Debes leer y aceptar la política de protección de datos y privacidad.", "warning");
 
     // 2. Determinar Email de Usuario
-    const emailFinal = regData.tipo === 'externo' ? regData.emailPagador : regData.emailContacto;
+    const emailFinal = normalizarEmail(regData.tipo === 'externo' ? regData.emailPagador : regData.emailContacto);
     if (!emailFinal) return showToast("⚠️ Falta el email para crear tu cuenta.", "error");
 
     // 3. Validaciones Específicas
+    let dniValidado = null;
+    let ibanValidado = null;
     if (regData.tipo === 'externo') {
-      if (!regData.nombrePagador) return showToast('⚠️ Falta: Nombre del Pagador', "warning");
-      if (!regData.dniPagador) return showToast('⚠️ Falta: DNI del Pagador', "warning");
-      
-      const ibanLimpio = (regData.iban || '').replace(/\s/g, '');
-      const ibanRegex = /^ES\d{22}$/;
-      if (!ibanRegex.test(ibanLimpio)) return showToast('⚠️ IBAN Inválido: Debe empezar por ES y tener 22 números después.', "error");
+      if (!regData.nombrePagador?.trim()) return showToast('⚠️ Falta: Nombre del Pagador', "warning");
+      if (!regData.dniPagador?.trim()) return showToast('⚠️ Falta: DNI/NIE del Pagador', "warning");
+      dniValidado = validarDniNie(regData.dniPagador);
+      if (!dniValidado.valido) return showToast(`⚠️ ${dniValidado.error}`, "error");
+
+      if (!regData.iban?.trim()) return showToast("⚠️ Falta: IBAN Bancario", "warning");
+      ibanValidado = validarIbanEspanol(regData.iban);
+      if (!ibanValidado.valido) return showToast(`⚠️ ${ibanValidado.error}`, "error");
     
       const tel1 = regData.telefono1 ? String(regData.telefono1).trim() : "";
       if (tel1.length < 9) return showToast("⛔ El teléfono debe tener 9 cifras", "warning");
       
-      if (!regData.direccion) return showToast("⚠️ Falta: Dirección", "warning");
-      if (!regData.cp) return showToast("⚠️ Falta: Código Postal", "warning");
-      if (!regData.iban) return showToast("⚠️ Falta: IBAN Bancario", "warning");
+      if (!regData.direccion?.trim()) return showToast("⚠️ Falta: Dirección", "warning");
+      if (!regData.cp?.trim()) return showToast("⚠️ Falta: Código Postal", "warning");
     } else {
       // VALIDACIÓN REGISTRO INTERNO
-      if (!regData.personaContacto) return showToast("⚠️ Falta: Nombre de la persona de contacto", "warning");
+      if (!regData.personaContacto?.trim()) return showToast("⚠️ Falta: Nombre de la persona de contacto", "warning");
       
       const telInterno = regData.telefono1 ? String(regData.telefono1).trim() : ""; 
       if (telInterno && telInterno.length < 9) {
@@ -7645,8 +7678,6 @@ const Login = ({ setView }) => {
     }
 
     try {
-      const emailFinal = regData.tipo === 'externo' ? regData.emailPagador : regData.emailContacto;
-
       // A. Crear en Firebase Auth
       const cred = await createUserWithEmailAndPassword(auth, emailFinal, regData.password);
       
@@ -7655,25 +7686,25 @@ const Login = ({ setView }) => {
         email: emailFinal, 
         role: 'user', 
         tipo: regData.tipo,
-        telefono1: regData.telefono1 || '', 
-        telefono2: regData.telefono2 || '',
+        telefono1: String(regData.telefono1 || '').trim(), 
+        telefono2: String(regData.telefono2 || '').trim(),
         aceptaPrivacidad: true,
         fechaAceptacionPrivacidad: new Date().toISOString(),
         
         // 🚩 ESTO ES LO QUE ARREGLA EL NOMBRE EN LA FICHA:
-        nombre: regData.tipo === 'externo' ? regData.nombrePagador : regData.personaContacto,
-        personaContacto: regData.personaContacto || '',
+        nombre: (regData.tipo === 'externo' ? regData.nombrePagador : regData.personaContacto).trim(),
+        personaContacto: String(regData.personaContacto || '').trim(),
         
         ...(regData.tipo === 'externo' ? {
-            nombrePagador: regData.nombrePagador, 
-            dniPagador: regData.dniPagador, 
-            dni: regData.dniPagador, // 👈 También guardamos el DNI aquí
-            direccion: regData.direccion, 
-            cp: regData.cp, 
-            poblacion: regData.poblacion,
-            iban: regData.iban
+            nombrePagador: regData.nombrePagador.trim(), 
+            dniPagador: dniValidado.normalizado, 
+            dni: dniValidado.normalizado, // 👈 También guardamos el DNI aquí
+            direccion: regData.direccion.trim(), 
+            cp: String(regData.cp || '').trim(), 
+            poblacion: String(regData.poblacion || '').trim(),
+            iban: ibanValidado.normalizado
         } : {
-            emailContacto: regData.emailContacto 
+            emailContacto: emailFinal
         })
       });
 
@@ -7689,7 +7720,7 @@ const Login = ({ setView }) => {
 
   const handleAuth = async (e) => {
     e.preventDefault();
-    const email = loginData.email?.toLowerCase().trim();
+    const email = normalizarEmail(loginData.email);
     const pass = loginData.password;
 
     if (!email || !pass) return showToast("⚠️ Escribe tu email y contraseña", "warning");
@@ -7697,32 +7728,7 @@ const Login = ({ setView }) => {
     try {
       await signInWithEmailAndPassword(auth, email, pass);
     } catch (error) {
-      if (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential') {
-        
-        // 1. REGLA PARA TUS MONITORES (CORREGIDA PARA EVITAR CRASH)
-        try {
-          const q = query(collection(db, 'equipo'), where('email', '==', email));
-          const querySnapshot = await getDocs(q);
-          
-          if (!querySnapshot.empty) {
-            const miembroDoc = querySnapshot.docs[0];
-            const miembroData = miembroDoc.data();
-            
-            if (miembroData.password === pass) {
-              const cred = await createUserWithEmailAndPassword(auth, email, pass);
-              // Asignar rol de monitor en la colección users al crearse la cuenta
-              await setDoc(doc(db, 'users', cred.user.uid), {
-                email: email,
-                role: 'monitor',
-                createdAt: new Date().toISOString()
-              });
-              return;
-            }
-          }
-        } catch (dbErr) {
-          console.error("Error al verificar credenciales de equipo:", dbErr);
-        }
-
+      if (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential' || error.code === 'auth/wrong-password') {
         showToast("⚠️ Email o contraseña incorrectos.", "error");
       } else {
         showToast("⚠️ Error: " + error.message, "error");

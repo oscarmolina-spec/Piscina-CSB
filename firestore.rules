@@ -1,27 +1,170 @@
 rules_version = '2';
+
+// ===============================================================
+// Assumed Data Model — Piscina CSB + Portal Extraescolares CSB
+// Shared Firebase Project: extraescolarescsb
+// ===============================================================
+//
+// Access & Trust Model:
+//   - Authenticated Users (`isAuthenticated()`): Non-anonymous Firebase Auth
+//     users (`request.auth != null && request.auth.uid != null &&
+//     request.auth.token.firebase.sign_in_provider != 'anonymous'`).
+//   - Administrators (`isAdmin()`): Provisioned school admin accounts:
+//       * extraescolares@sanbuenaventura.org
+//       * extraescolarespiscina@sanbuenaventura.org
+//     NOTE: `email_verified == true` is intentionally NOT required because
+//     these provisioned Email/Password accounts may have `email_verified == false`
+//     in Firebase Auth; requiring it would lock out live administrators.
+//   - Monitors (`isMonitor()`): Authenticated users whose `users/{uid}.role`
+//     is `'monitor'` or `'profe'` (assigned exclusively by admins).
+//   - Staff (`isStaff()`): `isAdmin() || isMonitor()`.
+//   - Public Read: Restricted strictly to the three non-PII catalog/map
+//     collections of the Extraescolares portal (`actividades_cole`,
+//     `clubes_cole`, `puntos_interes_cole`).
+//   - Default Deny: All other collections and subcollections are denied.
+//
+// Collections:
+//   1. students/{studentId}
+//      - Owner: parentId (immutable, equals request.auth.uid on family create)
+//      - Lifecycle: sin_inscripcion -> prueba_reservada | lista_espera | inscrito
+//        -> baja_pendiente -> baja_finalizada
+//      - Atomic capacity binding with `aforos/{slotId}` and server-validated
+//        pricing against OFERTA_ACTIVIDADES.
+//   2. users/{userId}
+//      - PII (email, phone, DNI, address, IBAN): readable only by owner or admin.
+//      - Role locked to 'user' on family create and immutable on family update.
+//   3. equipo/{docId}
+//      - Staff directory (no plaintext `password` field permitted).
+//      - Readable by admin or by the monitor owning the record.
+//   4. avisos/{avisoId}
+//      - Internal notices readable by authenticated users; admin-managed.
+//   5. logs/{logId}
+//      - Append-only audit log: admin read, staff create, update/delete denied.
+//   6. mail/{mailId}
+//      - Firebase Trigger Email queue: strict schema (`to`, `message.{subject,html}`)
+//        blocking bcc/cc/replyTo/attachment injection; families may only queue
+//        emails to their own `request.auth.token.email`; read/update/delete admin-only.
+//   7. clases/{claseId}
+//      - Staff-only class records.
+//   8. aforos/{slotId}
+//      - Aggregated slot capacity counters: readable by authenticated users,
+//        created by admins, decremented (`LIBERACION`) only by admins, and
+//        incremented (`RESERVA`) atomically with `students/{studentId}`.
+//   9. actividades_cole/{docId}, clubes_cole/{docId}, puntos_interes_cole/{docId}
+//      - Public catalog and campus map for Portal Extraescolares CSB; admin-managed.
+//
+// ===============================================================
+
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    // ===============================================================
+    // Core Auth & Ownership Helpers
+    // ===============================================================
+
+    // Rejects unauthenticated and anonymous sessions.
     function isAuthenticated() {
-      return request.auth != null;
+      return request.auth != null &&
+        request.auth.uid != null &&
+        request.auth.token.firebase.sign_in_provider != 'anonymous';
     }
 
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function uidUnchanged() {
+      return !('uid' in request.resource.data) ||
+        request.resource.data.uid == request.auth.uid;
+    }
+
+    function uidNotModified() {
+      return !('uid' in request.resource.data) ||
+        request.resource.data.uid == resource.data.uid;
+    }
+
+    // Administrator check:
+    // NOTE: `email_verified == true` is intentionally NOT required because
+    // these two provisioned Email/Password accounts may have
+    // `email_verified == false` in Firebase Auth; requiring it would lock out
+    // the school administrators in production.
     function isAdmin() {
-      return isAuthenticated() && (
-        request.auth.token.email == 'extraescolares@sanbuenaventura.org' ||
-        request.auth.token.email == 'extraescolarespiscina@sanbuenaventura.org'
-      );
+      return isAuthenticated() &&
+        request.auth.token.email in [
+          'extraescolares@sanbuenaventura.org',
+          'extraescolarespiscina@sanbuenaventura.org'
+        ];
     }
 
     function isMonitor() {
       return isAuthenticated() &&
         exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'profe' ||
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'monitor');
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['profe', 'monitor'];
     }
 
     function isStaff() {
       return isAdmin() || isMonitor();
     }
+
+    // ===============================================================
+    // Generic Validation Helpers
+    // ===============================================================
+
+    function hasRequiredFields(data, fields) {
+      return data.keys().hasAll(fields);
+    }
+
+    function hasOnlyAllowedFields(data, fields) {
+      return data.keys().hasOnly(fields);
+    }
+
+    function isNonEmptyString(val, maxLen) {
+      return val is string && val.size() > 0 && val.size() <= maxLen;
+    }
+
+    function isOptionalString(data, field, maxLen) {
+      return !(field in data) ||
+        data[field] == null ||
+        (data[field] is string && data[field].size() <= maxLen);
+    }
+
+    function isOptionalBool(data, field) {
+      return !(field in data) ||
+        data[field] == null ||
+        data[field] is bool;
+    }
+
+    function isOptionalTimestampOrString(data, field, maxLen) {
+      return !(field in data) ||
+        data[field] == null ||
+        data[field] is timestamp ||
+        (data[field] is string && data[field].size() <= maxLen);
+    }
+
+    // Reject script-executing URI schemes while permitting https/http/data:image/relative paths
+    function isSafeUrl(val, maxLen) {
+      return val is string &&
+        val.size() <= maxLen &&
+        !val.matches('(?i)^\\s*(javascript:|vbscript:|data:text/html).*');
+    }
+
+    function isValidLatNumber(val) {
+      return val is number && val >= -90 && val <= 90;
+    }
+
+    function isValidLngNumber(val) {
+      return val is number && val >= -180 && val <= 180;
+    }
+
+    function isOptionalCoordVal(val, maxAbs) {
+      return val == null ||
+        (val is number && val >= -maxAbs && val <= maxAbs) ||
+        (val is string && val.size() <= 40);
+    }
+
+    // ===============================================================
+    // Students & Aforos Helpers / Domain Validators
+    // ===============================================================
 
     function studentPath(studentId) {
       return /databases/$(database)/documents/students/$(studentId);
@@ -36,123 +179,606 @@ service cloud.firestore {
     }
 
     function hasValidSlots(data) {
-      return slots(data) is list && slots(data).size() > 0 && slots(data).size() <= 2;
+      let s = slots(data);
+      return s is list &&
+        s.size() > 0 &&
+        s.size() <= 2 &&
+        isNonEmptyString(s[0], 150) &&
+        (s.size() == 1 || (isNonEmptyString(s[1], 150) && s[0] != s[1]));
     }
 
-    function reservedSlot(slotId, studentId) {
-      return exists(aforoPath(slotId)) &&
-        getAfter(aforoPath(slotId)).data.ocupados == get(aforoPath(slotId)).data.ocupados + 1 &&
-        getAfter(aforoPath(slotId)).data.lastStudentId == studentId &&
-        getAfter(aforoPath(slotId)).data.lastActorUid == request.auth.uid &&
-        getAfter(aforoPath(slotId)).data.lastOperation == 'RESERVA';
+    // Verifies atomic +1 reservation on the slot AND that the slot belongs to the enrolled activity.
+    function reservedSlotValues(slotId, studentId, actividadId) {
+      let beforeAforo = get(aforoPath(slotId)).data;
+      let afterAforo = getAfter(aforoPath(slotId)).data;
+      return beforeAforo.actividadId == actividadId &&
+        afterAforo.ocupados == beforeAforo.ocupados + 1 &&
+        afterAforo.lastStudentId == studentId &&
+        afterAforo.lastActorUid == request.auth.uid &&
+        afterAforo.lastOperation == 'RESERVA';
     }
 
-    function releasedSlot(slotId, studentId) {
+    function reservedSlot(slotId, studentId, actividadId) {
       return exists(aforoPath(slotId)) &&
-        getAfter(aforoPath(slotId)).data.ocupados == get(aforoPath(slotId)).data.ocupados - 1 &&
-        getAfter(aforoPath(slotId)).data.lastStudentId == studentId &&
-        getAfter(aforoPath(slotId)).data.lastActorUid == request.auth.uid &&
-        getAfter(aforoPath(slotId)).data.lastOperation == 'LIBERACION';
+        reservedSlotValues(slotId, studentId, actividadId);
     }
 
     function allReserved(data, studentId) {
-      return hasValidSlots(data) && reservedSlot(slots(data)[0], studentId) &&
-        (slots(data).size() == 1 || reservedSlot(slots(data)[1], studentId));
+      let s = slots(data);
+      return hasValidSlots(data) &&
+        'actividadId' in data &&
+        isNonEmptyString(data.actividadId, 60) &&
+        reservedSlot(s[0], studentId, data.actividadId) &&
+        (s.size() == 1 || reservedSlot(s[1], studentId, data.actividadId));
     }
 
-    function allReleased(data, studentId) {
-      return hasValidSlots(data) && releasedSlot(slots(data)[0], studentId) &&
-        (slots(data).size() == 1 || releasedSlot(slots(data)[1], studentId));
+    // Official OFERTA_ACTIVIDADES fee schedule (1-day vs 2-day pack).
+    function validActivityPrice(actId, precio, numSlots) {
+      return (actId == 'chapoteo' && numSlots == 1 && precio == '45€') ||
+        (actId == 'primaria_1615' &&
+          ((numSlots == 1 && precio == '45€') || (numSlots == 2 && precio == '65€'))) ||
+        (actId in ['primaria_123_tarde', 'primaria_456_tarde', 'aquagym', 'adultos', 'eso_bach'] &&
+          ((numSlots == 1 && precio == '37€') || (numSlots == 2 && precio == '50€'))) ||
+        (actId == 'waterpolo' &&
+          ((numSlots == 1 && precio == '45€') || (numSlots == 2 && precio == '60€'))) ||
+        (actId == 'nado_libre' &&
+          ((numSlots == 1 && precio == '25€') || (numSlots == 2 && precio == '35€')));
+    }
+
+    // Validates price during family self-enrollment.
+    // Preserves backwards compatibility with the PantallaPruebaNivel VIP fallback
+    // (`citaNivel == 'EXENTO - ANTIGUO ALUMNO'`) where `precio` is not sent in datosExtra.
+    function validFamilyEnrollmentPrice(d) {
+      let numSlots = slots(d).size();
+      return ('precio' in d && d.precio is string && validActivityPrice(d.actividadId, d.precio, numSlots)) ||
+        (!('precio' in d) && !('precio' in resource.data) && d.get('citaNivel', null) == 'EXENTO - ANTIGUO ALUMNO');
     }
 
     function auditValue(data, key) {
       return data.get(key, null) in [null, '', 0, false] ? null : data.get(key, null);
     }
 
-    function validHistoryAppend() {
-      let before = resource.data.get('historialInscripciones', []);
-      let after = request.resource.data.get('historialInscripciones', []);
-      let entry = after[after.size() - 1];
-      return before is list && after is list && after.size() == before.size() + 1 &&
-        after == before.concat([entry]) && entry is map &&
+    function validHistoryEntry(entry) {
+      return entry is map &&
         entry.estadoAnterior == resource.data.estado &&
         entry.actividadId == auditValue(resource.data, 'actividadId') &&
         entry.actividad == auditValue(resource.data, 'actividad') &&
         entry.dias == auditValue(resource.data, 'dias') &&
         entry.horario == auditValue(resource.data, 'horario') &&
         entry.precio == auditValue(resource.data, 'precio') &&
-        entry.fecha is string &&
+        isNonEmptyString(entry.fecha, 50) &&
         entry.accion == (resource.data.estado == 'inscrito'
           ? 'SOLICITUD_BAJA_FAMILIA' : 'RETIRADA_SOLICITUD_FAMILIA');
     }
 
+    function validHistoryAppend() {
+      let before = resource.data.get('historialInscripciones', []);
+      let after = request.resource.data.get('historialInscripciones', []);
+      return before is list && after is list &&
+        after.size() == before.size() + 1 &&
+        after.size() <= 100 &&
+        after == before.concat([after[after.size() - 1]]) &&
+        validHistoryEntry(after[after.size() - 1]);
+    }
+
+    // Validates type and length bounds for any field modified in a student update.
+    // Checking `!(field in changed) || ...` protects legacy docs while blocking
+    // type juggling and 1MB payload DoS on every modified field.
+    function validModifiedStudentFields(d, changed) {
+      return (!('nombre' in changed) || isNonEmptyString(d.nombre, 200)) &&
+        (!('curso' in changed) || isOptionalString(d, 'curso', 40)) &&
+        (!('telefono' in changed) || isOptionalString(d, 'telefono', 30)) &&
+        (!('letra' in changed) || isOptionalString(d, 'letra', 10)) &&
+        (!('fechaNacimiento' in changed) || isOptionalString(d, 'fechaNacimiento', 30)) &&
+        (!('natacionPasado' in changed) || d.natacionPasado == null || d.natacionPasado in ['si', 'no', '']) &&
+        (!('esAntiguoAlumno' in changed) || isOptionalBool(d, 'esAntiguoAlumno')) &&
+        (!('esInfantil' in changed) || isOptionalBool(d, 'esInfantil')) &&
+        (!('aceptaNormas' in changed) || isOptionalBool(d, 'aceptaNormas')) &&
+        (!('autorizaFotos' in changed) || isOptionalBool(d, 'autorizaFotos')) &&
+        (!('alergias' in changed) || isOptionalString(d, 'alergias', 1000)) &&
+        (!('observaciones' in changed) || isOptionalString(d, 'observaciones', 1000)) &&
+        (!('actividad' in changed) || isOptionalString(d, 'actividad', 200)) &&
+        (!('actividadId' in changed) || isOptionalString(d, 'actividadId', 60)) &&
+        (!('dias' in changed) || isOptionalString(d, 'dias', 120)) &&
+        (!('opcionDias' in changed) || isOptionalString(d, 'opcionDias', 120)) &&
+        (!('horario' in changed) || isOptionalString(d, 'horario', 60)) &&
+        (!('grupo' in changed) || isOptionalString(d, 'grupo', 200)) &&
+        (!('precio' in changed) || isOptionalString(d, 'precio', 30)) &&
+        (!('citaNivel' in changed) || isOptionalString(d, 'citaNivel', 120)) &&
+        (!('citaFecha' in changed) || isOptionalString(d, 'citaFecha', 30)) &&
+        (!('citaHora' in changed) || isOptionalString(d, 'citaHora', 20)) &&
+        (!('citaId' in changed) || isOptionalString(d, 'citaId', 128)) &&
+        (!('inicioDeseado' in changed) || isOptionalString(d, 'inicioDeseado', 60)) &&
+        (!('mesInicio' in changed) || isOptionalString(d, 'mesInicio', 40)) &&
+        (!('motivoBaja' in changed) || isOptionalString(d, 'motivoBaja', 300)) &&
+        (!('fechaSolicitudBaja' in changed) || isOptionalString(d, 'fechaSolicitudBaja', 50)) &&
+        (!('fechaBaja' in changed) || isOptionalString(d, 'fechaBaja', 50)) &&
+        (!('fechaAlta' in changed) || isOptionalTimestampOrString(d, 'fechaAlta', 50)) &&
+        (!('fechaSolicitud' in changed) || isOptionalTimestampOrString(d, 'fechaSolicitud', 50)) &&
+        (!('fecha_alta' in changed) || isOptionalTimestampOrString(d, 'fecha_alta', 50)) &&
+        (!('fechaInscripcion' in changed) || isOptionalTimestampOrString(d, 'fechaInscripcion', 50)) &&
+        (!('waitlistGroupKey' in changed) || isOptionalString(d, 'waitlistGroupKey', 300)) &&
+        (!('waitlistJoinedAt' in changed) || isOptionalTimestampOrString(d, 'waitlistJoinedAt', 50)) &&
+        (!('ultimaActualizacion' in changed) || d.ultimaActualizacion is timestamp || d.ultimaActualizacion is int || isOptionalString(d, 'ultimaActualizacion', 50)) &&
+        (!('ultimaEdicion' in changed) || isOptionalTimestampOrString(d, 'ultimaEdicion', 50)) &&
+        (!('id' in changed) || isOptionalString(d, 'id', 128));
+    }
+
+    function isValidFamilyStudentCreate(d) {
+      return hasOnlyAllowedFields(d, [
+          'nombre', 'telefono', 'curso', 'letra', 'fechaNacimiento',
+          'natacionPasado', 'esAntiguoAlumno', 'esInfantil', 'aceptaNormas',
+          'autorizaFotos', 'alergias', 'observaciones', 'parentId',
+          'estado', 'fechaCreacion'
+        ]) &&
+        hasRequiredFields(d, ['nombre', 'curso', 'parentId', 'estado']) &&
+        d.parentId == request.auth.uid &&
+        d.estado == 'sin_inscripcion' &&
+        slots(d) == [] &&
+        d.get('validadoAdmin', false) != true &&
+        d.get('revisadoAdmin', false) != true &&
+        !('historialInscripciones' in d) &&
+        isNonEmptyString(d.nombre, 200) &&
+        isNonEmptyString(d.curso, 40) &&
+        isOptionalString(d, 'telefono', 30) &&
+        isOptionalString(d, 'letra', 10) &&
+        isOptionalString(d, 'fechaNacimiento', 30) &&
+        (!('natacionPasado' in d) || d.natacionPasado == null || d.natacionPasado in ['si', 'no', '']) &&
+        isOptionalBool(d, 'esAntiguoAlumno') &&
+        isOptionalBool(d, 'esInfantil') &&
+        isOptionalBool(d, 'aceptaNormas') &&
+        isOptionalBool(d, 'autorizaFotos') &&
+        isOptionalString(d, 'alergias', 1000) &&
+        isOptionalString(d, 'observaciones', 1000) &&
+        isOptionalTimestampOrString(d, 'fechaCreacion', 50);
+    }
+
+    function isValidAdminStudent(d, isCreate) {
+      return !('password' in d) &&
+        (isCreate
+          ? ('nombre' in d && isNonEmptyString(d.nombre, 200))
+          : (!('nombre' in d) || (d.nombre is string && d.nombre.size() <= 200))) &&
+        (!('estado' in d) || d.estado in [
+          'sin_inscripcion', 'inscrito', 'lista_espera',
+          'prueba_reservada', 'requiere_prueba', 'baja_pendiente', 'baja_finalizada'
+        ]) &&
+        (!('aforoSlotIds' in d) || (d.aforoSlotIds is list && d.aforoSlotIds.size() <= 4)) &&
+        (!('historialInscripciones' in d) || (d.historialInscripciones is list && d.historialInscripciones.size() <= 100));
+    }
+
     function validFamilyStudentUpdate(studentId) {
-      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      let d = request.resource.data;
+      let changed = d.diff(resource.data).affectedKeys();
       let sensitive = ['estado', 'aforoSlotIds', 'validadoAdmin', 'revisadoAdmin',
         'waitlistGroupKey', 'waitlistJoinedAt', 'historialInscripciones',
         'fechaAlta', 'fechaBaja', 'fechaSolicitudBaja', 'motivoBaja', 'precio',
         'fechaInscripcion', 'fechaCreacion', 'createdAt', 'inicioDeseado', 'fechaInicioReal'];
       let groupFields = ['actividad', 'actividadId', 'dias', 'opcionDias', 'horario', 'grupo', 'curso'];
-      let sameHistory = request.resource.data.get('historialInscripciones', []) ==
+      let sameHistory = d.get('historialInscripciones', []) ==
         resource.data.get('historialInscripciones', []);
-      return request.resource.data.parentId == resource.data.parentId &&
-        request.resource.data.get('user', null) == resource.data.get('user', null) &&
+      let immutableCreation = d.get('fechaCreacion', null) == resource.data.get('fechaCreacion', null) &&
+        d.get('createdAt', null) == resource.data.get('createdAt', null);
+
+      return d.parentId == resource.data.parentId &&
+        d.get('user', null) == resource.data.get('user', null) &&
+        immutableCreation &&
+        !('password' in d) &&
+        validModifiedStudentFields(d, changed) &&
         (
-          // Datos personales: no pueden borrar fechas, precio ni historial.
-          (sameHistory && !changed.hasAny(sensitive) &&
+          // 1. Datos personales: no pueden alterar fechas, precio, historial ni campos no permitidos.
+          (sameHistory &&
+            !changed.hasAny(sensitive) &&
+            changed.hasOnly([
+              'nombre', 'telefono', 'curso', 'letra', 'fechaNacimiento',
+              'natacionPasado', 'esAntiguoAlumno', 'esInfantil', 'aceptaNormas',
+              'autorizaFotos', 'alergias', 'observaciones', 'ultimaEdicion', 'id'
+            ]) &&
             (!(resource.data.estado in ['inscrito', 'baja_pendiente', 'baja_finalizada']) ||
              !changed.hasAny(groupFields))) ||
-          // Alta: conserva el historial y reserva cada plaza atómicamente.
-          (sameHistory && !(resource.data.estado in ['inscrito', 'baja_pendiente']) &&
-            slots(resource.data) == [] && request.resource.data.estado == 'inscrito' &&
-            request.resource.data.validadoAdmin == true &&
-            allReserved(request.resource.data, studentId)) ||
-          // Solicitudes sin plaza: una baja histórica no se puede vaciar desde un cliente antiguo.
-          (sameHistory && !(resource.data.estado in ['inscrito', 'baja_pendiente']) &&
-            request.resource.data.estado in ['lista_espera', 'prueba_reservada', 'sin_inscripcion'] &&
-            !(resource.data.estado == 'baja_finalizada' && request.resource.data.estado == 'sin_inscripcion') &&
-            slots(request.resource.data) == [] &&
-            request.resource.data.get('validadoAdmin', false) != true &&
-            request.resource.data.get('revisadoAdmin', false) != true) ||
-          // Inscritos: solo solicitan baja. No liberan plaza ni borran sus datos.
-          (resource.data.estado == 'inscrito' && request.resource.data.estado == 'baja_pendiente' &&
+          // 2. Alta: conserva el historial, reserva cada plaza atómicamente y valida precio/actividad.
+          (sameHistory &&
+            !(resource.data.estado in ['inscrito', 'baja_pendiente']) &&
+            slots(resource.data) == [] &&
+            d.estado == 'inscrito' &&
+            d.validadoAdmin == true &&
+            changed.hasOnly([
+              'nombre', 'curso', 'actividad', 'actividadId', 'dias', 'opcionDias',
+              'horario', 'grupo', 'precio', 'fechaAlta', 'revisadoAdmin', 'validadoAdmin',
+              'inicioDeseado', 'autorizaFotos', 'aceptaNormas', 'fechaInscripcion',
+              'citaNivel', 'citaFecha', 'citaHora', 'citaId', 'estado', 'aforoSlotIds',
+              'waitlistGroupKey', 'waitlistJoinedAt', 'ultimaActualizacion'
+            ]) &&
+            allReserved(d, studentId) &&
+            validFamilyEnrollmentPrice(d)) ||
+          // 3. Solicitudes sin plaza: una baja histórica no se puede vaciar desde un cliente antiguo.
+          (sameHistory &&
+            !(resource.data.estado in ['inscrito', 'baja_pendiente']) &&
+            d.estado in ['lista_espera', 'prueba_reservada', 'sin_inscripcion'] &&
+            !(resource.data.estado == 'baja_finalizada' && d.estado == 'sin_inscripcion') &&
+            slots(d) == [] &&
+            d.get('validadoAdmin', false) != true &&
+            d.get('revisadoAdmin', false) != true &&
+            changed.hasOnly([
+              'nombre', 'curso', 'actividad', 'actividadId', 'dias', 'opcionDias',
+              'horario', 'grupo', 'precio', 'fechaAlta', 'fechaSolicitud', 'fecha_alta',
+              'revisadoAdmin', 'validadoAdmin', 'inicioDeseado', 'mesInicio',
+              'autorizaFotos', 'aceptaNormas', 'fechaInscripcion', 'citaNivel',
+              'citaFecha', 'citaHora', 'citaId', 'estado', 'aforoSlotIds',
+              'waitlistGroupKey', 'waitlistJoinedAt', 'ultimaActualizacion'
+            ])) ||
+          // 4. Inscritos: solo solicitan baja. No liberan plaza ni borran sus datos.
+          (resource.data.estado == 'inscrito' &&
+            d.estado == 'baja_pendiente' &&
             changed.hasOnly(['estado', 'fechaSolicitudBaja', 'historialInscripciones']) &&
-            request.resource.data.fechaSolicitudBaja is string && validHistoryAppend()) ||
-          // Retirada de espera o prueba: queda visible en Bajas y conserva actividad y fechas de alta.
+            isNonEmptyString(d.fechaSolicitudBaja, 50) &&
+            validHistoryAppend()) ||
+          // 5. Retirada de espera o prueba: queda visible en Bajas y conserva actividad y fechas de alta.
           (resource.data.estado in ['lista_espera', 'prueba_reservada', 'requiere_prueba'] &&
-            slots(resource.data) == [] && request.resource.data.estado == 'baja_finalizada' &&
-            slots(request.resource.data) == [] &&
-            request.resource.data.get('validadoAdmin', false) == false &&
-            request.resource.data.get('revisadoAdmin', false) == false &&
-            changed.hasOnly(['estado', 'fechaSolicitudBaja', 'fechaBaja', 'motivoBaja',
+            slots(resource.data) == [] &&
+            d.estado == 'baja_finalizada' &&
+            slots(d) == [] &&
+            d.get('validadoAdmin', false) == false &&
+            d.get('revisadoAdmin', false) == false &&
+            changed.hasOnly([
+              'estado', 'fechaSolicitudBaja', 'fechaBaja', 'motivoBaja',
               'historialInscripciones', 'validadoAdmin', 'revisadoAdmin', 'aforoSlotIds',
-              'waitlistGroupKey', 'waitlistJoinedAt', 'ultimaActualizacion']) &&
-            request.resource.data.fechaBaja is string &&
-            request.resource.data.fechaSolicitudBaja is string && validHistoryAppend())
+              'waitlistGroupKey', 'waitlistJoinedAt', 'ultimaActualizacion'
+            ]) &&
+            isNonEmptyString(d.fechaBaja, 50) &&
+            isNonEmptyString(d.fechaSolicitudBaja, 50) &&
+            validHistoryAppend())
         );
     }
 
+    // ===============================================================
+    // Users Domain Validators
+    // ===============================================================
+
+    function isValidFamilyUserFields(d) {
+      return !('password' in d) &&
+        isNonEmptyString(d.email, 254) &&
+        (!('tipo' in d) || d.tipo == null || d.tipo in ['interno', 'externo']) &&
+        isOptionalString(d, 'telefono1', 30) &&
+        isOptionalString(d, 'telefono2', 30) &&
+        isOptionalString(d, 'telefono', 30) &&
+        isOptionalBool(d, 'aceptaPrivacidad') &&
+        isOptionalTimestampOrString(d, 'fechaAceptacionPrivacidad', 50) &&
+        isOptionalString(d, 'nombre', 200) &&
+        isOptionalString(d, 'personaContacto', 200) &&
+        isOptionalString(d, 'nombrePagador', 200) &&
+        isOptionalString(d, 'displayName', 200) &&
+        isOptionalString(d, 'dniPagador', 30) &&
+        isOptionalString(d, 'dni', 30) &&
+        isOptionalString(d, 'direccion', 300) &&
+        isOptionalString(d, 'cp', 20) &&
+        isOptionalString(d, 'poblacion', 120) &&
+        isOptionalString(d, 'iban', 40) &&
+        isOptionalString(d, 'emailContacto', 254) &&
+        isOptionalString(d, 'emailPagador', 254) &&
+        isOptionalTimestampOrString(d, 'createdAt', 50) &&
+        isOptionalTimestampOrString(d, 'updatedAt', 50);
+    }
+
+    function isValidFamilyUserCreate(d) {
+      return hasOnlyAllowedFields(d, [
+          'email', 'role', 'tipo', 'telefono1', 'telefono2',
+          'aceptaPrivacidad', 'fechaAceptacionPrivacidad', 'nombre',
+          'personaContacto', 'nombrePagador', 'dniPagador', 'dni',
+          'direccion', 'cp', 'poblacion', 'iban', 'emailContacto', 'createdAt'
+        ]) &&
+        hasRequiredFields(d, ['email', 'role']) &&
+        d.role == 'user' &&
+        request.auth.token.email is string &&
+        d.email is string &&
+        d.email.lower() == request.auth.token.email.lower() &&
+        isValidFamilyUserFields(d);
+    }
+
+    function isValidFamilyUserUpdate(d) {
+      return hasOnlyAllowedFields(d, [
+          'email', 'role', 'tipo', 'telefono1', 'telefono2', 'telefono',
+          'aceptaPrivacidad', 'fechaAceptacionPrivacidad', 'nombre',
+          'personaContacto', 'nombrePagador', 'displayName', 'dniPagador', 'dni',
+          'direccion', 'cp', 'poblacion', 'iban', 'emailContacto', 'emailPagador',
+          'createdAt', 'updatedAt'
+        ]) &&
+        d.get('role', 'user') == resource.data.get('role', 'user') &&
+        d.get('createdAt', null) == resource.data.get('createdAt', null) &&
+        d.email is string &&
+        (d.email == resource.data.get('email', '') ||
+          (request.auth.token.email is string && d.email.lower() == request.auth.token.email.lower())) &&
+        isValidFamilyUserFields(d);
+    }
+
+    function isValidAdminUser(d) {
+      return !('password' in d) &&
+        (!('email' in d) || isNonEmptyString(d.email, 254)) &&
+        (!('role' in d) || d.role in ['user', 'monitor', 'profe', 'admin', 'coordinador']);
+    }
+
+    // ===============================================================
+    // Equipo, Avisos, Logs, Mail, Clases, Aforos Domain Validators
+    // ===============================================================
+
+    function isValidEquipo(d) {
+      return !('password' in d) &&
+        hasOnlyAllowedFields(d, [
+          'uid', 'nombre', 'email', 'rol', 'gruposAsignados', 'fechaAlta', 'creadoPor'
+        ]) &&
+        hasRequiredFields(d, ['nombre', 'email', 'rol', 'gruposAsignados']) &&
+        (!('uid' in d) || isNonEmptyString(d.uid, 128)) &&
+        isNonEmptyString(d.nombre, 200) &&
+        isNonEmptyString(d.email, 254) &&
+        d.rol in ['monitor', 'profe', 'coordinador'] &&
+        d.gruposAsignados is list &&
+        d.gruposAsignados.size() <= 30 &&
+        (d.gruposAsignados.size() == 0 || isNonEmptyString(d.gruposAsignados[0], 150)) &&
+        isOptionalTimestampOrString(d, 'fechaAlta', 50) &&
+        isOptionalString(d, 'creadoPor', 254);
+    }
+
+    function isValidAviso(d) {
+      return hasOnlyAllowedFields(d, ['texto', 'fecha']) &&
+        hasRequiredFields(d, ['texto', 'fecha']) &&
+        isNonEmptyString(d.texto, 1000) &&
+        (d.fecha is timestamp || isNonEmptyString(d.fecha, 50));
+    }
+
+    function isValidLog(d) {
+      return hasOnlyAllowedFields(d, [
+          'fecha', 'alumnoId', 'alumnoNombre', 'accion', 'detalles', 'adminEmail'
+        ]) &&
+        hasRequiredFields(d, ['fecha', 'accion', 'detalles', 'adminEmail']) &&
+        ((d.fecha is number && d.fecha > 0) || d.fecha is timestamp) &&
+        isNonEmptyString(d.accion, 100) &&
+        d.detalles is string && d.detalles.size() <= 2000 &&
+        isNonEmptyString(d.adminEmail, 254) &&
+        isOptionalString(d, 'alumnoId', 128) &&
+        isOptionalString(d, 'alumnoNombre', 200);
+    }
+
+    function isValidMailMessage(msg, maxHtmlLen) {
+      return msg is map &&
+        msg.keys().hasOnly(['subject', 'html']) &&
+        msg.keys().hasAll(['subject', 'html']) &&
+        isNonEmptyString(msg.subject, 200) &&
+        isNonEmptyString(msg.html, maxHtmlLen);
+    }
+
+    function isValidFamilyMail(d) {
+      return hasOnlyAllowedFields(d, ['to', 'message']) &&
+        hasRequiredFields(d, ['to', 'message']) &&
+        d.to is list &&
+        d.to.size() == 1 &&
+        request.auth.token.email is string &&
+        d.to[0] == request.auth.token.email &&
+        isValidMailMessage(d.message, 20000);
+    }
+
+    function isValidAdminMail(d) {
+      return hasOnlyAllowedFields(d, ['to', 'message']) &&
+        hasRequiredFields(d, ['to', 'message']) &&
+        d.to is list &&
+        d.to.size() >= 1 &&
+        d.to.size() <= 50 &&
+        isNonEmptyString(d.to[0], 254) &&
+        isValidMailMessage(d.message, 30000);
+    }
+
+    function isValidClase(d) {
+      return !('password' in d) &&
+        hasOnlyAllowedFields(d, [
+          'nombre', 'actividadId', 'dia', 'horario',
+          'monitorUid', 'monitorNombre', 'notas', 'fecha', 'asistentes', 'updatedAt'
+        ]) &&
+        d.keys().size() > 0 &&
+        isOptionalString(d, 'nombre', 200) &&
+        isOptionalString(d, 'actividadId', 60) &&
+        isOptionalString(d, 'dia', 30) &&
+        isOptionalString(d, 'horario', 60) &&
+        isOptionalString(d, 'monitorUid', 128) &&
+        isOptionalString(d, 'monitorNombre', 200) &&
+        isOptionalString(d, 'notas', 2000) &&
+        isOptionalTimestampOrString(d, 'fecha', 50) &&
+        (!('asistentes' in d) || (d.asistentes is list && d.asistentes.size() <= 50)) &&
+        isOptionalTimestampOrString(d, 'updatedAt', 50);
+    }
+
+    function isValidAforoCreate(d) {
+      return hasOnlyAllowedFields(d, [
+          'temporada', 'actividadId', 'segmento', 'dia', 'horario',
+          'maximo', 'ocupados', 'lastStudentId', 'lastActorUid',
+          'lastOperation', 'updatedAt'
+        ]) &&
+        hasRequiredFields(d, [
+          'temporada', 'actividadId', 'segmento', 'dia', 'horario',
+          'maximo', 'ocupados', 'lastOperation'
+        ]) &&
+        isNonEmptyString(d.temporada, 30) &&
+        isNonEmptyString(d.actividadId, 60) &&
+        isNonEmptyString(d.segmento, 40) &&
+        isNonEmptyString(d.dia, 30) &&
+        isNonEmptyString(d.horario, 40) &&
+        d.maximo is int && d.maximo > 0 && d.maximo <= 100 &&
+        d.ocupados is int && d.ocupados >= 0 && d.ocupados <= 200 &&
+        isOptionalString(d, 'lastStudentId', 128) &&
+        isOptionalString(d, 'lastActorUid', 128) &&
+        d.lastOperation == 'INICIALIZACION' &&
+        (!('updatedAt' in d) || d.updatedAt is timestamp);
+    }
+
+    function isValidFamilyAforoReserva(slotId, studentId) {
+      let stuBefore = get(studentPath(studentId)).data;
+      let stuAfter = getAfter(studentPath(studentId)).data;
+      return (stuBefore.parentId == request.auth.uid ||
+          ('user' in stuBefore && stuBefore.user == request.auth.uid)) &&
+        !(slotId in slots(stuBefore)) &&
+        slotId in slots(stuAfter) &&
+        stuAfter.estado == 'inscrito' &&
+        stuAfter.actividadId == resource.data.actividadId;
+    }
+
+    function isValidAforoUpdate(slotId) {
+      let d = request.resource.data;
+      return d.diff(resource.data).affectedKeys().hasOnly([
+          'ocupados', 'lastStudentId', 'lastActorUid', 'lastOperation', 'updatedAt'
+        ]) &&
+        d.lastActorUid == request.auth.uid &&
+        isNonEmptyString(d.lastStudentId, 128) &&
+        d.lastOperation in ['RESERVA', 'LIBERACION'] &&
+        exists(studentPath(d.lastStudentId)) &&
+        d.temporada == resource.data.temporada &&
+        d.actividadId == resource.data.actividadId &&
+        d.segmento == resource.data.segmento &&
+        d.dia == resource.data.dia &&
+        d.horario == resource.data.horario &&
+        d.maximo == resource.data.maximo &&
+        d.ocupados is int &&
+        d.ocupados >= 0 &&
+        (!('updatedAt' in d) || d.updatedAt is timestamp) &&
+        (
+          // Solo administración puede decrementar aforo (LIBERACION).
+          (isAdmin() &&
+            d.lastOperation == 'LIBERACION' &&
+            d.ocupados == resource.data.ocupados - 1) ||
+          // RESERVA (+1): admin o familia titular en transacción atómica con su alumno.
+          (d.lastOperation == 'RESERVA' &&
+            d.ocupados == resource.data.ocupados + 1 &&
+            resource.data.ocupados < resource.data.maximo &&
+            d.ocupados <= resource.data.maximo &&
+            (isAdmin() || isValidFamilyAforoReserva(slotId, d.lastStudentId)))
+        );
+    }
+
+    // ===============================================================
+    // Portal Extraescolares CSB Domain Validators
+    // (actividades_cole, clubes_cole, puntos_interes_cole)
+    // ===============================================================
+
+    function isValidHeaderConfig(d) {
+      return d.keys().size() > 0 &&
+        hasOnlyAllowedFields(d, [
+          'fotoFondoHeader', 'fotoEtapaInfantil', 'fotoEtapaPrimaria',
+          'fotoEtapaESO', 'fotoEtapaAdultos', 'fotoEtapaClubes',
+          'avisoActivo', 'avisoTipo', 'avisoTitulo', 'avisoTexto',
+          'avisoEnlace', 'avisoEnlaceTexto', 'faqs', 'updatedAt'
+        ]) &&
+        (!('fotoFondoHeader' in d) || d.fotoFondoHeader == null || isSafeUrl(d.fotoFondoHeader, 500000)) &&
+        (!('fotoEtapaInfantil' in d) || d.fotoEtapaInfantil == null || isSafeUrl(d.fotoEtapaInfantil, 500000)) &&
+        (!('fotoEtapaPrimaria' in d) || d.fotoEtapaPrimaria == null || isSafeUrl(d.fotoEtapaPrimaria, 500000)) &&
+        (!('fotoEtapaESO' in d) || d.fotoEtapaESO == null || isSafeUrl(d.fotoEtapaESO, 500000)) &&
+        (!('fotoEtapaAdultos' in d) || d.fotoEtapaAdultos == null || isSafeUrl(d.fotoEtapaAdultos, 500000)) &&
+        (!('fotoEtapaClubes' in d) || d.fotoEtapaClubes == null || isSafeUrl(d.fotoEtapaClubes, 500000)) &&
+        isOptionalBool(d, 'avisoActivo') &&
+        isOptionalString(d, 'avisoTipo', 50) &&
+        isOptionalString(d, 'avisoTitulo', 200) &&
+        isOptionalString(d, 'avisoTexto', 2000) &&
+        (!('avisoEnlace' in d) || d.avisoEnlace == null || isSafeUrl(d.avisoEnlace, 2000)) &&
+        isOptionalString(d, 'avisoEnlaceTexto', 200) &&
+        (!('faqs' in d) || d.faqs == null || (d.faqs is list && d.faqs.size() <= 50)) &&
+        isOptionalTimestampOrString(d, 'updatedAt', 50);
+    }
+
+    function isValidCatalogItem(d, isCreate) {
+      return 'nombre' in d &&
+        isNonEmptyString(d.nombre, 200) &&
+        hasOnlyAllowedFields(d, [
+          'nombre', 'etapas', 'activa', 'categoria', 'dias', 'horario', 'lugar',
+          'precio', 'info', 'material', 'imagen', 'imagenExtra', 'empresa',
+          'logoEmpresa', 'nombreContacto', 'contacto', 'enlace', 'linkInscripcion',
+          'linksMultiples', 'recogidaMonitores', 'recogidaFamilias',
+          'latAct', 'lngAct', 'latMon', 'lngMon', 'latFam', 'lngFam',
+          'fotoAct', 'fotoMon', 'fotoFam', 'estadoPlazas', 'destacada', 'updatedAt',
+          'foto', 'descripcion', 'etapa', 'Infantil', 'Primaria', 'ESO', 'Adultos',
+          'id', 'esClub'
+        ]) &&
+        (isCreate
+          ? ('etapas' in d && d.etapas is list && d.etapas.size() >= 1 && d.etapas.size() <= 10 && d.etapas[0] is string && d.etapas[0].size() <= 80)
+          : (('etapas' in d && d.etapas is list && d.etapas.size() <= 10 && (d.etapas.size() == 0 || (d.etapas[0] is string && d.etapas[0].size() <= 80))) ||
+             ('etapa' in d && isNonEmptyString(d.etapa, 100)))) &&
+        (!('activa' in d) || d.activa is bool) &&
+        (!('categoria' in d) || (d.categoria is string && d.categoria.size() <= 100)) &&
+        (!('dias' in d) || (d.dias is string && d.dias.size() <= 300)) &&
+        (!('horario' in d) || (d.horario is string && d.horario.size() <= 300)) &&
+        (!('lugar' in d) || (d.lugar is string && d.lugar.size() <= 300)) &&
+        (!('precio' in d) || (d.precio is string && d.precio.size() <= 100) || (d.precio is number && d.precio >= 0 && d.precio <= 100000)) &&
+        (!('info' in d) || (d.info is string && d.info.size() <= 10000)) &&
+        (!('material' in d) || (d.material is string && d.material.size() <= 3000)) &&
+        (!('imagen' in d) || (d.imagen is string && d.imagen.size() <= 500000)) &&
+        (!('imagenExtra' in d) || (d.imagenExtra is string && d.imagenExtra.size() <= 500000)) &&
+        (!('empresa' in d) || (d.empresa is string && d.empresa.size() <= 200)) &&
+        (!('logoEmpresa' in d) || (d.logoEmpresa is string && d.logoEmpresa.size() <= 500000)) &&
+        (!('nombreContacto' in d) || (d.nombreContacto is string && d.nombreContacto.size() <= 200)) &&
+        (!('contacto' in d) || (d.contacto is string && d.contacto.size() <= 300)) &&
+        (!('enlace' in d) || isSafeUrl(d.enlace, 2000)) &&
+        (!('linkInscripcion' in d) || isSafeUrl(d.linkInscripcion, 2000)) &&
+        (!('linksMultiples' in d) || (d.linksMultiples is list && d.linksMultiples.size() <= 30 && (d.linksMultiples.size() == 0 || (d.linksMultiples[0] is map && d.linksMultiples[0].keys().hasOnly(['etiqueta', 'url']))))) &&
+        (!('recogidaMonitores' in d) || (d.recogidaMonitores is string && d.recogidaMonitores.size() <= 500)) &&
+        (!('recogidaFamilias' in d) || (d.recogidaFamilias is string && d.recogidaFamilias.size() <= 500)) &&
+        (!('latAct' in d) || isOptionalCoordVal(d.latAct, 90)) &&
+        (!('lngAct' in d) || isOptionalCoordVal(d.lngAct, 180)) &&
+        (!('latMon' in d) || isOptionalCoordVal(d.latMon, 90)) &&
+        (!('lngMon' in d) || isOptionalCoordVal(d.lngMon, 180)) &&
+        (!('latFam' in d) || isOptionalCoordVal(d.latFam, 90)) &&
+        (!('lngFam' in d) || isOptionalCoordVal(d.lngFam, 180)) &&
+        (!('fotoAct' in d) || (d.fotoAct is string && d.fotoAct.size() <= 500000)) &&
+        (!('fotoMon' in d) || (d.fotoMon is string && d.fotoMon.size() <= 500000)) &&
+        (!('fotoFam' in d) || (d.fotoFam is string && d.fotoFam.size() <= 500000)) &&
+        (!('estadoPlazas' in d) || (d.estadoPlazas is string && d.estadoPlazas.size() <= 100)) &&
+        (!('destacada' in d) || d.destacada is bool) &&
+        (!('updatedAt' in d) || d.updatedAt is timestamp || (d.updatedAt is string && d.updatedAt.size() <= 50)) &&
+        (!('foto' in d) || (d.foto is string && d.foto.size() <= 500000)) &&
+        (!('descripcion' in d) || (d.descripcion is string && d.descripcion.size() <= 10000)) &&
+        (!('etapa' in d) || (d.etapa is string && d.etapa.size() <= 100)) &&
+        (!('Infantil' in d) || d.Infantil is bool) &&
+        (!('Primaria' in d) || d.Primaria is bool) &&
+        (!('ESO' in d) || d.ESO is bool) &&
+        (!('Adultos' in d) || d.Adultos is bool) &&
+        (!('id' in d) || (d.id is string && d.id.size() <= 200)) &&
+        (!('esClub' in d) || d.esClub is bool);
+    }
+
+    function isValidPuntoInteres(d) {
+      return hasRequiredFields(d, ['nombre', 'lat', 'lng']) &&
+        hasOnlyAllowedFields(d, [
+          'nombre', 'descripcion', 'lat', 'lng', 'foto', 'color', 'categoria'
+        ]) &&
+        isNonEmptyString(d.nombre, 150) &&
+        isOptionalString(d, 'descripcion', 1000) &&
+        isValidLatNumber(d.lat) &&
+        isValidLngNumber(d.lng) &&
+        (!('foto' in d) || d.foto == null || isSafeUrl(d.foto, 500000)) &&
+        isOptionalString(d, 'color', 30) &&
+        isOptionalString(d, 'categoria', 50);
+    }
+
+    // ===============================================================
+    // Collection Rules
+    // ===============================================================
+
     match /students/{studentId} {
-      allow read: if isStaff() ||
-        (isAuthenticated() && resource.data.parentId == request.auth.uid);
+      allow read: if (isAuthenticated() && resource.data.parentId == request.auth.uid) ||
+        isStaff();
 
-      allow create: if isAuthenticated() &&
-        (isAdmin() || (request.resource.data.parentId == request.auth.uid &&
-          request.resource.data.estado == 'sin_inscripcion' &&
-          slots(request.resource.data) == [] &&
-          request.resource.data.get('validadoAdmin', false) != true &&
-          request.resource.data.get('revisadoAdmin', false) != true));
+      allow create: if isAuthenticated() && (
+        (isAdmin() && isValidAdminStudent(request.resource.data, true)) ||
+        isValidFamilyStudentCreate(request.resource.data)
+      );
 
-      allow update: if isAdmin() ||
-        (isMonitor() && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
-          'parentId', 'user', 'estado', 'aforoSlotIds', 'validadoAdmin',
-          'revisadoAdmin', 'actividad', 'actividadId', 'dias', 'opcionDias',
-          'horario', 'grupo', 'curso', 'precio', 'fechaAlta', 'fechaBaja',
-          'fechaSolicitudBaja', 'motivoBaja', 'historialInscripciones'
-        ])) ||
-        (isAuthenticated() &&
-         resource.data.parentId == request.auth.uid &&
-         validFamilyStudentUpdate(studentId));
+      allow update: if isAuthenticated() && (
+        (isAdmin() && isValidAdminStudent(request.resource.data, false)) ||
+        (resource.data.parentId == request.auth.uid && validFamilyStudentUpdate(studentId)) ||
+        (isMonitor() &&
+          !('password' in request.resource.data) &&
+          validModifiedStudentFields(request.resource.data, request.resource.data.diff(resource.data).affectedKeys()) &&
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+            'parentId', 'user', 'estado', 'aforoSlotIds', 'validadoAdmin',
+            'revisadoAdmin', 'actividad', 'actividadId', 'dias', 'opcionDias',
+            'horario', 'grupo', 'curso', 'precio', 'fechaAlta', 'fechaBaja',
+            'fechaSolicitudBaja', 'motivoBaja', 'historialInscripciones',
+            'fechaCreacion', 'createdAt', 'fechaInscripcion'
+          ]))
+      );
 
       // Solo administración puede eliminar perfiles.
       allow delete: if isAdmin();
@@ -160,130 +786,107 @@ service cloud.firestore {
 
     match /users/{userId} {
       allow read: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
-      allow create: if isAdmin() || (isAuthenticated() &&
-        request.auth.uid == userId && request.resource.data.role == 'user');
-      allow update: if isAuthenticated() &&
-        ((request.auth.uid == userId && request.resource.data.role == resource.data.role) || isAdmin());
+
+      allow create: if (isAdmin() && isValidAdminUser(request.resource.data)) ||
+        (isOwner(userId) && isValidFamilyUserCreate(request.resource.data));
+
+      allow update: if (isAdmin() && isValidAdminUser(request.resource.data)) ||
+        (isOwner(userId) && isValidFamilyUserUpdate(request.resource.data));
+
       allow delete: if isAdmin();
     }
 
     match /equipo/{docId} {
-      allow read: if isStaff();
-      allow write: if isAdmin();
+      allow read: if isAdmin() ||
+        (isMonitor() && (docId == request.auth.uid || resource.data.email == request.auth.token.email));
+
+      // Nunca se permiten contraseñas en texto plano en equipo.
+      allow create, update: if isAdmin() &&
+        !('password' in request.resource.data) &&
+        isValidEquipo(request.resource.data);
+
+      allow delete: if isAdmin();
     }
 
     match /avisos/{avisoId} {
-      allow read: if true;
-      allow write: if isAdmin();
+      allow read: if isAuthenticated();
+      allow create, update: if isAdmin() && isValidAviso(request.resource.data);
+      allow delete: if isAdmin();
     }
 
     match /logs/{logId} {
-      allow read, write: if isStaff();
+      allow read: if isAdmin();
+      allow create: if isStaff() && isValidLog(request.resource.data);
+      // Registro de auditoría inmutable (append-only).
+      allow update, delete: if false;
     }
 
     match /mail/{mailId} {
-      allow create: if isAdmin() || (isAuthenticated() &&
-        request.resource.data.to is list && request.resource.data.to.size() == 1 &&
-        request.resource.data.to[0] == request.auth.token.email);
-      allow read, update, delete: if isStaff();
+      allow create: if (isAdmin() && isValidAdminMail(request.resource.data)) ||
+        (isAuthenticated() && isValidFamilyMail(request.resource.data));
+
+      // Solo administración puede consultar, actualizar o borrar la cola de correo.
+      allow read, delete: if isAdmin();
+      allow update: if isAdmin() && isValidAdminMail(request.resource.data);
     }
 
     match /clases/{claseId} {
-      allow read: if true;
-      allow write: if isStaff();
+      allow read: if isStaff();
+      allow create, update: if isStaff() && isValidClase(request.resource.data);
+      allow delete: if isAdmin();
     }
 
     // Contadores agregados por actividad, segmento, día y horario.
-    // No contienen nombres ni IDs de alumnos, por lo que pueden mostrarse a familias.
+    // Solo visibles para sesiones autenticadas para no exponer metadatos a anónimos.
     match /aforos/{slotId} {
-      allow read: if true;
+      allow read: if isAuthenticated();
 
       // La primera sincronización la realiza una de las dos cuentas de administración.
-      allow create: if isAdmin() &&
-        request.resource.data.keys().hasOnly([
-          'temporada', 'actividadId', 'segmento', 'dia', 'horario',
-          'maximo', 'ocupados', 'lastStudentId', 'lastActorUid',
-          'lastOperation', 'updatedAt'
-        ]) &&
-        request.resource.data.temporada is string &&
-        request.resource.data.actividadId is string &&
-        request.resource.data.segmento is string &&
-        request.resource.data.dia is string &&
-        request.resource.data.horario is string &&
-        request.resource.data.maximo is int &&
-        request.resource.data.maximo > 0 &&
-        request.resource.data.ocupados is int &&
-        request.resource.data.ocupados >= 0 &&
-        request.resource.data.lastOperation == 'INICIALIZACION';
+      allow create: if isAdmin() && isValidAforoCreate(request.resource.data);
 
       // Las reservas y bajas solo pueden variar el contador en una unidad.
-      // Se admite ocupados > maximo únicamente si ya existía ese exceso histórico
-      // (por ejemplo, el 17/16 actual); nunca se permite aumentarlo.
-      allow update: if isAuthenticated() &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-          'ocupados', 'lastStudentId', 'lastActorUid', 'lastOperation', 'updatedAt'
-        ]) &&
-        request.resource.data.lastActorUid == request.auth.uid &&
-        request.resource.data.lastStudentId is string &&
-        request.resource.data.lastStudentId != '' &&
-        request.resource.data.lastOperation in ['RESERVA', 'LIBERACION'] &&
-        exists(/databases/$(database)/documents/students/$(request.resource.data.lastStudentId)) &&
-        (
-          isAdmin() ||
-          get(/databases/$(database)/documents/students/$(request.resource.data.lastStudentId)).data.parentId == request.auth.uid ||
-          (
-            'user' in get(/databases/$(database)/documents/students/$(request.resource.data.lastStudentId)).data &&
-            get(/databases/$(database)/documents/students/$(request.resource.data.lastStudentId)).data.user == request.auth.uid
-          )
-        ) &&
-        request.resource.data.temporada == resource.data.temporada &&
-        request.resource.data.actividadId == resource.data.actividadId &&
-        request.resource.data.segmento == resource.data.segmento &&
-        request.resource.data.dia == resource.data.dia &&
-        request.resource.data.horario == resource.data.horario &&
-        request.resource.data.maximo == resource.data.maximo &&
-        request.resource.data.ocupados is int &&
-        request.resource.data.ocupados >= 0 &&
-        (
-          (request.resource.data.lastOperation == 'LIBERACION' &&
-            request.resource.data.ocupados == resource.data.ocupados - 1) ||
-          (request.resource.data.lastOperation == 'RESERVA' &&
-            request.resource.data.ocupados == resource.data.ocupados + 1 &&
-            resource.data.ocupados < resource.data.maximo &&
-            request.resource.data.ocupados <= resource.data.maximo)
-        ) &&
-        (
-          isAdmin() ||
-          (
-            request.resource.data.lastOperation == 'RESERVA' &&
-            !(slotId in slots(get(studentPath(request.resource.data.lastStudentId)).data)) &&
-            slotId in slots(getAfter(studentPath(request.resource.data.lastStudentId)).data) &&
-            getAfter(studentPath(request.resource.data.lastStudentId)).data.estado == 'inscrito'
-          ) ||
-          (
-            request.resource.data.lastOperation == 'LIBERACION' &&
-            slotId in slots(get(studentPath(request.resource.data.lastStudentId)).data) &&
-            !(slotId in slots(getAfter(studentPath(request.resource.data.lastStudentId)).data)) &&
-            get(studentPath(request.resource.data.lastStudentId)).data.estado in ['inscrito', 'baja_pendiente']
-          )
-        );
+      // Se admite ocupados > maximo únicamente si ya existía ese exceso histórico;
+      // nunca se permite aumentarlo.
+      allow update: if isAuthenticated() && isValidAforoUpdate(slotId);
 
       allow delete: if false;
     }
 
+    // ===============================================================
+    // Portal Extraescolares CSB (colecciones públicas compartidas)
+    // ===============================================================
+
     match /actividades_cole/{actId} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow create: if isAdmin() && (
+        actId == 'configuracion_header'
+          ? isValidHeaderConfig(request.resource.data)
+          : isValidCatalogItem(request.resource.data, true)
+      );
+      allow update: if isAdmin() && (
+        actId == 'configuracion_header'
+          ? isValidHeaderConfig(request.resource.data)
+          : isValidCatalogItem(request.resource.data, false)
+      );
+      allow delete: if isAdmin();
     }
 
     match /clubes_cole/{clubId} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow create: if isAdmin() && isValidCatalogItem(request.resource.data, true);
+      allow update: if isAdmin() && isValidCatalogItem(request.resource.data, false);
+      allow delete: if isAdmin();
     }
 
     match /puntos_interes_cole/{puntoId} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow create, update: if isAdmin() && isValidPuntoInteres(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    // Denegación explícita por defecto para cualquier otra colección o subcolección.
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }
